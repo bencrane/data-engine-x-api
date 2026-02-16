@@ -1,4 +1,4 @@
-// pipeline.ts — Main pipeline workflow that processes submissions through recipe steps
+// pipeline.ts — Main pipeline workflow that processes submissions through blueprint steps
 
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { normalize } from "./tasks/normalize";
@@ -12,7 +12,7 @@ const stepRegistry: Record<string, typeof normalize> = {
   "enrich-apollo": enrichApollo,
 };
 
-interface RecipeStep {
+interface BlueprintStep {
   stepId: string;
   slug: string;
   order: number;
@@ -23,7 +23,7 @@ interface PipelinePayload {
   submissionId: string;
   orgId: string;
   data: Record<string, unknown>[];
-  steps: RecipeStep[];
+  steps: BlueprintStep[];
   callbackUrl?: string;
 }
 

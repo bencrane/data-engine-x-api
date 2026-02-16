@@ -1,17 +1,17 @@
 # data-engine-x-api
 
-Multi-tenant data processing engine. FastAPI app hosted on Railway, with Trigger.dev for pipeline orchestration and task execution. Supabase (Postgres) for data.
+Multi-tenant data processing engine. FastAPI app hosted on Railway for API/auth/persistence, Trigger.dev for orchestration + task execution, and Supabase (Postgres) for data.
 
 ## What This System Does
 
-Receives raw CRM/company data submissions, runs them through registered enrichment/cleaning steps (each a Trigger.dev task), orchestrated in a waterfall sequence defined by a "recipe." Results are delivered back to a dashboard, CRM, or both.
+Receives raw CRM/company data submissions, runs them through registered enrichment/cleaning steps (each a Trigger.dev task), orchestrated in a waterfall sequence defined by a "blueprint." Results are delivered back to a dashboard, CRM, or both.
 
 ## Multi-Tenancy Model
 
 ```
 Org (e.g., Revenue Activation)
   └── Company (client whose data is being processed)
-        └── Submission (a batch of data + recipe to run)
+        └── Submission (a batch of data + blueprint to run)
               └── Pipeline Run (orchestrated execution of steps)
                     └── Step Results (output of each enrichment task)
 ```
@@ -38,7 +38,7 @@ cd trigger && npm run dev
 ## Architecture
 
 - **FastAPI (Railway)**: API layer, auth, data persistence, triggers pipeline runs
-- **Trigger.dev**: Task orchestration and execution (replaces Modal + Prefect)
+- **Trigger.dev**: Task orchestration and execution
 - **Supabase**: Database for orgs, companies, submissions, step registry, results
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture decisions.

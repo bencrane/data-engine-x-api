@@ -1,34 +1,34 @@
-# app/models/recipe.py — Recipe schemas
+# app/models/blueprint.py — Blueprint schemas
 
 from datetime import datetime
 
 from pydantic import BaseModel
 
 
-class RecipeStepConfig(BaseModel):
+class BlueprintStepConfig(BaseModel):
     step_id: str
     order: int
     config: dict | None = None
 
 
-class RecipeBase(BaseModel):
+class BlueprintBase(BaseModel):
     name: str
     description: str | None = None
-    steps: list[RecipeStepConfig]
+    steps: list[BlueprintStepConfig]
 
 
-class RecipeCreate(RecipeBase):
+class BlueprintCreate(BlueprintBase):
     pass
 
 
-class RecipeUpdate(BaseModel):
+class BlueprintUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
-    steps: list[RecipeStepConfig] | None = None
+    steps: list[BlueprintStepConfig] | None = None
     is_active: bool | None = None
 
 
-class Recipe(RecipeBase):
+class Blueprint(BlueprintBase):
     id: str
     org_id: str
     is_active: bool

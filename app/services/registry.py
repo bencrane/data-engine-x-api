@@ -29,7 +29,7 @@ async def get_step_by_slug(slug: str) -> Step | None:
     return Step(**result.data)
 
 
-async def validate_recipe_steps(step_ids: list[str]) -> bool:
+async def validate_blueprint_steps(step_ids: list[str]) -> bool:
     """Validate that all step IDs exist and are active."""
     client = get_supabase_client()
     result = (

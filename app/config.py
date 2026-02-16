@@ -12,10 +12,12 @@ class Settings(BaseSettings):
 
     # Trigger.dev
     trigger_secret_key: str
+    trigger_project_id: str
     trigger_api_url: str = "https://api.trigger.dev"
 
     # Auth
     jwt_secret: str
+    super_admin_jwt_secret: str
     internal_api_key: str
 
     class Config:

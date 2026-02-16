@@ -16,7 +16,7 @@ class SubmissionStatus(str, Enum):
 
 class SubmissionBase(BaseModel):
     company_id: str
-    recipe_id: str
+    blueprint_id: str
     data: list[dict[str, Any]]
 
 

@@ -1,11 +1,11 @@
-# app/routers/admin.py — Admin/super-user endpoints (register steps, manage recipes)
+# app/routers/admin.py — Admin/super-user endpoints (register steps, manage blueprints)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import AuthContext, get_current_auth
 from app.database import get_supabase_client
+from app.models.blueprint import Blueprint, BlueprintCreate, BlueprintUpdate
 from app.models.step import Step, StepCreate, StepUpdate
-from app.models.recipe import Recipe, RecipeCreate, RecipeUpdate
 
 router = APIRouter()
 
@@ -46,35 +46,35 @@ async def update_step(
     return result.data[0]
 
 
-@router.post("/recipes/create", response_model=Recipe)
-async def create_recipe(
-    recipe: RecipeCreate,
+@router.post("/blueprints/create", response_model=Blueprint)
+async def create_blueprint(
+    blueprint: BlueprintCreate,
     auth: AuthContext = Depends(require_admin),
 ):
-    """Create a new recipe (ordered list of steps)."""
+    """Create a new blueprint (ordered list of steps)."""
     client = get_supabase_client()
-    recipe_data = recipe.model_dump()
-    recipe_data["org_id"] = auth.org_id
-    result = client.table("recipes").insert(recipe_data).execute()
+    blueprint_data = blueprint.model_dump()
+    blueprint_data["org_id"] = auth.org_id
+    result = client.table("blueprints").insert(blueprint_data).execute()
     return result.data[0]
 
 
-@router.post("/recipes/{recipe_id}/update", response_model=Recipe)
-async def update_recipe(
-    recipe_id: str,
-    recipe: RecipeUpdate,
+@router.post("/blueprints/{blueprint_id}/update", response_model=Blueprint)
+async def update_blueprint(
+    blueprint_id: str,
+    blueprint: BlueprintUpdate,
     auth: AuthContext = Depends(require_admin),
 ):
-    """Update a recipe."""
+    """Update a blueprint."""
     client = get_supabase_client()
-    update_data = recipe.model_dump(exclude_unset=True)
+    update_data = blueprint.model_dump(exclude_unset=True)
     result = (
-        client.table("recipes")
+        client.table("blueprints")
         .update(update_data)
-        .eq("id", recipe_id)
+        .eq("id", blueprint_id)
         .eq("org_id", auth.org_id)
         .execute()
     )
     if not result.data:
-        raise HTTPException(status_code=404, detail="Recipe not found")
+        raise HTTPException(status_code=404, detail="Blueprint not found")
     return result.data[0]

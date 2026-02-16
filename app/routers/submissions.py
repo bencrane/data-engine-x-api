@@ -16,7 +16,7 @@ async def create_submission(
     auth: AuthContext = Depends(get_current_auth),
 ):
     """
-    Submit a batch of data for processing with a specified recipe.
+    Submit a batch of data for processing with a specified blueprint.
     Triggers the Trigger.dev pipeline task.
     """
     client = get_supabase_client()
@@ -33,23 +33,23 @@ async def create_submission(
     if not company_result.data:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Load recipe with steps
-    recipe_result = (
-        client.table("recipes")
+    # Load blueprint with steps
+    blueprint_result = (
+        client.table("blueprints")
         .select("*")
-        .eq("id", submission.recipe_id)
+        .eq("id", submission.blueprint_id)
         .eq("org_id", auth.org_id)
         .single()
         .execute()
     )
-    if not recipe_result.data:
-        raise HTTPException(status_code=404, detail="Recipe not found")
+    if not blueprint_result.data:
+        raise HTTPException(status_code=404, detail="Blueprint not found")
 
-    # Load recipe steps with step details
-    recipe_steps_result = (
-        client.table("recipe_steps")
+    # Load blueprint steps with step details
+    blueprint_steps_result = (
+        client.table("blueprint_steps")
         .select("*, steps(*)")
-        .eq("recipe_id", submission.recipe_id)
+        .eq("blueprint_id", submission.blueprint_id)
         .order("order")
         .execute()
     )
@@ -62,7 +62,7 @@ async def create_submission(
             "order": rs["order"],
             "config": rs.get("config"),
         }
-        for rs in recipe_steps_result.data
+        for rs in blueprint_steps_result.data
     ]
 
     # Create submission record

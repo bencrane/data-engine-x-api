@@ -8,7 +8,7 @@ from app.auth.models import TokenPayload
 
 
 def decode_jwt(token: str) -> TokenPayload:
-    """Decode and validate a JWT token."""
+    """Decode and validate a tenant JWT token."""
     settings = get_settings()
     try:
         payload = jwt.decode(
@@ -16,7 +16,14 @@ def decode_jwt(token: str) -> TokenPayload:
             settings.jwt_secret,
             algorithms=["HS256"],
         )
-        return TokenPayload(**payload)
+        parsed = TokenPayload(**payload)
+        token_type = parsed.type or "user"
+        if token_type != "user":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type for tenant endpoints",
+            )
+        return parsed
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
