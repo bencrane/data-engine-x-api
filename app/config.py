@@ -6,6 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Public API URL (used by Trigger callbacks / local tooling)
+    api_url: str | None = None
+
     # Postgres
     database_url: str
 

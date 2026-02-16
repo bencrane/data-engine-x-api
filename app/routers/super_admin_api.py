@@ -91,13 +91,21 @@ class UserDeactivateRequest(BaseModel):
 
 class StepRegisterRequest(BaseModel):
     slug: str
-    task_id: str
+    task_id: str = "execute-step"
     name: str
     step_type: Literal["clean", "enrich", "analyze", "extract", "transform"]
     default_config: dict[str, Any] | None = None
     input_schema: dict[str, Any] | None = None
     output_schema: dict[str, Any] | None = None
     description: str | None = None
+    url: str
+    method: str = "POST"
+    auth_type: Literal["bearer_token", "api_key_header", "none"] | None = None
+    auth_config: dict[str, Any] | None = None
+    payload_template: dict[str, Any] | list[Any] | None = None
+    response_mapping: dict[str, Any] | list[Any] | str | None = None
+    timeout_ms: int = 30000
+    retry_config: dict[str, Any] | None = None
 
 
 class StepListRequest(BaseModel):
@@ -121,6 +129,14 @@ class StepUpdateRequest(BaseModel):
     output_schema: dict[str, Any] | None = None
     description: str | None = None
     is_active: bool | None = None
+    url: str | None = None
+    method: str | None = None
+    auth_type: Literal["bearer_token", "api_key_header", "none"] | None = None
+    auth_config: dict[str, Any] | None = None
+    payload_template: dict[str, Any] | list[Any] | None = None
+    response_mapping: dict[str, Any] | list[Any] | str | None = None
+    timeout_ms: int | None = None
+    retry_config: dict[str, Any] | None = None
 
 
 class StepDeactivateRequest(BaseModel):
@@ -368,6 +384,11 @@ async def super_admin_register_step(
     client = get_supabase_client()
     create_data = payload.model_dump()
     create_data["default_config"] = create_data.get("default_config") or {}
+    create_data["auth_config"] = create_data.get("auth_config") or {}
+    create_data["retry_config"] = create_data.get("retry_config") or {
+        "max_attempts": 3,
+        "backoff_factor": 2,
+    }
     result = client.table("steps").insert(create_data).execute()
     return DataEnvelope(data=result.data[0])
 

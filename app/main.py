@@ -6,10 +6,13 @@ from fastapi.responses import JSONResponse
 from app.routers import (
     auth,
     health,
+    internal,
     super_admin_api,
     super_admin_auth,
+    super_admin_flow,
     tenant_blueprints,
     tenant_companies,
+    tenant_flow,
     tenant_steps,
     tenant_users,
 )
@@ -27,6 +30,11 @@ async def http_exception_handler(_: Request, exc: HTTPException):
 
 # Include routers
 app.include_router(health.router, tags=["health"])
+app.include_router(
+    internal.router,
+    prefix="/api/internal",
+    tags=["internal"],
+)
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(
     super_admin_auth.router,
@@ -37,6 +45,11 @@ app.include_router(
     super_admin_api.router,
     prefix="/api/super-admin",
     tags=["super-admin"],
+)
+app.include_router(
+    super_admin_flow.router,
+    prefix="/api/super-admin",
+    tags=["super-admin-flow"],
 )
 app.include_router(
     tenant_companies.router,
@@ -57,4 +70,9 @@ app.include_router(
     tenant_users.router,
     prefix="/api/users",
     tags=["tenant-users"],
+)
+app.include_router(
+    tenant_flow.router,
+    prefix="/api",
+    tags=["tenant-flow"],
 )
