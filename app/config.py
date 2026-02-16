@@ -10,17 +10,13 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
 
-    # Modal
-    modal_token_id: str
-    modal_token_secret: str
+    # Trigger.dev
+    trigger_secret_key: str
+    trigger_api_url: str = "https://api.trigger.dev"
 
     # Auth
     jwt_secret: str
     internal_api_key: str
-
-    # Prefect
-    prefect_api_url: str
-    prefect_api_key: str
 
     class Config:
         env_file = ".env"

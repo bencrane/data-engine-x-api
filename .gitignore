@@ -6,4 +6,8 @@ venv/
 *.egg-info/
 dist/
 build/
-.modal/
+
+# Trigger.dev
+.trigger/
+trigger/node_modules/
+trigger/dist/

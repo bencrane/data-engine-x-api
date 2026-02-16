@@ -17,7 +17,7 @@ async def create_submission(
 ):
     """
     Submit a batch of data for processing with a specified recipe.
-    Triggers the Prefect pipeline flow.
+    Triggers the Trigger.dev pipeline task.
     """
     client = get_supabase_client()
 
@@ -33,6 +33,38 @@ async def create_submission(
     if not company_result.data:
         raise HTTPException(status_code=404, detail="Company not found")
 
+    # Load recipe with steps
+    recipe_result = (
+        client.table("recipes")
+        .select("*")
+        .eq("id", submission.recipe_id)
+        .eq("org_id", auth.org_id)
+        .single()
+        .execute()
+    )
+    if not recipe_result.data:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    # Load recipe steps with step details
+    recipe_steps_result = (
+        client.table("recipe_steps")
+        .select("*, steps(*)")
+        .eq("recipe_id", submission.recipe_id)
+        .order("order")
+        .execute()
+    )
+
+    # Format steps for Trigger.dev
+    steps = [
+        {
+            "stepId": rs["step_id"],
+            "slug": rs["steps"]["slug"],
+            "order": rs["order"],
+            "config": rs.get("config"),
+        }
+        for rs in recipe_steps_result.data
+    ]
+
     # Create submission record
     submission_data = submission.model_dump()
     submission_data["org_id"] = auth.org_id
@@ -41,8 +73,13 @@ async def create_submission(
     result = client.table("submissions").insert(submission_data).execute()
     submission_record = result.data[0]
 
-    # Trigger Prefect pipeline
-    await trigger_pipeline(submission_id=submission_record["id"])
+    # Trigger pipeline via Trigger.dev
+    await trigger_pipeline(
+        submission_id=submission_record["id"],
+        org_id=auth.org_id,
+        data=submission.data,
+        steps=steps,
+    )
 
     return submission_record
 

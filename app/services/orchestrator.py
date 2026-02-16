@@ -1,51 +1,71 @@
-# app/services/orchestrator.py — Prefect flow trigger/management
+# app/services/orchestrator.py — Trigger.dev task trigger/management
+
+from typing import Any
 
 import httpx
 
 from app.config import get_settings
 
 
-async def trigger_pipeline(submission_id: str) -> str:
+async def trigger_pipeline(
+    submission_id: str,
+    org_id: str,
+    data: list[dict[str, Any]],
+    steps: list[dict[str, Any]],
+    callback_url: str | None = None,
+) -> str:
     """
-    Trigger a Prefect flow run for the given submission.
-    Returns the flow run ID.
+    Trigger the pipeline task in Trigger.dev.
+    Returns the run ID.
     """
     settings = get_settings()
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{settings.prefect_api_url}/deployments/data-engine-x/pipeline-runner/create_flow_run",
-            headers={"Authorization": f"Bearer {settings.prefect_api_key}"},
+            f"{settings.trigger_api_url}/api/v1/tasks/run-pipeline/trigger",
+            headers={
+                "Authorization": f"Bearer {settings.trigger_secret_key}",
+                "Content-Type": "application/json",
+            },
             json={
-                "parameters": {"submission_id": submission_id},
+                "payload": {
+                    "submissionId": submission_id,
+                    "orgId": org_id,
+                    "data": data,
+                    "steps": steps,
+                    "callbackUrl": callback_url,
+                },
             },
         )
         response.raise_for_status()
-        data = response.json()
-        return data["id"]
+        result = response.json()
+        return result["id"]
 
 
-async def get_flow_run_status(flow_run_id: str) -> dict:
-    """Get the status of a Prefect flow run."""
+async def get_run_status(run_id: str) -> dict:
+    """Get the status of a Trigger.dev run."""
     settings = get_settings()
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{settings.prefect_api_url}/flow_runs/{flow_run_id}",
-            headers={"Authorization": f"Bearer {settings.prefect_api_key}"},
+            f"{settings.trigger_api_url}/api/v1/runs/{run_id}",
+            headers={
+                "Authorization": f"Bearer {settings.trigger_secret_key}",
+            },
         )
         response.raise_for_status()
         return response.json()
 
 
-async def cancel_flow_run(flow_run_id: str) -> None:
-    """Cancel a running Prefect flow."""
+async def cancel_run(run_id: str) -> None:
+    """Cancel a running Trigger.dev task."""
     settings = get_settings()
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{settings.prefect_api_url}/flow_runs/{flow_run_id}/set_state",
-            headers={"Authorization": f"Bearer {settings.prefect_api_key}"},
-            json={"state": {"type": "CANCELLED"}},
+            f"{settings.trigger_api_url}/api/v1/runs/{run_id}/cancel",
+            headers={
+                "Authorization": f"Bearer {settings.trigger_secret_key}",
+            },
         )
         response.raise_for_status()
