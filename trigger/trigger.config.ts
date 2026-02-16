@@ -3,9 +3,10 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
 
 export default defineConfig({
-  project: "data-engine-x",
+  project: "proj_gunoekmmafoeqygflcmm",
   runtime: "node",
   logLevel: "log",
+  maxDuration: 300, // 5 minutes max per task
   retries: {
     enabledInDev: true,
     default: {
