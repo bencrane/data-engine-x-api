@@ -3,8 +3,7 @@
 Seed a single super admin record.
 
 Required environment variables:
-- SUPABASE_URL
-- SUPABASE_SERVICE_ROLE_KEY
+- DATA_ENGINE_DATABASE_URL
 - SUPER_ADMIN_EMAIL
 - SUPER_ADMIN_PASSWORD
 """
@@ -13,7 +12,7 @@ import os
 import sys
 
 import bcrypt
-from supabase import create_client
+import psycopg
 
 
 def _required_env(name: str) -> str:
@@ -24,33 +23,30 @@ def _required_env(name: str) -> str:
 
 
 def main() -> int:
-    supabase_url = _required_env("SUPABASE_URL")
-    supabase_service_role_key = _required_env("SUPABASE_SERVICE_ROLE_KEY")
+    database_url = _required_env("DATA_ENGINE_DATABASE_URL")
     email = _required_env("SUPER_ADMIN_EMAIL").strip().lower()
     password = _required_env("SUPER_ADMIN_PASSWORD")
 
-    client = create_client(supabase_url, supabase_service_role_key)
-
-    existing = (
-        client.table("super_admins")
-        .select("id")
-        .eq("email", email)
-        .limit(1)
-        .execute()
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
     )
-    if existing.data:
-        print(f"super_admin already exists for {email}")
-        return 0
 
-    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    with psycopg.connect(database_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM super_admins WHERE email = %s LIMIT 1", (email,))
+            existing = cur.fetchone()
+            if existing:
+                print(f"super_admin already exists for {email}")
+                return 0
 
-    client.table("super_admins").insert(
-        {
-            "email": email,
-            "password_hash": password_hash,
-            "is_active": True,
-        }
-    ).execute()
+            cur.execute(
+                """
+                INSERT INTO super_admins (email, password_hash, is_active)
+                VALUES (%s, %s, TRUE)
+                """,
+                (email, password_hash),
+            )
+        conn.commit()
 
     print(f"seeded super_admin: {email}")
     return 0

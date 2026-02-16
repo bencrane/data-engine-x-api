@@ -12,5 +12,5 @@ def get_supabase_client() -> Client:
     settings = get_settings()
     return create_client(
         settings.supabase_url,
-        settings.supabase_service_role_key,
+        settings.supabase_service_key,
     )

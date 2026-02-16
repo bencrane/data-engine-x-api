@@ -2,13 +2,16 @@
 
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Postgres
+    database_url: str
+
     # Supabase
     supabase_url: str
-    supabase_service_role_key: str
+    supabase_service_key: str
 
     # Trigger.dev
     trigger_secret_key: str
@@ -20,9 +23,11 @@ class Settings(BaseSettings):
     super_admin_jwt_secret: str
     internal_api_key: str
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="DATA_ENGINE_",
+    )
 
 
 @lru_cache

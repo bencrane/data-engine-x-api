@@ -94,12 +94,12 @@ uvicorn app.main:app --reload
 cd trigger && npm install && cd ..
 
 # Run migration (manual execution by operator)
-psql "$DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
+psql "$DATA_ENGINE_DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
 ```
 
 ## Database Connection
 
-- `DATABASE_URL=<postgres-connection-string>`
+- `DATA_ENGINE_DATABASE_URL=<postgres-connection-string>`
 - Keep real credentials in `.env`; never hardcode secrets in source files.
 
 ## Directory Structure
