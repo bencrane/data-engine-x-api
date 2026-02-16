@@ -25,7 +25,9 @@ def _blueprint_version_from_snapshot(snapshot: dict[str, Any]) -> int:
     digest = hashlib.sha256(
         str(snapshot).encode("utf-8")
     ).hexdigest()
-    return int(digest[:8], 16)
+    # Keep deterministic version within Postgres INT range.
+    value = int(digest[:8], 16) % 2_147_483_647
+    return value if value > 0 else 1
 
 
 def _ensure_company_in_org(org_id: str, company_id: str) -> bool:
