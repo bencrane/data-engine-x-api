@@ -28,6 +28,10 @@ interface InternalPipelineRun {
       input?: Record<string, unknown>;
       index?: number;
     };
+    fan_out?: {
+      parent_pipeline_run_id?: string;
+      start_from_position?: number;
+    };
   };
   step_results: Array<{
     id: string;
@@ -72,6 +76,19 @@ interface InternalEnvelope<TData> {
 interface InternalConfig {
   apiUrl: string;
   internalApiKey: string;
+}
+
+function getExecutionStartPosition(run: InternalPipelineRun): number {
+  const fanOutStart = run.blueprint_snapshot.fan_out?.start_from_position;
+  if (typeof fanOutStart === "number" && Number.isInteger(fanOutStart) && fanOutStart > 0) {
+    return fanOutStart;
+  }
+
+  if (run.step_results.length > 0) {
+    return run.step_results.reduce((min, stepResult) => Math.min(min, stepResult.step_position), Number.MAX_SAFE_INTEGER);
+  }
+
+  return 1;
 }
 
 function resolveInternalConfig(payload: RunPipelinePayload): InternalConfig {
@@ -176,8 +193,10 @@ export const runPipeline = task({
       submission_id: run.submission_id,
     });
 
+    const executionStartPosition = getExecutionStartPosition(run);
     const orderedSteps = [...run.blueprint_snapshot.steps]
       .filter((step) => step.is_enabled !== false)
+      .filter((step) => step.position >= executionStartPosition)
       .sort((a, b) => a.position - b.position);
 
     const snapshotEntity = run.blueprint_snapshot.entity || {};
