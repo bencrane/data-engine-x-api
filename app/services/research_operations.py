@@ -5,14 +5,25 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.company_research import ResolveG2UrlOutput, ResolvePricingPageUrlOutput
-from app.providers import gemini, openai_provider
+from app.contracts.company_research import (
+    DiscoverCompetitorsOutput,
+    ResolveG2UrlOutput,
+    ResolvePricingPageUrlOutput,
+)
+from app.providers import gemini, openai_provider, revenueinfra
 
 
 def _normalize_company_domain(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     cleaned = value.strip().lower()
+    return cleaned or None
+
+
+def _as_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
     return cleaned or None
 
 
@@ -326,6 +337,119 @@ async def execute_company_research_resolve_pricing_page_url(
         "run_id": run_id,
         "operation_id": "company.research.resolve_pricing_page_url",
         "status": "found" if pricing_page_url else "not_found",
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+def _company_research_context(input_data: dict[str, Any]) -> dict[str, Any]:
+    cumulative = input_data.get("cumulative_context")
+    if isinstance(cumulative, dict):
+        return cumulative
+    return {}
+
+
+def _extract_company_research_discover_competitors_inputs(
+    input_data: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
+    context = _company_research_context(input_data)
+    company_profile = context.get("company_profile")
+    profile = company_profile if isinstance(company_profile, dict) else {}
+
+    company_domain = _normalize_company_domain(
+        context.get("company_domain") or profile.get("company_domain")
+    )
+    company_name = _as_non_empty_str(
+        context.get("company_name") or profile.get("company_name")
+    )
+    company_linkedin_url = _as_non_empty_str(
+        context.get("company_linkedin_url") or profile.get("company_linkedin_url")
+    )
+    return company_domain, company_name, company_linkedin_url
+
+
+async def execute_company_research_discover_competitors(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    operation_id = "company.research.discover_competitors"
+
+    company_domain, company_name, company_linkedin_url = (
+        _extract_company_research_discover_competitors_inputs(input_data)
+    )
+
+    if not company_domain and not company_name:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["company_domain", "company_name"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await revenueinfra.discover_competitors(
+        base_url=settings.revenueinfra_api_url,
+        domain=company_domain or "",
+        company_name=company_name or "",
+        company_linkedin_url=company_linkedin_url,
+    )
+    attempt = result.get("attempt") if isinstance(result, dict) else {}
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result, dict) else None
+
+    status = attempt.get("status") if isinstance(attempt, dict) else "failed"
+    if status == "failed":
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+        }
+    if status == "skipped":
+        missing_inputs: list[str] = []
+        if not company_domain:
+            missing_inputs.append("company_domain")
+        if not company_name:
+            missing_inputs.append("company_name")
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": missing_inputs or ["company_domain|company_name"],
+            "provider_attempts": attempts,
+        }
+
+    competitors = []
+    if isinstance(mapped, dict) and isinstance(mapped.get("competitors"), list):
+        competitors = mapped.get("competitors") or []
+
+    try:
+        output = DiscoverCompetitorsOutput.model_validate(
+            {
+                "competitors": competitors,
+                "competitor_count": len(competitors),
+                "source_provider": "revenueinfra",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "not_found" if status == "not_found" else "found",
         "output": output,
         "provider_attempts": attempts,
     }
