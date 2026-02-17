@@ -7,6 +7,51 @@ import httpx
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 
+def _extract_location_name(value: Any) -> str | None:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    if not isinstance(value, dict):
+        return None
+    for key in ("name", "full", "address", "formatted"):
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    parts: list[str] = []
+    for key in ("city", "state", "state_code", "country", "country_name", "country_code"):
+        candidate = value.get(key)
+        if isinstance(candidate, str):
+            cleaned = candidate.strip()
+            if cleaned:
+                parts.append(cleaned)
+    if not parts:
+        country_obj = value.get("country")
+        if isinstance(country_obj, dict):
+            country_name = country_obj.get("name")
+            country_code = country_obj.get("code")
+            for candidate in (country_name, country_code):
+                if isinstance(candidate, str) and candidate.strip():
+                    parts.append(candidate.strip())
+    return ", ".join(parts) if parts else None
+
+
+def _extract_country_code(person: dict[str, Any]) -> str | None:
+    country_code = person.get("country_code")
+    if isinstance(country_code, str) and country_code.strip():
+        return country_code.strip()
+    location = person.get("location")
+    if isinstance(location, dict):
+        direct = location.get("country_code")
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        country_obj = location.get("country")
+        if isinstance(country_obj, dict):
+            nested = country_obj.get("code")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+    return None
+
+
 def canonical_company_result(
     *,
     provider: str,
@@ -204,12 +249,12 @@ async def search_people(
                 last_name=person.get("last_name"),
                 linkedin_url=person.get("linkedin_url"),
                 headline=person.get("headline"),
-                current_title=person.get("job_title") or person.get("title"),
+                current_title=person.get("current_job_title") or person.get("job_title") or person.get("title"),
                 company_name=company.get("name"),
                 company_domain=company.get("domain"),
-                location_name=person.get("location"),
-                country_code=person.get("country_code"),
-                source_person_id=person.get("person_id"),
+                location_name=_extract_location_name(person.get("location")),
+                country_code=_extract_country_code(person),
+                source_person_id=str(person.get("person_id")) if person.get("person_id") is not None else None,
                 raw={"person": person, "company": company},
             )
         )

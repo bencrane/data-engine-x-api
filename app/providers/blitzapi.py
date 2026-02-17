@@ -33,19 +33,25 @@ def canonical_person_result(
     raw: dict[str, Any],
 ) -> dict[str, Any]:
     location = person.get("location") or {}
-    current = (person.get("experiences") or [{}])[0] or {}
+    experiences = person.get("experiences") or []
+    current = next((exp for exp in experiences if isinstance(exp, dict) and exp.get("job_is_current")), None)
+    if not isinstance(current, dict):
+        current = experiences[0] if experiences and isinstance(experiences[0], dict) else {}
+    location_name = location.get("city")
+    if not isinstance(location_name, str) or not location_name.strip():
+        location_name = location.get("country_code")
     return {
         "full_name": person.get("full_name"),
         "first_name": person.get("first_name"),
         "last_name": person.get("last_name"),
         "linkedin_url": person.get("linkedin_url"),
         "headline": person.get("headline"),
-        "current_title": current.get("job_title"),
+        "current_title": current.get("job_title") or current.get("position"),
         "current_company_name": None,
         "current_company_domain": None,
-        "location_name": location.get("city"),
+        "location_name": location_name,
         "country_code": location.get("country_code"),
-        "source_person_id": None,
+        "source_person_id": str(person.get("id")) if person.get("id") is not None else None,
         "source_provider": "blitzapi",
         "raw": raw,
     }

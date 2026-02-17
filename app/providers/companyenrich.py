@@ -32,17 +32,24 @@ def canonical_person_result(person: dict[str, Any]) -> dict[str, Any]:
     country = location.get("country") or {}
     experiences = person.get("experiences") or []
     current_company = None
+    current_experience = None
     for exp in experiences:
-        if exp.get("isCurrent") and exp.get("type") == "company":
+        if not isinstance(exp, dict) or not exp.get("isCurrent"):
+            continue
+        current_experience = exp
+        if exp.get("type") == "company":
             current_company = exp.get("company") or {}
-            break
+        break
+    current_position = person.get("position")
+    if (not isinstance(current_position, str) or not current_position.strip()) and isinstance(current_experience, dict):
+        current_position = current_experience.get("position")
     return {
         "full_name": person.get("name"),
         "first_name": person.get("first_name"),
         "last_name": person.get("last_name"),
         "linkedin_url": socials.get("linkedin_url"),
         "headline": person.get("position"),
-        "current_title": person.get("position"),
+        "current_title": current_position,
         "current_company_name": (current_company or {}).get("name"),
         "current_company_domain": (current_company or {}).get("domain"),
         "location_name": location.get("address"),

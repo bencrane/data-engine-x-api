@@ -413,20 +413,15 @@ async def execute_person_search(
             }
         ).model_dump()
     except Exception as exc:  # noqa: BLE001
-        attempts.append(
-            {
-                "provider": "person.search",
-                "action": "output_validation",
-                "status": "failed",
-                "provider_status": f"unhandled_exception:{exc.__class__.__name__}",
-                "raw_response": {"error": str(exc)},
-            }
-        )
         return {
             "run_id": run_id,
             "operation_id": "person.search",
             "status": "failed",
             "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
     return {
         "run_id": run_id,
