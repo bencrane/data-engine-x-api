@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
+from app.contracts.company_enrich import CompanyEnrichProfileOutput
 from app.providers import blitzapi, companyenrich, leadmagic, prospeo
 
 
@@ -268,14 +269,17 @@ async def execute_company_enrich_profile(
             "source_company_id": input_data.get("source_company_id") or profile.get("source_company_id"),
         }
 
+    output = CompanyEnrichProfileOutput.model_validate(
+        {
+            "company_profile": profile or None,
+            "source_providers": sources,
+        }
+    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "company.enrich.profile",
         "status": "found" if profile else "not_found",
-        "output": {
-            "company_profile": profile or None,
-            "source_providers": sources,
-        },
+        "output": output,
         "provider_attempts": attempts,
     }
 

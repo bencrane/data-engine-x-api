@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
+from app.contracts.person_contact import ResolveEmailOutput, ResolveMobilePhoneOutput, VerifyEmailOutput
 from app.providers import blitzapi, icypeas, leadmagic, millionverifier, parallel_ai, reoon
 
 INCONCLUSIVE_MILLIONVERIFIER_RESULTS = {"unknown", "catch_all"}
@@ -245,15 +246,18 @@ async def execute_person_contact_resolve_email(
             if reoon_verification is not None:
                 verification = reoon_verification
 
+    output = ResolveEmailOutput.model_validate(
+        {
+            "email": resolved_email,
+            "source_provider": source,
+            "verification": verification,
+        }
+    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.contact.resolve_email",
         "status": "found" if resolved_email else "not_found",
-        "output": {
-            "email": resolved_email,
-            "source_provider": source,
-            "verification": verification,
-        },
+        "output": output,
         "provider_attempts": attempts,
     }
 
@@ -280,14 +284,17 @@ async def execute_person_contact_verify_email(
         if reoon_verification is not None:
             verification = reoon_verification
 
+    output = VerifyEmailOutput.model_validate(
+        {
+            "email": email,
+            "verification": verification,
+        }
+    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.contact.verify_email",
         "status": "verified" if verification else "failed",
-        "output": {
-            "email": email,
-            "verification": verification,
-        },
+        "output": output,
         "provider_attempts": attempts,
     }
 
@@ -333,14 +340,17 @@ async def execute_person_contact_resolve_mobile_phone(
                 source = "blitzapi"
                 break
 
+    output = ResolveMobilePhoneOutput.model_validate(
+        {
+            "mobile_phone": mobile_phone,
+            "source_provider": source,
+        }
+    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.contact.resolve_mobile_phone",
         "status": "found" if mobile_phone else "not_found",
-        "output": {
-            "mobile_phone": mobile_phone,
-            "source_provider": source,
-        },
+        "output": output,
         "provider_attempts": attempts,
     }
 

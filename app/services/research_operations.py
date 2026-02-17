@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
+from app.contracts.company_research import ResolveG2UrlOutput, ResolvePricingPageUrlOutput
 from app.providers import gemini, openai_provider
 
 
@@ -177,17 +178,20 @@ async def execute_company_research_resolve_g2_url(
         if g2_url:
             provider_used = "openai"
 
-    return {
-        "run_id": run_id,
-        "operation_id": "company.research.resolve_g2_url",
-        "status": "found" if g2_url else "not_found",
-        "output": {
+    output = ResolveG2UrlOutput.model_validate(
+        {
             "company_name": company_name,
             "company_domain": company_domain,
             "g2_url": g2_url,
             "confidence": confidence,
             "provider_used": provider_used,
-        },
+        }
+    ).model_dump()
+    return {
+        "run_id": run_id,
+        "operation_id": "company.research.resolve_g2_url",
+        "status": "found" if g2_url else "not_found",
+        "output": output,
         "provider_attempts": attempts,
     }
 
@@ -266,16 +270,19 @@ async def execute_company_research_resolve_pricing_page_url(
         if pricing_page_url:
             provider_used = "openai"
 
-    return {
-        "run_id": run_id,
-        "operation_id": "company.research.resolve_pricing_page_url",
-        "status": "found" if pricing_page_url else "not_found",
-        "output": {
+    output = ResolvePricingPageUrlOutput.model_validate(
+        {
             "company_name": company_name,
             "company_domain": company_domain,
             "pricing_page_url": pricing_page_url,
             "confidence": confidence,
             "provider_used": provider_used,
-        },
+        }
+    ).model_dump()
+    return {
+        "run_id": run_id,
+        "operation_id": "company.research.resolve_pricing_page_url",
+        "status": "found" if pricing_page_url else "not_found",
+        "output": output,
         "provider_attempts": attempts,
     }

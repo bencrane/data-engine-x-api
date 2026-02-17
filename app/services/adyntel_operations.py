@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
+from app.contracts.company_ads import GoogleAdsOutput, LinkedInAdsOutput, MetaAdsOutput
 from app.providers import adyntel
 
 
@@ -78,11 +79,12 @@ async def execute_company_ads_search_linkedin(
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
     ads = mapped.get("ads") or []
+    output = LinkedInAdsOutput.model_validate(mapped).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "company.ads.search.linkedin",
         "status": "found" if ads else "not_found",
-        "output": mapped,
+        "output": output,
         "provider_attempts": attempts,
     }
 
@@ -147,11 +149,12 @@ async def execute_company_ads_search_meta(
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
     results = mapped.get("results") or []
+    output = MetaAdsOutput.model_validate(mapped).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "company.ads.search.meta",
         "status": "found" if results else "not_found",
-        "output": mapped,
+        "output": output,
         "provider_attempts": attempts,
     }
 
@@ -197,11 +200,12 @@ async def execute_company_ads_search_google(
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
     ads = mapped.get("ads") or []
+    output = GoogleAdsOutput.model_validate(mapped).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "company.ads.search.google",
         "status": "found" if ads else "not_found",
-        "output": mapped,
+        "output": output,
         "provider_attempts": attempts,
     }
 

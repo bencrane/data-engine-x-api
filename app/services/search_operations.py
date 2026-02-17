@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
+from app.contracts.search import CompanySearchOutput, PersonSearchOutput
 from app.providers import blitzapi, companyenrich, prospeo
 
 
@@ -171,16 +172,19 @@ async def execute_company_search(
             break
 
     deduped = _dedupe_companies(combined)[:limit]
-    return {
-        "run_id": run_id,
-        "operation_id": "company.search",
-        "status": "found" if deduped else "not_found",
-        "output": {
+    output = CompanySearchOutput.model_validate(
+        {
             "results": deduped,
             "result_count": len(deduped),
             "provider_order_used": _company_search_provider_order(),
             "pagination": pagination_by_provider,
-        },
+        }
+    ).model_dump()
+    return {
+        "run_id": run_id,
+        "operation_id": "company.search",
+        "status": "found" if deduped else "not_found",
+        "output": output,
         "provider_attempts": attempts,
     }
 
@@ -356,15 +360,18 @@ async def execute_person_search(
             break
 
     deduped = _dedupe_people(combined)[:limit]
-    return {
-        "run_id": run_id,
-        "operation_id": "person.search",
-        "status": "found" if deduped else "not_found",
-        "output": {
+    output = PersonSearchOutput.model_validate(
+        {
             "results": deduped,
             "result_count": len(deduped),
             "provider_order_used": _person_search_provider_order(),
             "pagination": pagination_by_provider,
-        },
+        }
+    ).model_dump()
+    return {
+        "run_id": run_id,
+        "operation_id": "person.search",
+        "status": "found" if deduped else "not_found",
+        "output": output,
         "provider_attempts": attempts,
     }
