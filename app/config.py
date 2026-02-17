@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     blitzapi_api_key: str | None = None
     companyenrich_api_key: str | None = None
     adyntel_api_key: str | None = None
-    adyntel_email: str | None = None
+    adyntel_account_email: str | None = None
     parallel_processor: str = "core"
     icypeas_poll_interval_ms: int = 2000
     icypeas_max_wait_ms: int = 45000
@@ -57,7 +57,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        env_prefix="DATA_ENGINE_",
     )
 
     @field_validator("internal_api_key")
@@ -65,7 +64,7 @@ class Settings(BaseSettings):
     def _validate_internal_api_key(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("DATA_ENGINE_INTERNAL_API_KEY must be set and non-empty")
+            raise ValueError("INTERNAL_API_KEY must be set and non-empty")
         return cleaned
 
 

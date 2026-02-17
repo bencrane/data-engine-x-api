@@ -26,13 +26,13 @@ def _validate_adyntel_settings(attempts: list[dict[str, Any]], action: str) -> t
     settings = get_settings()
     validation = adyntel.validate_credentials(
         api_key=settings.adyntel_api_key,
-        email=settings.adyntel_email,
+        email=settings.adyntel_account_email,
         action=action,
     )
     if validation is not None:
         attempts.append(validation["attempt"])
         return None, None
-    return settings.adyntel_api_key, settings.adyntel_email
+    return settings.adyntel_api_key, settings.adyntel_account_email
 
 
 async def execute_company_ads_search_linkedin(
