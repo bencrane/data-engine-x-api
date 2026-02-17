@@ -1,9 +1,12 @@
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from app.auth import AuthContext, get_current_auth
+from app.auth.models import SuperAdminContext
+from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.email_operations import (
@@ -27,6 +30,8 @@ from app.services.research_operations import (
 
 router = APIRouter()
 
+_security = HTTPBearer(auto_error=False)
+
 SUPPORTED_OPERATION_IDS = {
     "person.contact.resolve_email",
     "person.contact.resolve_mobile_phone",
@@ -40,6 +45,20 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.resolve_g2_url",
     "company.research.resolve_pricing_page_url",
 }
+
+
+async def _resolve_flexible_auth(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
+) -> AuthContext | SuperAdminContext:
+    """Accept super-admin API key or tenant auth (JWT / API token)."""
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization token")
+    try:
+        return await get_current_super_admin(credentials)
+    except HTTPException:
+        pass
+    return await get_current_auth(request=request, credentials=credentials)
 
 
 class ExecuteV1Request(BaseModel):
@@ -57,6 +76,7 @@ class BatchEntityInput(BaseModel):
 class BatchSubmitRequest(BaseModel):
     blueprint_id: str
     entities: list[BatchEntityInput]
+    org_id: str | None = None
     company_id: str | None = None
     source: str | None = "api_v1_batch"
     metadata: dict[str, Any] | None = None
@@ -64,6 +84,7 @@ class BatchSubmitRequest(BaseModel):
 
 class BatchStatusRequest(BaseModel):
     submission_id: str
+    org_id: str | None = None
 
 
 @router.post(
@@ -215,21 +236,32 @@ async def execute_v1(
 )
 async def batch_submit(
     payload: BatchSubmitRequest,
-    auth: AuthContext = Depends(get_current_auth),
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
     if not payload.entities:
         return error_response("entities must contain at least one entity", 400)
 
-    if auth.role in {"company_admin", "member"}:
-        if not auth.company_id:
-            return error_response("Company-scoped user missing company_id", 403)
-        company_id = auth.company_id
-        if payload.company_id and payload.company_id != auth.company_id:
-            return error_response("Forbidden company access", 403)
-    else:
+    is_super_admin = isinstance(auth, SuperAdminContext)
+
+    if is_super_admin:
+        if not payload.org_id:
+            return error_response("org_id is required for super-admin batch submit", 400)
+        if not payload.company_id:
+            return error_response("company_id is required for super-admin batch submit", 400)
+        org_id = payload.org_id
         company_id = payload.company_id
-        if not company_id:
-            return error_response("company_id is required for org-scoped users", 400)
+    else:
+        org_id = auth.org_id
+        if auth.role in {"company_admin", "member"}:
+            if not auth.company_id:
+                return error_response("Company-scoped user missing company_id", 403)
+            company_id = auth.company_id
+            if payload.company_id and payload.company_id != auth.company_id:
+                return error_response("Forbidden company access", 403)
+        else:
+            company_id = payload.company_id
+            if not company_id:
+                return error_response("company_id is required for org-scoped users", 400)
 
     invalid_entities = []
     for idx, entity in enumerate(payload.entities):
@@ -245,13 +277,13 @@ async def batch_submit(
 
     try:
         result = await create_batch_submission_and_trigger_pipeline_runs(
-            org_id=auth.org_id,
+            org_id=org_id,
             company_id=company_id,
             blueprint_id=payload.blueprint_id,
             entities=[entity.model_dump() for entity in payload.entities],
             source=payload.source,
             metadata=payload.metadata,
-            submitted_by_user_id=auth.user_id,
+            submitted_by_user_id=auth.user_id if hasattr(auth, "user_id") else None,
         )
     except ValueError as exc:
         return error_response(str(exc), 400)
@@ -276,29 +308,33 @@ def _map_pipeline_status(status: str | None) -> str:
 )
 async def batch_status(
     payload: BatchStatusRequest,
-    auth: AuthContext = Depends(get_current_auth),
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+
     client = get_supabase_client()
-    submission_result = (
-        client.table("submissions")
-        .select("*")
-        .eq("id", payload.submission_id)
-        .eq("org_id", auth.org_id)
-        .limit(1)
-        .execute()
-    )
+    query = client.table("submissions").select("*").eq("id", payload.submission_id)
+    if is_super_admin:
+        if payload.org_id:
+            query = query.eq("org_id", payload.org_id)
+    else:
+        query = query.eq("org_id", auth.org_id)
+
+    submission_result = query.limit(1).execute()
     if not submission_result.data:
         return error_response("Submission not found", 404)
 
     submission = submission_result.data[0]
-    if auth.role in {"company_admin", "member"} and submission.get("company_id") != auth.company_id:
+    org_id = submission["org_id"]
+
+    if not is_super_admin and auth.role in {"company_admin", "member"} and submission.get("company_id") != auth.company_id:
         return error_response("Forbidden submission access", 403)
 
     runs_result = (
         client.table("pipeline_runs")
         .select("*")
         .eq("submission_id", payload.submission_id)
-        .eq("org_id", auth.org_id)
+        .eq("org_id", org_id)
         .order("created_at")
         .execute()
     )
@@ -316,7 +352,7 @@ async def batch_status(
                 client.table("step_results")
                 .select("step_position, status, output_payload")
                 .eq("pipeline_run_id", run["id"])
-                .eq("org_id", auth.org_id)
+                .eq("org_id", org_id)
                 .order("step_position", desc=True)
                 .execute()
             )
@@ -357,4 +393,3 @@ async def batch_status(
             "runs": per_entity,
         }
     )
-
