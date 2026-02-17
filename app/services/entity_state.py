@@ -123,6 +123,52 @@ def _stable_identity_fallback(prefix: str, org_id: str, canonical_fields: dict[s
     return str(uuid5(NAMESPACE_URL, f"{prefix}:{org_id}:fallback:{identity_payload}"))
 
 
+def resolve_company_entity_id(
+    *,
+    org_id: str,
+    canonical_fields: dict[str, Any],
+    entity_id: str | None = None,
+) -> str:
+    explicit_entity_id = _as_uuid_str(entity_id)
+    if explicit_entity_id:
+        return explicit_entity_id
+
+    normalized_fields = _company_fields_from_context(canonical_fields)
+    canonical_domain = normalized_fields.get("canonical_domain")
+    linkedin_url = normalized_fields.get("linkedin_url")
+    canonical_name = normalized_fields.get("canonical_name")
+    if canonical_domain:
+        return str(uuid5(NAMESPACE_URL, f"company:{org_id}:domain:{canonical_domain}"))
+    if linkedin_url:
+        return str(uuid5(NAMESPACE_URL, f"company:{org_id}:linkedin:{linkedin_url}"))
+    if canonical_name:
+        return str(uuid5(NAMESPACE_URL, f"company:{org_id}:name:{canonical_name.lower()}"))
+    return _stable_identity_fallback("company", org_id, canonical_fields)
+
+
+def resolve_person_entity_id(
+    *,
+    org_id: str,
+    canonical_fields: dict[str, Any],
+    entity_id: str | None = None,
+) -> str:
+    explicit_entity_id = _as_uuid_str(entity_id)
+    if explicit_entity_id:
+        return explicit_entity_id
+
+    normalized_fields = _person_fields_from_context(canonical_fields)
+    linkedin_url = normalized_fields.get("linkedin_url")
+    work_email = normalized_fields.get("work_email")
+    full_name = normalized_fields.get("full_name")
+    if linkedin_url:
+        return str(uuid5(NAMESPACE_URL, f"person:{org_id}:linkedin:{linkedin_url}"))
+    if work_email:
+        return str(uuid5(NAMESPACE_URL, f"person:{org_id}:work_email:{work_email}"))
+    if full_name:
+        return str(uuid5(NAMESPACE_URL, f"person:{org_id}:full_name:{full_name.lower()}"))
+    return _stable_identity_fallback("person", org_id, canonical_fields)
+
+
 def _company_fields_from_context(canonical_fields: dict[str, Any]) -> dict[str, Any]:
     return {
         "canonical_domain": _normalize_domain(
@@ -299,17 +345,10 @@ def upsert_company_entity(
             resolved_entity_id = existing["entity_id"]
 
     if not resolved_entity_id:
-        canonical_domain = normalized_fields.get("canonical_domain")
-        linkedin_url = normalized_fields.get("linkedin_url")
-        canonical_name = normalized_fields.get("canonical_name")
-        if canonical_domain:
-            resolved_entity_id = str(uuid5(NAMESPACE_URL, f"company:{org_id}:domain:{canonical_domain}"))
-        elif linkedin_url:
-            resolved_entity_id = str(uuid5(NAMESPACE_URL, f"company:{org_id}:linkedin:{linkedin_url}"))
-        elif canonical_name:
-            resolved_entity_id = str(uuid5(NAMESPACE_URL, f"company:{org_id}:name:{canonical_name.lower()}"))
-        else:
-            resolved_entity_id = _stable_identity_fallback("company", org_id, canonical_fields)
+        resolved_entity_id = resolve_company_entity_id(
+            org_id=org_id,
+            canonical_fields=canonical_fields,
+        )
 
     if existing is None:
         existing = _load_company_by_id(org_id, resolved_entity_id)
@@ -418,17 +457,10 @@ def upsert_person_entity(
             resolved_entity_id = existing["entity_id"]
 
     if not resolved_entity_id:
-        linkedin_url = normalized_fields.get("linkedin_url")
-        work_email = normalized_fields.get("work_email")
-        full_name = normalized_fields.get("full_name")
-        if linkedin_url:
-            resolved_entity_id = str(uuid5(NAMESPACE_URL, f"person:{org_id}:linkedin:{linkedin_url}"))
-        elif work_email:
-            resolved_entity_id = str(uuid5(NAMESPACE_URL, f"person:{org_id}:work_email:{work_email}"))
-        elif full_name:
-            resolved_entity_id = str(uuid5(NAMESPACE_URL, f"person:{org_id}:full_name:{full_name.lower()}"))
-        else:
-            resolved_entity_id = _stable_identity_fallback("person", org_id, canonical_fields)
+        resolved_entity_id = resolve_person_entity_id(
+            org_id=org_id,
+            canonical_fields=canonical_fields,
+        )
 
     if existing is None:
         existing = _load_person_by_id(org_id, resolved_entity_id)

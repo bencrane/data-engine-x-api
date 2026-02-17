@@ -12,6 +12,8 @@ from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.entity_state import (
     EntityStateVersionError,
+    resolve_company_entity_id,
+    resolve_person_entity_id,
     upsert_company_entity,
     upsert_person_entity,
 )
@@ -94,6 +96,9 @@ class InternalPipelineRunFanOutRequest(BaseModel):
     fan_out_entities: list[dict[str, Any]]
     start_from_position: int
     parent_cumulative_context: dict[str, Any] | None = None
+    fan_out_operation_id: str | None = None
+    provider: str | None = None
+    provider_attempts: list[dict[str, Any]] | None = None
 
 
 def _normalize_timeline_status(status_value: str | None) -> str:
@@ -112,6 +117,22 @@ def _select_provider_from_attempts(provider_attempts: list[dict[str, Any]] | Non
             return str(attempt["provider"])
     first_provider = provider_attempts[0].get("provider")
     return str(first_provider) if first_provider else None
+
+
+def _extract_company_context_for_timeline(
+    *,
+    run_blueprint_snapshot: dict[str, Any] | None,
+    parent_cumulative_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if isinstance(parent_cumulative_context, dict) and parent_cumulative_context:
+        return parent_cumulative_context
+    if isinstance(run_blueprint_snapshot, dict):
+        entity_data = run_blueprint_snapshot.get("entity")
+        if isinstance(entity_data, dict):
+            entity_input = entity_data.get("input")
+            if isinstance(entity_input, dict):
+                return entity_input
+    return {}
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
@@ -321,6 +342,66 @@ async def internal_fan_out_pipeline_runs(
         start_from_position=payload.start_from_position,
         parent_cumulative_context=payload.parent_cumulative_context,
     )
+
+    fan_out_operation_id = payload.fan_out_operation_id or "person.search"
+    company_context = _extract_company_context_for_timeline(
+        run_blueprint_snapshot=parent_run.get("blueprint_snapshot"),
+        parent_cumulative_context=payload.parent_cumulative_context,
+    )
+    company_entity_id = resolve_company_entity_id(
+        org_id=payload.org_id,
+        canonical_fields=company_context,
+        entity_id=company_context.get("entity_id") if isinstance(company_context, dict) else None,
+    )
+
+    record_entity_event(
+        org_id=payload.org_id,
+        company_id=payload.company_id,
+        entity_type="company",
+        entity_id=company_entity_id,
+        operation_id=fan_out_operation_id,
+        pipeline_run_id=payload.parent_pipeline_run_id,
+        submission_id=payload.submission_id,
+        provider=payload.provider,
+        status="found" if child_runs else "not_found",
+        fields_updated=["results", "result_count"],
+        summary=f"{fan_out_operation_id} found {len(child_runs)} people",
+        metadata={
+            "event_type": "fan_out_discovery",
+            "child_pipeline_run_ids": [row["pipeline_run_id"] for row in child_runs],
+            "provider_attempts": payload.provider_attempts or [],
+        },
+    )
+
+    for index, child in enumerate(child_runs):
+        entity_input = child.get("entity_input")
+        if not isinstance(entity_input, dict):
+            continue
+        person_entity_id = resolve_person_entity_id(
+            org_id=payload.org_id,
+            canonical_fields=entity_input,
+            entity_id=entity_input.get("entity_id"),
+        )
+        record_entity_event(
+            org_id=payload.org_id,
+            company_id=payload.company_id,
+            entity_type="person",
+            entity_id=person_entity_id,
+            operation_id=fan_out_operation_id,
+            pipeline_run_id=child["pipeline_run_id"],
+            submission_id=payload.submission_id,
+            provider=payload.provider,
+            status="found",
+            fields_updated=sorted([key for key in entity_input.keys() if entity_input.get(key) is not None]),
+            summary=f"{fan_out_operation_id}: discovered person #{index + 1}",
+            metadata={
+                "event_type": "fan_out_discovery",
+                "parent_pipeline_run_id": payload.parent_pipeline_run_id,
+                "discovered_from_company_entity_id": company_entity_id,
+                "discovered_from_context": company_context,
+                "provider_attempts": payload.provider_attempts or [],
+            },
+        )
 
     return DataEnvelope(
         data={

@@ -136,3 +136,22 @@ def test_upsert_company_entity_rejects_lower_record_version(monkeypatch: pytest.
             canonical_fields={"canonical_name": "Nope"},
             incoming_record_version=4,
         )
+
+
+def test_resolve_person_entity_id_is_stable_for_linkedin():
+    org_id = "11111111-1111-1111-1111-111111111111"
+    payload = {"linkedin_url": "https://linkedin.com/in/example/"}
+    first = entity_state.resolve_person_entity_id(org_id=org_id, canonical_fields=payload)
+    second = entity_state.resolve_person_entity_id(org_id=org_id, canonical_fields=payload)
+    assert first == second
+
+
+def test_resolve_company_entity_id_prefers_explicit_entity_id():
+    org_id = "11111111-1111-1111-1111-111111111111"
+    explicit = "22222222-2222-2222-2222-222222222222"
+    resolved = entity_state.resolve_company_entity_id(
+        org_id=org_id,
+        canonical_fields={"canonical_domain": "acme.com"},
+        entity_id=explicit,
+    )
+    assert resolved == explicit
