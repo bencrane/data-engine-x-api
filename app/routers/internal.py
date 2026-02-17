@@ -10,6 +10,11 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.entity_state import (
+    EntityStateVersionError,
+    upsert_company_entity,
+    upsert_person_entity,
+)
 
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
@@ -69,6 +74,13 @@ class InternalSubmissionSyncStatusRequest(BaseModel):
 class InternalMarkRemainingSkippedRequest(BaseModel):
     pipeline_run_id: str
     from_step_position: int
+
+
+class InternalEntityStateUpsertRequest(BaseModel):
+    pipeline_run_id: str
+    entity_type: Literal["company", "person"]
+    cumulative_context: dict[str, Any]
+    last_operation_id: str | None = None
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
@@ -234,3 +246,52 @@ async def internal_sync_submission_status(
         .execute()
     )
     return DataEnvelope(data=result.data[0])
+
+
+@router.post(
+    "/entity-state/upsert",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+async def internal_upsert_entity_state(
+    payload: InternalEntityStateUpsertRequest,
+    _: None = Depends(require_internal_key),
+):
+    client = get_supabase_client()
+    run_result = (
+        client.table("pipeline_runs")
+        .select("id, org_id, company_id, status")
+        .eq("id", payload.pipeline_run_id)
+        .limit(1)
+        .execute()
+    )
+    if not run_result.data:
+        return error_response("Pipeline run not found", 404)
+
+    run = run_result.data[0]
+    if run.get("status") != "succeeded":
+        return error_response("Entity state upsert requires a succeeded pipeline run", 400)
+
+    try:
+        if payload.entity_type == "company":
+            upserted = upsert_company_entity(
+                org_id=run["org_id"],
+                company_id=run.get("company_id"),
+                entity_id=payload.cumulative_context.get("entity_id"),
+                canonical_fields=payload.cumulative_context,
+                last_operation_id=payload.last_operation_id,
+                last_run_id=run["id"],
+            )
+        else:
+            upserted = upsert_person_entity(
+                org_id=run["org_id"],
+                company_id=run.get("company_id"),
+                entity_id=payload.cumulative_context.get("entity_id"),
+                canonical_fields=payload.cumulative_context,
+                last_operation_id=payload.last_operation_id,
+                last_run_id=run["id"],
+            )
+    except EntityStateVersionError as exc:
+        return error_response(str(exc), 400)
+
+    return DataEnvelope(data=upserted)

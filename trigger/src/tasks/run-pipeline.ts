@@ -168,6 +168,7 @@ export const runPipeline = task({
         : {};
     const initialInput = snapshotEntity.input || submissionInput;
     let cumulativeContext: Record<string, unknown> = { ...initialInput };
+    let lastSuccessfulOperationId: string | null = null;
 
     for (const stepSnapshot of orderedSteps) {
       const stepResult = run.step_results.find((sr) => sr.step_position === stepSnapshot.position);
@@ -256,6 +257,7 @@ export const runPipeline = task({
             cumulative_context: cumulativeContext,
           },
         });
+        lastSuccessfulOperationId = operationId;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await internalPost(internalConfig, "/api/internal/step-results/update", {
@@ -287,6 +289,26 @@ export const runPipeline = task({
       error_message: null,
       error_details: null,
     });
+    try {
+      await internalPost(internalConfig, "/api/internal/entity-state/upsert", {
+        pipeline_run_id,
+        entity_type: entityType,
+        cumulative_context: cumulativeContext,
+        last_operation_id: lastSuccessfulOperationId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await internalPost(internalConfig, "/api/internal/pipeline-runs/update-status", {
+        pipeline_run_id,
+        status: "failed",
+        error_message: "Entity state upsert failed",
+        error_details: { error: message },
+      });
+      await internalPost(internalConfig, "/api/internal/submissions/sync-status", {
+        submission_id: run.submission_id,
+      });
+      return { pipeline_run_id, status: "failed", error: message };
+    }
     await internalPost(internalConfig, "/api/internal/submissions/sync-status", {
       submission_id: run.submission_id,
     });
