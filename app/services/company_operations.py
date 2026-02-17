@@ -275,11 +275,14 @@ async def execute_company_enrich_profile(
             "source_providers": sources,
         }
     ).model_dump()
+    # Flatten profile fields to top level so downstream operations
+    # can read company_name, company_domain, etc. from cumulative context.
+    flat_output = {**(profile or {}), **output}
     return {
         "run_id": run_id,
         "operation_id": "company.enrich.profile",
         "status": "found" if profile else "not_found",
-        "output": output,
+        "output": flat_output,
         "provider_attempts": attempts,
     }
 
