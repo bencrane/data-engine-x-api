@@ -1,14 +1,16 @@
 # app/models/blueprint.py — Blueprint schemas
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
 
 class BlueprintStepConfig(BaseModel):
-    step_id: str
-    order: int
-    config: dict | None = None
+    position: int
+    operation_id: str
+    step_config: dict[str, Any] | None = None
+    is_enabled: bool = True
 
 
 class BlueprintBase(BaseModel):
@@ -28,12 +30,15 @@ class BlueprintUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class Blueprint(BlueprintBase):
+class Blueprint(BaseModel):
     id: str
     org_id: str
+    name: str
+    description: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    steps: list[BlueprintStepConfig]
 
     class Config:
         from_attributes = True
