@@ -18,6 +18,7 @@ from app.services.adyntel_operations import (
     execute_company_ads_search_meta,
 )
 from app.services.operation_history import persist_operation_execution
+from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
 from app.services.research_operations import (
     execute_company_research_resolve_g2_url,
     execute_company_research_resolve_pricing_page_url,
@@ -45,6 +46,19 @@ class ExecuteV1Request(BaseModel):
     entity_type: Literal["person", "company"]
     input: dict[str, Any]
     options: dict[str, Any] | None = None
+
+
+class BatchEntityInput(BaseModel):
+    entity_type: Literal["person", "company"]
+    input: dict[str, Any]
+
+
+class BatchSubmitRequest(BaseModel):
+    blueprint_id: str
+    entities: list[BatchEntityInput]
+    company_id: str | None = None
+    source: str | None = "api_v1_batch"
+    metadata: dict[str, Any] | None = None
 
 
 @router.post(
@@ -187,4 +201,55 @@ async def execute_v1(
         return DataEnvelope(data=result)
 
     return error_response(f"Unsupported operation_id: {payload.operation_id}", 400)
+
+
+@router.post(
+    "/batch/submit",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope}},
+)
+async def batch_submit(
+    payload: BatchSubmitRequest,
+    auth: AuthContext = Depends(get_current_auth),
+):
+    if not payload.entities:
+        return error_response("entities must contain at least one entity", 400)
+
+    if auth.role in {"company_admin", "member"}:
+        if not auth.company_id:
+            return error_response("Company-scoped user missing company_id", 403)
+        company_id = auth.company_id
+        if payload.company_id and payload.company_id != auth.company_id:
+            return error_response("Forbidden company access", 403)
+    else:
+        company_id = payload.company_id
+        if not company_id:
+            return error_response("company_id is required for org-scoped users", 400)
+
+    invalid_entities = []
+    for idx, entity in enumerate(payload.entities):
+        if entity.entity_type not in {"company", "person"}:
+            invalid_entities.append(f"{idx}:invalid_entity_type")
+        if not isinstance(entity.input, dict):
+            invalid_entities.append(f"{idx}:input_must_be_object")
+    if invalid_entities:
+        return error_response(
+            f"Invalid entities: {', '.join(invalid_entities)}",
+            400,
+        )
+
+    try:
+        result = await create_batch_submission_and_trigger_pipeline_runs(
+            org_id=auth.org_id,
+            company_id=company_id,
+            blueprint_id=payload.blueprint_id,
+            entities=[entity.model_dump() for entity in payload.entities],
+            source=payload.source,
+            metadata=payload.metadata,
+            submitted_by_user_id=auth.user_id,
+        )
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+
+    return DataEnvelope(data=result)
 

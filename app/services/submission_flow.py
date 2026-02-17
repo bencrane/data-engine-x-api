@@ -60,7 +60,7 @@ def _load_blueprint_snapshot(org_id: str, blueprint_id: str) -> dict[str, Any] |
 
     steps_result = (
         client.table("blueprint_steps")
-        .select("*, steps(*)")
+        .select("*")
         .eq("blueprint_id", blueprint_id)
         .eq("is_enabled", True)
         .order("position")
@@ -116,7 +116,7 @@ def _create_step_result_rows(
             "company_id": company_id,
             "submission_id": submission_id,
             "pipeline_run_id": pipeline_run_id,
-            "step_id": step["step_id"],
+            "step_id": step.get("step_id"),
             "blueprint_step_id": step["id"],
             "step_position": step["position"],
             "status": "queued",
@@ -216,6 +216,112 @@ async def create_submission_and_trigger_pipeline(
         "pipeline_run_id": run["id"],
         "pipeline_run_status": run["status"],
         "trigger_run_id": run.get("trigger_run_id"),
+    }
+
+
+async def create_batch_submission_and_trigger_pipeline_runs(
+    *,
+    org_id: str,
+    company_id: str,
+    blueprint_id: str,
+    entities: list[dict[str, Any]],
+    source: str | None,
+    metadata: dict[str, Any] | None,
+    submitted_by_user_id: str | None,
+) -> dict[str, Any]:
+    if not _is_uuid(org_id) or not _is_uuid(company_id) or not _is_uuid(blueprint_id):
+        raise ValueError("org_id, company_id, and blueprint_id must be valid UUIDs")
+    if not entities:
+        raise ValueError("entities must contain at least one entity")
+    if not _ensure_company_in_org(org_id, company_id):
+        raise ValueError("company_id does not belong to org_id")
+
+    snapshot = _load_blueprint_snapshot(org_id, blueprint_id)
+    if snapshot is None:
+        raise ValueError("blueprint not found or inactive for org")
+
+    client = get_supabase_client()
+    submission_result = client.table("submissions").insert(
+        {
+            "org_id": org_id,
+            "company_id": company_id,
+            "blueprint_id": blueprint_id,
+            "submitted_by_user_id": submitted_by_user_id,
+            "input_payload": {"entities": entities},
+            "source": source,
+            "metadata": metadata or {},
+            "status": "received",
+        }
+    ).execute()
+    submission = submission_result.data[0]
+
+    pipeline_runs: list[dict[str, Any]] = []
+    for idx, entity in enumerate(entities):
+        run_snapshot = {
+            **snapshot,
+            "entity": {
+                "index": idx,
+                "entity_type": entity.get("entity_type"),
+                "input": entity.get("input") if isinstance(entity.get("input"), dict) else {},
+            },
+        }
+        run = _create_pipeline_run_row(
+            org_id=org_id,
+            company_id=company_id,
+            submission_id=submission["id"],
+            blueprint_id=blueprint_id,
+            blueprint_snapshot=run_snapshot,
+            attempt=1,
+        )
+        _create_step_result_rows(
+            org_id=org_id,
+            company_id=company_id,
+            submission_id=submission["id"],
+            pipeline_run_id=run["id"],
+            blueprint_steps=snapshot["steps"],
+        )
+        try:
+            trigger_run_id = await trigger_pipeline_run(
+                pipeline_run_id=run["id"],
+                org_id=org_id,
+                company_id=company_id,
+            )
+            run_update = (
+                client.table("pipeline_runs")
+                .update({"trigger_run_id": trigger_run_id, "status": "queued"})
+                .eq("id", run["id"])
+                .execute()
+            )
+            run = run_update.data[0]
+        except Exception as exc:  # noqa: BLE001
+            failed = (
+                client.table("pipeline_runs")
+                .update(
+                    {
+                        "status": "failed",
+                        "error_message": "Failed to trigger Trigger.dev run",
+                        "error_details": {"error": str(exc), "at": _iso_now()},
+                    }
+                )
+                .eq("id", run["id"])
+                .execute()
+            )
+            run = failed.data[0]
+
+        pipeline_runs.append(
+            {
+                "entity_index": idx,
+                "entity_type": entity.get("entity_type"),
+                "pipeline_run_id": run["id"],
+                "pipeline_run_status": run["status"],
+                "trigger_run_id": run.get("trigger_run_id"),
+            }
+        )
+
+    client.table("submissions").update({"status": "queued"}).eq("id", submission["id"]).execute()
+    return {
+        "submission_id": submission["id"],
+        "pipeline_runs": pipeline_runs,
     }
 
 
