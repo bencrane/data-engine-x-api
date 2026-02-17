@@ -145,9 +145,11 @@ class StepDeactivateRequest(BaseModel):
 
 
 class BlueprintStepInput(BaseModel):
-    step_id: str
+    step_id: str | None = None
+    operation_id: str | None = None
     position: int
     config: dict[str, Any] | None = None
+    step_config: dict[str, Any] | None = None
 
 
 class BlueprintCreateRequest(BaseModel):
@@ -478,15 +480,19 @@ async def super_admin_create_blueprint(
     blueprint = blueprint_result.data[0]
 
     if payload.steps:
-        step_rows = [
-            {
+        step_rows = []
+        for step in payload.steps:
+            row: dict[str, Any] = {
                 "blueprint_id": blueprint["id"],
-                "step_id": step.step_id,
                 "position": step.position,
-                "config": step.config or {},
             }
-            for step in payload.steps
-        ]
+            if step.operation_id:
+                row["operation_id"] = step.operation_id
+                row["step_config"] = step.step_config or step.config or {}
+            if step.step_id:
+                row["step_id"] = step.step_id
+                row["config"] = step.config or {}
+            step_rows.append(row)
         client.table("blueprint_steps").insert(step_rows).execute()
 
     details = (
@@ -552,15 +558,19 @@ async def super_admin_update_blueprint(
             return error_response("Blueprint step positions must be unique", 400)
         client.table("blueprint_steps").delete().eq("blueprint_id", payload.id).execute()
         if payload.steps:
-            step_rows = [
-                {
+            step_rows = []
+            for step in payload.steps:
+                row: dict[str, Any] = {
                     "blueprint_id": payload.id,
-                    "step_id": step.step_id,
                     "position": step.position,
-                    "config": step.config or {},
                 }
-                for step in payload.steps
-            ]
+                if step.operation_id:
+                    row["operation_id"] = step.operation_id
+                    row["step_config"] = step.step_config or step.config or {}
+                if step.step_id:
+                    row["step_id"] = step.step_id
+                    row["config"] = step.config or {}
+                step_rows.append(row)
             client.table("blueprint_steps").insert(step_rows).execute()
 
     result = (
