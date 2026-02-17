@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,6 +58,14 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="DATA_ENGINE_",
     )
+
+    @field_validator("internal_api_key")
+    @classmethod
+    def _validate_internal_api_key(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("DATA_ENGINE_INTERNAL_API_KEY must be set and non-empty")
+        return cleaned
 
 
 @lru_cache
