@@ -126,7 +126,7 @@ async def run_parallel_task(
 
     headers = {"x-api-key": api_key, "Content-Type": "application/json"}
     payload = {
-        "input": json.dumps(input_data),
+        "input": input_data,
         "processor": processor,
         "task_spec": task_spec,
     }
