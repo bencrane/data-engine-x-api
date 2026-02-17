@@ -8,8 +8,8 @@ from app.contracts.search import CompanySearchOutput, PersonSearchOutput
 from app.providers import blitzapi, companyenrich, prospeo
 
 
-def _domain_from_value(value: str | None) -> str | None:
-    if not value:
+def _domain_from_value(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
         return None
     cleaned = value.strip().lower()
     if cleaned.startswith("http://"):
@@ -20,6 +20,39 @@ def _domain_from_value(value: str | None) -> str | None:
     if cleaned.startswith("www."):
         cleaned = cleaned[len("www.") :]
     return cleaned or None
+
+
+def _as_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _as_int(
+    value: Any,
+    *,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None and parsed < minimum:
+        parsed = minimum
+    if maximum is not None and parsed > maximum:
+        parsed = maximum
+    return parsed
+
+
+def _person_provider_filters(input_data: dict[str, Any]) -> dict[str, Any] | None:
+    raw = input_data.get("provider_filters")
+    if not isinstance(raw, dict):
+        return None
+    sanitized = {key: value for key, value in raw.items() if key in {"prospeo", "blitzapi", "companyenrich"} and isinstance(value, dict)}
+    return sanitized or None
 
 
 def _company_search_provider_order() -> list[str]:
@@ -298,18 +331,16 @@ async def execute_person_search(
 ) -> dict[str, Any]:
     run_id = str(uuid.uuid4())
     attempts: list[dict[str, Any]] = []
-    query = input_data.get("query")
-    page = int(input_data.get("page") or 1)
-    page_size = min(max(int(input_data.get("page_size") or 25), 1), 100)
-    limit = max(int(input_data.get("limit") or 100), 1)
+    query = _as_non_empty_str(input_data.get("query"))
+    page = _as_int(input_data.get("page"), default=1, minimum=1)
+    page_size = _as_int(input_data.get("page_size"), default=25, minimum=1, maximum=100)
+    limit = _as_int(input_data.get("limit"), default=100, minimum=1)
     company_domain = _domain_from_value(input_data.get("company_domain") or input_data.get("company_website"))
-    company_name = input_data.get("company_name")
-    company_linkedin_url = input_data.get("company_linkedin_url")
-    provider_filters = input_data.get("provider_filters")
-    if provider_filters is not None and not isinstance(provider_filters, dict):
-        provider_filters = None
+    company_name = _as_non_empty_str(input_data.get("company_name"))
+    company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
+    provider_filters = _person_provider_filters(input_data)
 
-    if not isinstance(query, str) and not company_domain and not company_name and not company_linkedin_url and not provider_filters:
+    if not query and not company_domain and not company_name and not company_linkedin_url and not provider_filters:
         return {
             "run_id": run_id,
             "operation_id": "person.search",
@@ -322,35 +353,47 @@ async def execute_person_search(
     pagination_by_provider: dict[str, Any] = {}
 
     for provider in _person_search_provider_order():
-        if provider == "prospeo":
-            results, pagination = await _search_people_prospeo(
-                query=query if isinstance(query, str) else None,
-                page=page,
-                company_domain=company_domain,
-                company_name=company_name if isinstance(company_name, str) else None,
-                attempts=attempts,
-                provider_filters=provider_filters,
+        try:
+            if provider == "prospeo":
+                results, pagination = await _search_people_prospeo(
+                    query=query,
+                    page=page,
+                    company_domain=company_domain,
+                    company_name=company_name,
+                    attempts=attempts,
+                    provider_filters=provider_filters,
+                )
+            elif provider == "blitzapi":
+                results, pagination = await _search_people_blitzapi(
+                    query=query,
+                    company_domain=company_domain,
+                    company_linkedin_url=company_linkedin_url,
+                    limit=limit,
+                    attempts=attempts,
+                    provider_filters=provider_filters,
+                )
+            elif provider == "companyenrich":
+                results, pagination = await _search_people_companyenrich(
+                    query=query,
+                    page=page,
+                    page_size=page_size,
+                    company_domain=company_domain,
+                    company_name=company_name,
+                    attempts=attempts,
+                    provider_filters=provider_filters,
+                )
+            else:
+                continue
+        except Exception as exc:  # noqa: BLE001
+            attempts.append(
+                {
+                    "provider": provider,
+                    "action": "person_search",
+                    "status": "failed",
+                    "provider_status": f"unhandled_exception:{exc.__class__.__name__}",
+                    "raw_response": {"error": str(exc)},
+                }
             )
-        elif provider == "blitzapi":
-            results, pagination = await _search_people_blitzapi(
-                query=query if isinstance(query, str) else None,
-                company_domain=company_domain,
-                company_linkedin_url=company_linkedin_url if isinstance(company_linkedin_url, str) else None,
-                limit=limit,
-                attempts=attempts,
-                provider_filters=provider_filters,
-            )
-        elif provider == "companyenrich":
-            results, pagination = await _search_people_companyenrich(
-                query=query if isinstance(query, str) else None,
-                page=page,
-                page_size=page_size,
-                company_domain=company_domain,
-                company_name=company_name if isinstance(company_name, str) else None,
-                attempts=attempts,
-                provider_filters=provider_filters,
-            )
-        else:
             continue
 
         if pagination is not None:
@@ -360,14 +403,31 @@ async def execute_person_search(
             break
 
     deduped = _dedupe_people(combined)[:limit]
-    output = PersonSearchOutput.model_validate(
-        {
-            "results": deduped,
-            "result_count": len(deduped),
-            "provider_order_used": _person_search_provider_order(),
-            "pagination": pagination_by_provider,
+    try:
+        output = PersonSearchOutput.model_validate(
+            {
+                "results": deduped,
+                "result_count": len(deduped),
+                "provider_order_used": _person_search_provider_order(),
+                "pagination": pagination_by_provider,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        attempts.append(
+            {
+                "provider": "person.search",
+                "action": "output_validation",
+                "status": "failed",
+                "provider_status": f"unhandled_exception:{exc.__class__.__name__}",
+                "raw_response": {"error": str(exc)},
+            }
+        )
+        return {
+            "run_id": run_id,
+            "operation_id": "person.search",
+            "status": "failed",
+            "provider_attempts": attempts,
         }
-    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.search",
