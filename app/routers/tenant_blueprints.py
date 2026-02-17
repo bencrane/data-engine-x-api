@@ -23,6 +23,7 @@ class BlueprintStepInput(BaseModel):
     position: int = Field(gt=0)
     operation_id: str
     step_config: dict | None = None
+    fan_out: bool = False
     is_enabled: bool = True
 
 
@@ -116,6 +117,7 @@ async def create_blueprint(
                 "position": step.position,
                 "operation_id": step.operation_id,
                 "step_config": step.step_config,
+                "fan_out": step.fan_out,
                 "is_enabled": step.is_enabled,
                 "config": step.step_config or {},
             }
@@ -175,6 +177,7 @@ async def update_blueprint(
                     "position": step.position,
                     "operation_id": step.operation_id,
                     "step_config": step.step_config,
+                    "fan_out": step.fan_out,
                     "is_enabled": step.is_enabled,
                     "config": step.step_config or {},
                 }

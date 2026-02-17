@@ -10,6 +10,7 @@ class BlueprintStepConfig(BaseModel):
     position: int
     operation_id: str
     step_config: dict[str, Any] | None = None
+    fan_out: bool = False
     is_enabled: bool = True
 
 

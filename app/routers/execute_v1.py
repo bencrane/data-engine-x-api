@@ -301,6 +301,33 @@ def _map_pipeline_status(status: str | None) -> str:
     return "pending"
 
 
+def _extract_final_context_for_run(
+    *,
+    client,
+    org_id: str,
+    pipeline_run_id: str,
+    mapped_status: str,
+) -> dict[str, Any] | None:
+    if mapped_status != "completed":
+        return None
+    step_results = (
+        client.table("step_results")
+        .select("step_position, status, output_payload")
+        .eq("pipeline_run_id", pipeline_run_id)
+        .eq("org_id", org_id)
+        .order("step_position", desc=True)
+        .execute()
+    )
+    for step in step_results.data:
+        if step.get("status") == "succeeded":
+            payload_data = step.get("output_payload") or {}
+            if isinstance(payload_data, dict):
+                final_context = payload_data.get("cumulative_context")
+                if isinstance(final_context, dict):
+                    return final_context
+    return None
+
+
 @router.post(
     "/batch/status",
     response_model=DataEnvelope,
@@ -339,42 +366,42 @@ async def batch_status(
         .execute()
     )
     run_rows = runs_result.data
-    per_entity: list[dict[str, Any]] = []
+    run_map: dict[str, dict[str, Any]] = {}
+    child_buckets: dict[str, list[dict[str, Any]]] = {}
     summary = {"total": len(run_rows), "completed": 0, "failed": 0, "pending": 0, "running": 0}
 
     for run in run_rows:
         mapped_status = _map_pipeline_status(run.get("status"))
         summary[mapped_status] = summary.get(mapped_status, 0) + 1
         entity_meta = (run.get("blueprint_snapshot") or {}).get("entity") or {}
-        final_context = None
-        if mapped_status == "completed":
-            step_results = (
-                client.table("step_results")
-                .select("step_position, status, output_payload")
-                .eq("pipeline_run_id", run["id"])
-                .eq("org_id", org_id)
-                .order("step_position", desc=True)
-                .execute()
-            )
-            for step in step_results.data:
-                if step.get("status") == "succeeded":
-                    payload_data = step.get("output_payload") or {}
-                    if isinstance(payload_data, dict):
-                        final_context = payload_data.get("cumulative_context")
-                    if final_context is not None:
-                        break
+        run_payload = {
+            "entity_index": entity_meta.get("index"),
+            "entity_type": entity_meta.get("entity_type"),
+            "pipeline_run_id": run["id"],
+            "parent_pipeline_run_id": run.get("parent_pipeline_run_id"),
+            "trigger_run_id": run.get("trigger_run_id"),
+            "status": mapped_status,
+            "final_context": _extract_final_context_for_run(
+                client=client,
+                org_id=org_id,
+                pipeline_run_id=run["id"],
+                mapped_status=mapped_status,
+            ),
+            "error_message": run.get("error_message"),
+            "children": [],
+        }
+        run_map[run["id"]] = run_payload
+        parent_id = run.get("parent_pipeline_run_id")
+        if parent_id:
+            child_buckets.setdefault(parent_id, []).append(run_payload)
 
-        per_entity.append(
-            {
-                "entity_index": entity_meta.get("index"),
-                "entity_type": entity_meta.get("entity_type"),
-                "pipeline_run_id": run["id"],
-                "trigger_run_id": run.get("trigger_run_id"),
-                "status": mapped_status,
-                "final_context": final_context,
-                "error_message": run.get("error_message"),
-            }
-        )
+    per_entity: list[dict[str, Any]] = []
+    for run in run_rows:
+        run_payload = run_map[run["id"]]
+        if run_payload["parent_pipeline_run_id"]:
+            continue
+        run_payload["children"] = child_buckets.get(run["id"], [])
+        per_entity.append(run_payload)
 
     return DataEnvelope(
         data={

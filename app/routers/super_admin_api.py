@@ -150,6 +150,7 @@ class BlueprintStepInput(BaseModel):
     position: int
     config: dict[str, Any] | None = None
     step_config: dict[str, Any] | None = None
+    fan_out: bool = False
 
 
 class BlueprintCreateRequest(BaseModel):
@@ -485,6 +486,7 @@ async def super_admin_create_blueprint(
             row: dict[str, Any] = {
                 "blueprint_id": blueprint["id"],
                 "position": step.position,
+                "fan_out": step.fan_out,
             }
             if step.operation_id:
                 row["operation_id"] = step.operation_id
@@ -563,6 +565,7 @@ async def super_admin_update_blueprint(
                 row: dict[str, Any] = {
                     "blueprint_id": payload.id,
                     "position": step.position,
+                    "fan_out": step.fan_out,
                 }
                 if step.operation_id:
                     row["operation_id"] = step.operation_id

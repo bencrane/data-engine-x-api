@@ -81,6 +81,7 @@ def _create_pipeline_run_row(
     blueprint_id: str,
     blueprint_snapshot: dict[str, Any],
     attempt: int,
+    parent_pipeline_run_id: str | None = None,
 ) -> dict[str, Any]:
     client = get_supabase_client()
     blueprint_version = _blueprint_version_from_snapshot(blueprint_snapshot)
@@ -94,6 +95,7 @@ def _create_pipeline_run_row(
             "blueprint_version": blueprint_version,
             "status": "queued",
             "attempt": attempt,
+            "parent_pipeline_run_id": parent_pipeline_run_id,
         }
     ).execute()
     return run_result.data[0]
@@ -106,10 +108,16 @@ def _create_step_result_rows(
     submission_id: str,
     pipeline_run_id: str,
     blueprint_steps: list[dict[str, Any]],
+    start_from_position: int | None = None,
 ):
     if not blueprint_steps:
         return
     client = get_supabase_client()
+    relevant_steps = (
+        [step for step in blueprint_steps if step.get("position", 0) >= start_from_position]
+        if start_from_position is not None
+        else blueprint_steps
+    )
     rows = [
         {
             "org_id": org_id,
@@ -121,7 +129,7 @@ def _create_step_result_rows(
             "step_position": step["position"],
             "status": "queued",
         }
-        for step in blueprint_steps
+        for step in relevant_steps
     ]
     client.table("step_results").insert(rows).execute()
 
@@ -323,6 +331,103 @@ async def create_batch_submission_and_trigger_pipeline_runs(
         "submission_id": submission["id"],
         "pipeline_runs": pipeline_runs,
     }
+
+
+async def create_fan_out_child_pipeline_runs(
+    *,
+    org_id: str,
+    company_id: str,
+    submission_id: str,
+    parent_pipeline_run_id: str,
+    blueprint_id: str,
+    blueprint_snapshot: dict[str, Any],
+    fan_out_entities: list[dict[str, Any]],
+    start_from_position: int,
+    parent_cumulative_context: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if not fan_out_entities:
+        return []
+
+    base_context = parent_cumulative_context if isinstance(parent_cumulative_context, dict) else {}
+    steps = blueprint_snapshot.get("steps") if isinstance(blueprint_snapshot, dict) else None
+    if not isinstance(steps, list):
+        raise ValueError("blueprint_snapshot.steps must be present for fan-out child creation")
+
+    child_runs: list[dict[str, Any]] = []
+    client = get_supabase_client()
+
+    for idx, entity in enumerate(fan_out_entities):
+        if not isinstance(entity, dict):
+            continue
+        entity_input = {**base_context, **entity}
+        child_snapshot = {
+            **blueprint_snapshot,
+            "entity": {
+                "index": idx,
+                "entity_type": entity.get("entity_type") or "person",
+                "input": entity_input,
+            },
+            "fan_out": {
+                "parent_pipeline_run_id": parent_pipeline_run_id,
+                "start_from_position": start_from_position,
+            },
+        }
+        run = _create_pipeline_run_row(
+            org_id=org_id,
+            company_id=company_id,
+            submission_id=submission_id,
+            blueprint_id=blueprint_id,
+            blueprint_snapshot=child_snapshot,
+            attempt=1,
+            parent_pipeline_run_id=parent_pipeline_run_id,
+        )
+        _create_step_result_rows(
+            org_id=org_id,
+            company_id=company_id,
+            submission_id=submission_id,
+            pipeline_run_id=run["id"],
+            blueprint_steps=steps,
+            start_from_position=start_from_position,
+        )
+        try:
+            trigger_run_id = await trigger_pipeline_run(
+                pipeline_run_id=run["id"],
+                org_id=org_id,
+                company_id=company_id,
+            )
+            updated = (
+                client.table("pipeline_runs")
+                .update({"trigger_run_id": trigger_run_id, "status": "queued"})
+                .eq("id", run["id"])
+                .execute()
+            )
+            run = updated.data[0]
+        except Exception as exc:  # noqa: BLE001
+            failed = (
+                client.table("pipeline_runs")
+                .update(
+                    {
+                        "status": "failed",
+                        "error_message": "Failed to trigger Trigger.dev run",
+                        "error_details": {"error": str(exc), "at": _iso_now()},
+                    }
+                )
+                .eq("id", run["id"])
+                .execute()
+            )
+            run = failed.data[0]
+
+        child_runs.append(
+            {
+                "pipeline_run_id": run["id"],
+                "pipeline_run_status": run["status"],
+                "trigger_run_id": run.get("trigger_run_id"),
+                "entity_type": child_snapshot["entity"]["entity_type"],
+                "entity_input": child_snapshot["entity"]["input"],
+            }
+        )
+
+    return child_runs
 
 
 async def retry_pipeline_run_for_submission(
