@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-import time
 import uuid
 from typing import Any
 
-import httpx
-
 from app.config import get_settings
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
+from app.providers import blitzapi, companyenrich, prospeo
 
 
 def _domain_from_value(value: str | None) -> str | None:
@@ -35,35 +29,6 @@ def _company_search_provider_order() -> list[str]:
     return filtered or ["prospeo", "blitzapi", "companyenrich"]
 
 
-def _canonical_company_result(
-    *,
-    provider: str,
-    name: str | None,
-    domain: str | None,
-    website: str | None,
-    linkedin_url: str | None,
-    industry: str | None,
-    employee_range: str | None,
-    founded_year: int | None,
-    hq_country_code: str | None,
-    source_company_id: str | None,
-    raw: dict[str, Any],
-) -> dict[str, Any]:
-    return {
-        "company_name": name,
-        "company_domain": domain,
-        "company_website": website,
-        "company_linkedin_url": linkedin_url,
-        "industry_primary": industry,
-        "employee_range": employee_range,
-        "founded_year": founded_year,
-        "hq_country_code": hq_country_code,
-        "source_company_id": source_company_id,
-        "source_provider": provider,
-        "raw": raw,
-    }
-
-
 async def _search_companies_prospeo(
     *,
     query: str | None,
@@ -72,80 +37,15 @@ async def _search_companies_prospeo(
     provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    if not settings.prospeo_api_key:
-        attempts.append(
-            {"provider": "prospeo", "action": "company_search", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return [], None
-
-    prospeo_filters = (provider_filters or {}).get("prospeo")
-    if not prospeo_filters:
-        if not query:
-            attempts.append(
-                {"provider": "prospeo", "action": "company_search", "status": "skipped", "skip_reason": "missing_required_inputs"}
-            )
-            return [], None
-        prospeo_filters = {"company": {"names": {"include": [query]}}}
-
-    payload = {"page": page, "filters": prospeo_filters}
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.prospeo.io/search-company",
-            headers={"X-KEY": settings.prospeo_api_key, "Content-Type": "application/json"},
-            json=payload,
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400 or body.get("error") is True:
-        code = body.get("error_code")
-        attempts.append(
-            {
-                "provider": "prospeo",
-                "action": "company_search",
-                "status": "not_found" if code == "NO_RESULTS" else "failed",
-                "http_status": res.status_code,
-                "provider_status": code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    results = body.get("results") or []
-    mapped: list[dict[str, Any]] = []
-    for item in results:
-        company = item.get("company") or {}
-        location = company.get("location") or {}
-        mapped.append(
-            _canonical_company_result(
-                provider="prospeo",
-                name=company.get("name"),
-                domain=company.get("domain"),
-                website=company.get("website"),
-                linkedin_url=company.get("linkedin_url"),
-                industry=company.get("industry"),
-                employee_range=company.get("employee_range"),
-                founded_year=company.get("founded"),
-                hq_country_code=location.get("country_code"),
-                source_company_id=company.get("company_id"),
-                raw=company,
-            )
-        )
-
-    attempts.append(
-        {
-            "provider": "prospeo",
-            "action": "company_search",
-            "status": "found" if mapped else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    result = await prospeo.search_companies(
+        api_key=settings.prospeo_api_key,
+        query=query,
+        page=page,
+        provider_filters=provider_filters,
     )
-    return mapped, body.get("pagination")
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
 
 
 async def _search_companies_blitzapi(
@@ -155,120 +55,23 @@ async def _search_companies_blitzapi(
     provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    if not settings.blitzapi_api_key:
-        attempts.append(
-            {"provider": "blitzapi", "action": "company_search", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return [], None
-
     blitz_input = (provider_filters or {}).get("blitzapi") or {}
     linkedin_url = blitz_input.get("company_linkedin_url")
     domain = blitz_input.get("company_domain") or _domain_from_value(query)
-    start_ms = _now_ms()
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        if not linkedin_url and domain:
-            bridge = await client.post(
-                "https://api.blitz-api.ai/v2/enrichment/domain-to-linkedin",
-                headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-                json={"domain": domain},
-            )
-            try:
-                bridge_body = bridge.json()
-            except Exception:  # noqa: BLE001
-                bridge_body = {"raw": bridge.text}
-
-            if bridge.status_code < 400 and bridge_body.get("found"):
-                linkedin_url = bridge_body.get("company_linkedin_url")
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "domain_to_linkedin",
-                        "status": "found",
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": bridge_body,
-                    }
-                )
-            else:
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "domain_to_linkedin",
-                        "status": "not_found" if bridge.status_code in {404, 422} else "failed",
-                        "http_status": bridge.status_code,
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": bridge_body,
-                    }
-                )
-
-        if not linkedin_url:
-            attempts.append(
-                {"provider": "blitzapi", "action": "company_search", "status": "skipped", "skip_reason": "missing_required_inputs"}
-            )
-            return [], None
-
-        res = await client.post(
-            "https://api.blitz-api.ai/v2/enrichment/company",
-            headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-            json={"company_linkedin_url": linkedin_url},
+    if not linkedin_url and domain:
+        bridge = await blitzapi.domain_to_linkedin(
+            api_key=settings.blitzapi_api_key,
+            domain=domain,
         )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "blitzapi",
-                "action": "company_search",
-                "status": "not_found" if res.status_code == 404 else "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    company = body.get("company") or {}
-    if not body.get("found") or not company:
-        attempts.append(
-            {
-                "provider": "blitzapi",
-                "action": "company_search",
-                "status": "not_found",
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    hq = company.get("hq") or {}
-    mapped = [
-        _canonical_company_result(
-            provider="blitzapi",
-            name=company.get("name"),
-            domain=company.get("domain"),
-            website=company.get("website"),
-            linkedin_url=company.get("linkedin_url"),
-            industry=company.get("industry"),
-            employee_range=company.get("size"),
-            founded_year=company.get("founded_year"),
-            hq_country_code=hq.get("country_code"),
-            source_company_id=str(company.get("linkedin_id")) if company.get("linkedin_id") is not None else None,
-            raw=company,
-        )
-    ]
-    attempts.append(
-        {
-            "provider": "blitzapi",
-            "action": "company_search",
-            "status": "found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+        attempts.append(bridge["attempt"])
+        linkedin_url = (bridge.get("mapped") or {}).get("company_linkedin_url")
+    result = await blitzapi.company_search(
+        api_key=settings.blitzapi_api_key,
+        company_linkedin_url=linkedin_url,
     )
-    return mapped, {"page": 1, "totalPages": 1, "totalItems": 1}
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
 
 
 async def _search_companies_companyenrich(
@@ -280,85 +83,16 @@ async def _search_companies_companyenrich(
     provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    if not settings.companyenrich_api_key:
-        attempts.append(
-            {"provider": "companyenrich", "action": "company_search", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return [], None
-
-    override = (provider_filters or {}).get("companyenrich") or {}
-    payload: dict[str, Any] = {"page": page, "pageSize": page_size}
-    if query:
-        payload["query"] = query
-    payload.update(override)
-    if not payload.get("query") and not payload.get("semanticQuery"):
-        attempts.append(
-            {"provider": "companyenrich", "action": "company_search", "status": "skipped", "skip_reason": "missing_required_inputs"}
-        )
-        return [], None
-
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.companyenrich.com/companies/search",
-            headers={
-                "Authorization": f"Bearer {settings.companyenrich_api_key}",
-                "accept": "application/json",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "companyenrich",
-                "action": "company_search",
-                "status": "not_found" if res.status_code in {404, 422} else "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    items = body.get("items") or []
-    mapped: list[dict[str, Any]] = []
-    for company in items:
-        socials = company.get("socials") or {}
-        location = company.get("location") or {}
-        country = (location.get("country") or {}).get("code")
-        mapped.append(
-            _canonical_company_result(
-                provider="companyenrich",
-                name=company.get("name"),
-                domain=company.get("domain"),
-                website=company.get("website"),
-                linkedin_url=socials.get("linkedin_url"),
-                industry=company.get("industry"),
-                employee_range=company.get("employees"),
-                founded_year=company.get("founded_year"),
-                hq_country_code=country,
-                source_company_id=company.get("id"),
-                raw=company,
-            )
-        )
-
-    attempts.append(
-        {
-            "provider": "companyenrich",
-            "action": "company_search",
-            "status": "found" if mapped else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    result = await companyenrich.search_companies(
+        api_key=settings.companyenrich_api_key,
+        query=query,
+        page=page,
+        page_size=page_size,
+        provider_filters=provider_filters,
     )
-    pagination = {"page": body.get("page"), "totalPages": body.get("totalPages"), "totalItems": body.get("totalItems")}
-    return mapped, pagination
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
 
 
 def _dedupe_companies(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -460,39 +194,6 @@ def _person_search_provider_order() -> list[str]:
     return filtered or ["prospeo", "blitzapi", "companyenrich"]
 
 
-def _canonical_person_result(
-    *,
-    provider: str,
-    full_name: str | None,
-    first_name: str | None,
-    last_name: str | None,
-    linkedin_url: str | None,
-    headline: str | None,
-    current_title: str | None,
-    company_name: str | None,
-    company_domain: str | None,
-    location_name: str | None,
-    country_code: str | None,
-    source_person_id: str | None,
-    raw: dict[str, Any],
-) -> dict[str, Any]:
-    return {
-        "full_name": full_name,
-        "first_name": first_name,
-        "last_name": last_name,
-        "linkedin_url": linkedin_url,
-        "headline": headline,
-        "current_title": current_title,
-        "current_company_name": company_name,
-        "current_company_domain": company_domain,
-        "location_name": location_name,
-        "country_code": country_code,
-        "source_person_id": source_person_id,
-        "source_provider": provider,
-        "raw": raw,
-    }
-
-
 async def _search_people_prospeo(
     *,
     query: str | None,
@@ -503,88 +204,17 @@ async def _search_people_prospeo(
     provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    if not settings.prospeo_api_key:
-        attempts.append(
-            {"provider": "prospeo", "action": "person_search", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return [], None
-
-    filters = (provider_filters or {}).get("prospeo")
-    if not filters:
-        filters = {}
-        if query:
-            filters["person_job_title"] = {"include": [query]}
-        if company_domain:
-            filters.setdefault("company", {}).setdefault("websites", {})["include"] = [company_domain]
-        elif company_name:
-            filters.setdefault("company", {}).setdefault("names", {})["include"] = [company_name]
-
-    if not filters:
-        attempts.append(
-            {"provider": "prospeo", "action": "person_search", "status": "skipped", "skip_reason": "missing_required_inputs"}
-        )
-        return [], None
-
-    payload = {"page": page, "filters": filters}
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.prospeo.io/search-person",
-            headers={"X-KEY": settings.prospeo_api_key, "Content-Type": "application/json"},
-            json=payload,
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400 or body.get("error") is True:
-        code = body.get("error_code")
-        attempts.append(
-            {
-                "provider": "prospeo",
-                "action": "person_search",
-                "status": "not_found" if code == "NO_RESULTS" else "failed",
-                "http_status": res.status_code,
-                "provider_status": code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    mapped: list[dict[str, Any]] = []
-    for item in body.get("results") or []:
-        person = item.get("person") or {}
-        company = item.get("company") or {}
-        mapped.append(
-            _canonical_person_result(
-                provider="prospeo",
-                full_name=person.get("full_name") or person.get("name"),
-                first_name=person.get("first_name"),
-                last_name=person.get("last_name"),
-                linkedin_url=person.get("linkedin_url"),
-                headline=person.get("headline"),
-                current_title=person.get("job_title") or person.get("title"),
-                company_name=company.get("name"),
-                company_domain=company.get("domain"),
-                location_name=person.get("location"),
-                country_code=person.get("country_code"),
-                source_person_id=person.get("person_id"),
-                raw={"person": person, "company": company},
-            )
-        )
-
-    attempts.append(
-        {
-            "provider": "prospeo",
-            "action": "person_search",
-            "status": "found" if mapped else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    result = await prospeo.search_people(
+        api_key=settings.prospeo_api_key,
+        query=query,
+        page=page,
+        company_domain=company_domain,
+        company_name=company_name,
+        provider_filters=provider_filters,
     )
-    return mapped, body.get("pagination")
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
 
 
 async def _search_people_blitzapi(
@@ -597,179 +227,23 @@ async def _search_people_blitzapi(
     provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    if not settings.blitzapi_api_key:
-        attempts.append(
-            {"provider": "blitzapi", "action": "person_search", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return [], None
-
     blitz_input = (provider_filters or {}).get("blitzapi") or {}
     linkedin_url = blitz_input.get("company_linkedin_url") or company_linkedin_url
     domain = blitz_input.get("company_domain") or company_domain
-    start_ms = _now_ms()
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        if not linkedin_url and domain:
-            bridge = await client.post(
-                "https://api.blitz-api.ai/v2/enrichment/domain-to-linkedin",
-                headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-                json={"domain": domain},
-            )
-            try:
-                bridge_body = bridge.json()
-            except Exception:  # noqa: BLE001
-                bridge_body = {"raw": bridge.text}
-
-            if bridge.status_code < 400 and bridge_body.get("found"):
-                linkedin_url = bridge_body.get("company_linkedin_url")
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "domain_to_linkedin",
-                        "status": "found",
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": bridge_body,
-                    }
-                )
-            else:
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "domain_to_linkedin",
-                        "status": "not_found" if bridge.status_code in {404, 422} else "failed",
-                        "http_status": bridge.status_code,
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": bridge_body,
-                    }
-                )
-
-        if not linkedin_url:
-            attempts.append(
-                {"provider": "blitzapi", "action": "person_search", "status": "skipped", "skip_reason": "missing_required_inputs"}
-            )
-            return [], None
-
-        if query:
-            cascade = blitz_input.get("cascade") or [
-                {
-                    "include_title": [query],
-                    "exclude_title": ["intern", "assistant", "junior"],
-                    "location": ["WORLD"],
-                    "include_headline_search": True,
-                }
-            ]
-            res = await client.post(
-                "https://api.blitz-api.ai/v2/search/waterfall-icp-keyword",
-                headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-                json={"company_linkedin_url": linkedin_url, "cascade": cascade, "max_results": min(limit, 100)},
-            )
-            try:
-                body = res.json()
-            except Exception:  # noqa: BLE001
-                body = {"raw": res.text}
-
-            if res.status_code >= 400:
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "person_search",
-                        "status": "failed",
-                        "http_status": res.status_code,
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": body,
-                    }
-                )
-                return [], None
-
-            mapped: list[dict[str, Any]] = []
-            for row in body.get("results") or []:
-                person = row.get("person") or {}
-                location = person.get("location") or {}
-                current = (person.get("experiences") or [{}])[0] or {}
-                mapped.append(
-                    _canonical_person_result(
-                        provider="blitzapi",
-                        full_name=person.get("full_name"),
-                        first_name=person.get("first_name"),
-                        last_name=person.get("last_name"),
-                        linkedin_url=person.get("linkedin_url"),
-                        headline=person.get("headline"),
-                        current_title=current.get("job_title"),
-                        company_name=None,
-                        company_domain=None,
-                        location_name=location.get("city"),
-                        country_code=location.get("country_code"),
-                        source_person_id=None,
-                        raw=row,
-                    )
-                )
-
-            attempts.append(
-                {
-                    "provider": "blitzapi",
-                    "action": "person_search",
-                    "status": "found" if mapped else "not_found",
-                    "duration_ms": _now_ms() - start_ms,
-                    "raw_response": body,
-                }
-            )
-            return mapped, {"page": 1, "totalPages": 1, "totalItems": len(mapped)}
-
-        res = await client.post(
-            "https://api.blitz-api.ai/v2/search/employee-finder",
-            headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-            json={"company_linkedin_url": linkedin_url, "max_results": min(limit, 100), **{k: v for k, v in blitz_input.items() if k != "company_linkedin_url" and k != "company_domain"}},
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "blitzapi",
-                "action": "person_search",
-                "status": "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    mapped = []
-    for person in body.get("results") or []:
-        location = person.get("location") or {}
-        current = (person.get("experiences") or [{}])[0] or {}
-        mapped.append(
-            _canonical_person_result(
-                provider="blitzapi",
-                full_name=person.get("full_name"),
-                first_name=person.get("first_name"),
-                last_name=person.get("last_name"),
-                linkedin_url=person.get("linkedin_url"),
-                headline=person.get("headline"),
-                current_title=current.get("job_title"),
-                company_name=None,
-                company_domain=None,
-                location_name=location.get("city"),
-                country_code=location.get("country_code"),
-                source_person_id=None,
-                raw=person,
-            )
-        )
-
-    attempts.append(
-        {
-            "provider": "blitzapi",
-            "action": "person_search",
-            "status": "found" if mapped else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    if not linkedin_url and domain:
+        bridge = await blitzapi.domain_to_linkedin(api_key=settings.blitzapi_api_key, domain=domain)
+        attempts.append(bridge["attempt"])
+        linkedin_url = (bridge.get("mapped") or {}).get("company_linkedin_url")
+    result = await blitzapi.person_search(
+        api_key=settings.blitzapi_api_key,
+        company_linkedin_url=linkedin_url,
+        query=query,
+        limit=limit,
+        blitz_input=blitz_input,
     )
-    return mapped, {"page": body.get("page"), "totalPages": body.get("total_pages"), "totalItems": body.get("results_length")}
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
 
 
 async def _search_people_companyenrich(
@@ -783,96 +257,18 @@ async def _search_people_companyenrich(
     provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    if not settings.companyenrich_api_key:
-        attempts.append(
-            {"provider": "companyenrich", "action": "person_search", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return [], None
-
-    override = (provider_filters or {}).get("companyenrich") or {}
-    payload: dict[str, Any] = {"page": page, "pageSize": page_size}
-    if query:
-        payload["positionQuery"] = query
-    if company_domain:
-        payload["domains"] = [company_domain]
-    elif company_name:
-        payload["companyFilter"] = {"query": company_name}
-    payload.update(override)
-
-    if not payload.get("positionQuery") and not payload.get("domains") and not payload.get("companyFilter"):
-        attempts.append(
-            {"provider": "companyenrich", "action": "person_search", "status": "skipped", "skip_reason": "missing_required_inputs"}
-        )
-        return [], None
-
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.companyenrich.com/people/search",
-            headers={
-                "Authorization": f"Bearer {settings.companyenrich_api_key}",
-                "accept": "application/json",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "companyenrich",
-                "action": "person_search",
-                "status": "not_found" if res.status_code in {404, 422} else "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return [], None
-
-    mapped = []
-    for person in body.get("items") or []:
-        socials = person.get("socials") or {}
-        location = person.get("location") or {}
-        country = location.get("country") or {}
-        experiences = person.get("experiences") or []
-        current_company = None
-        for exp in experiences:
-            if exp.get("isCurrent") and exp.get("type") == "company":
-                current_company = exp.get("company") or {}
-                break
-        mapped.append(
-            _canonical_person_result(
-                provider="companyenrich",
-                full_name=person.get("name"),
-                first_name=person.get("first_name"),
-                last_name=person.get("last_name"),
-                linkedin_url=socials.get("linkedin_url"),
-                headline=person.get("position"),
-                current_title=person.get("position"),
-                company_name=(current_company or {}).get("name"),
-                company_domain=(current_company or {}).get("domain"),
-                location_name=location.get("address"),
-                country_code=country.get("code"),
-                source_person_id=str(person.get("id")) if person.get("id") is not None else None,
-                raw=person,
-            )
-        )
-
-    attempts.append(
-        {
-            "provider": "companyenrich",
-            "action": "person_search",
-            "status": "found" if mapped else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    result = await companyenrich.search_people(
+        api_key=settings.companyenrich_api_key,
+        query=query,
+        page=page,
+        page_size=page_size,
+        company_domain=company_domain,
+        company_name=company_name,
+        provider_filters=provider_filters,
     )
-    return mapped, {"page": body.get("page"), "totalPages": body.get("totalPages"), "totalItems": body.get("totalItems")}
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
 
 
 def _dedupe_people(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

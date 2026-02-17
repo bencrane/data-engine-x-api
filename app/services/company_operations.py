@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-import time
 import uuid
 from typing import Any
 
-import httpx
-
 from app.config import get_settings
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
+from app.providers import blitzapi, companyenrich, leadmagic, prospeo
 
 
 def _domain_from_website(website: str | None) -> str | None:
@@ -155,65 +149,15 @@ async def _prospeo_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    if not settings.prospeo_api_key:
-        attempts.append(
-            {"provider": "prospeo", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return None
-
     data = {
         "company_website": input_data.get("company_website") or input_data.get("company_domain"),
         "company_linkedin_url": input_data.get("company_linkedin_url"),
         "company_name": input_data.get("company_name"),
         "company_id": input_data.get("source_company_id"),
     }
-    data = {k: v for k, v in data.items() if v}
-    if not data:
-        attempts.append(
-            {"provider": "prospeo", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_required_inputs"}
-        )
-        return None
-
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.prospeo.io/enrich-company",
-            headers={"X-KEY": settings.prospeo_api_key, "Content-Type": "application/json"},
-            json={"data": data},
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        error_code = body.get("error_code")
-        attempts.append(
-            {
-                "provider": "prospeo",
-                "action": "company_enrich",
-                "status": "not_found" if error_code == "NO_MATCH" else "failed",
-                "http_status": res.status_code,
-                "provider_status": error_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return None
-
-    company = body.get("company")
-    found = bool(company and isinstance(company, dict))
-    attempts.append(
-        {
-            "provider": "prospeo",
-            "action": "company_enrich",
-            "status": "found" if found else "not_found",
-            "provider_status": "free_enrichment" if body.get("free_enrichment") else "ok",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
-    )
-    return company if found else None
+    result = await prospeo.enrich_company(api_key=settings.prospeo_api_key, data=data)
+    attempts.append(result["attempt"])
+    return result.get("mapped")
 
 
 async def _blitzapi_company_enrich(
@@ -222,92 +166,18 @@ async def _blitzapi_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    if not settings.blitzapi_api_key:
-        attempts.append(
-            {"provider": "blitzapi", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return None
-
     linkedin_url = input_data.get("company_linkedin_url")
     domain = input_data.get("company_domain") or _domain_from_website(input_data.get("company_website"))
-    start_ms = _now_ms()
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        if not linkedin_url and domain:
-            bridge_res = await client.post(
-                "https://api.blitz-api.ai/v2/enrichment/domain-to-linkedin",
-                headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-                json={"domain": domain},
-            )
-            try:
-                bridge_body = bridge_res.json()
-            except Exception:  # noqa: BLE001
-                bridge_body = {"raw": bridge_res.text}
-
-            if bridge_res.status_code < 400 and bridge_body.get("found"):
-                linkedin_url = bridge_body.get("company_linkedin_url")
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "domain_to_linkedin",
-                        "status": "found",
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": bridge_body,
-                    }
-                )
-            else:
-                attempts.append(
-                    {
-                        "provider": "blitzapi",
-                        "action": "domain_to_linkedin",
-                        "status": "not_found" if bridge_res.status_code in {404, 422} else "failed",
-                        "http_status": bridge_res.status_code,
-                        "duration_ms": _now_ms() - start_ms,
-                        "raw_response": bridge_body,
-                    }
-                )
-
-        if not linkedin_url:
-            attempts.append(
-                {"provider": "blitzapi", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_required_inputs"}
-            )
-            return None
-
-        res = await client.post(
-            "https://api.blitz-api.ai/v2/enrichment/company",
-            headers={"x-api-key": settings.blitzapi_api_key, "Content-Type": "application/json"},
-            json={"company_linkedin_url": linkedin_url},
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "blitzapi",
-                "action": "company_enrich",
-                "status": "not_found" if res.status_code == 404 else "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return None
-
-    company = body.get("company")
-    found = bool(body.get("found") and isinstance(company, dict))
-    attempts.append(
-        {
-            "provider": "blitzapi",
-            "action": "company_enrich",
-            "status": "found" if found else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    if not linkedin_url and domain:
+        bridge = await blitzapi.domain_to_linkedin(api_key=settings.blitzapi_api_key, domain=domain)
+        attempts.append(bridge["attempt"])
+        linkedin_url = (bridge.get("mapped") or {}).get("company_linkedin_url")
+    result = await blitzapi.enrich_company(
+        api_key=settings.blitzapi_api_key,
+        company_linkedin_url=linkedin_url,
     )
-    return company if found else None
+    attempts.append(result["attempt"])
+    return result.get("mapped")
 
 
 async def _companyenrich_company_enrich(
@@ -316,55 +186,13 @@ async def _companyenrich_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    if not settings.companyenrich_api_key:
-        attempts.append(
-            {"provider": "companyenrich", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return None
-
     domain = input_data.get("company_domain") or _domain_from_website(input_data.get("company_website"))
-    if not domain:
-        attempts.append(
-            {"provider": "companyenrich", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_required_inputs"}
-        )
-        return None
-
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.get(
-            "https://api.companyenrich.com/companies/enrich",
-            params={"domain": domain},
-            headers={"Authorization": f"Bearer {settings.companyenrich_api_key}", "accept": "application/json"},
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "companyenrich",
-                "action": "company_enrich",
-                "status": "not_found" if res.status_code == 404 else "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return None
-
-    found = bool(body.get("id") or body.get("domain") or body.get("name"))
-    attempts.append(
-        {
-            "provider": "companyenrich",
-            "action": "company_enrich",
-            "status": "found" if found else "not_found",
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
+    result = await companyenrich.enrich_company(
+        api_key=settings.companyenrich_api_key,
+        domain=domain,
     )
-    return body if found else None
+    attempts.append(result["attempt"])
+    return result.get("mapped")
 
 
 async def _leadmagic_company_enrich(
@@ -373,61 +201,14 @@ async def _leadmagic_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    if not settings.leadmagic_api_key:
-        attempts.append(
-            {"provider": "leadmagic", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_provider_api_key"}
-        )
-        return None
-
     payload = {
         "company_domain": input_data.get("company_domain") or _domain_from_website(input_data.get("company_website")),
         "profile_url": input_data.get("company_linkedin_url"),
         "company_name": input_data.get("company_name"),
     }
-    payload = {k: v for k, v in payload.items() if v}
-    if not payload:
-        attempts.append(
-            {"provider": "leadmagic", "action": "company_enrich", "status": "skipped", "skip_reason": "missing_required_inputs"}
-        )
-        return None
-
-    start_ms = _now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.leadmagic.io/v1/companies/company-search",
-            headers={"X-API-Key": settings.leadmagic_api_key, "Content-Type": "application/json"},
-            json=payload,
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        attempts.append(
-            {
-                "provider": "leadmagic",
-                "action": "company_enrich",
-                "status": "not_found" if res.status_code == 404 else "failed",
-                "http_status": res.status_code,
-                "duration_ms": _now_ms() - start_ms,
-                "raw_response": body,
-            }
-        )
-        return None
-
-    found = bool(body.get("companyName") or body.get("companyId"))
-    attempts.append(
-        {
-            "provider": "leadmagic",
-            "action": "company_enrich",
-            "status": "found" if found else "not_found",
-            "provider_status": body.get("message"),
-            "duration_ms": _now_ms() - start_ms,
-            "raw_response": body,
-        }
-    )
-    return body if found else None
+    result = await leadmagic.enrich_company(api_key=settings.leadmagic_api_key, payload=payload)
+    attempts.append(result["attempt"])
+    return result.get("mapped")
 
 
 async def execute_company_enrich_profile(

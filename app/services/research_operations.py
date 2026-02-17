@@ -1,37 +1,11 @@
 from __future__ import annotations
 
-import json
 import re
-import time
 import uuid
 from typing import Any
 
-import httpx
-
 from app.config import get_settings
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _extract_json_block(text: str) -> dict[str, Any] | None:
-    text = text.strip()
-    try:
-        loaded = json.loads(text)
-        if isinstance(loaded, dict):
-            return loaded
-    except Exception:  # noqa: BLE001
-        pass
-
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not match:
-        return None
-    try:
-        loaded = json.loads(match.group(0))
-    except Exception:  # noqa: BLE001
-        return None
-    return loaded if isinstance(loaded, dict) else None
+from app.providers import gemini, openai_provider
 
 
 def _extract_g2_url(value: str | None) -> str | None:
@@ -108,76 +82,36 @@ def _build_pricing_prompt(company_name: str, company_domain: str | None) -> str:
 
 async def _call_gemini(*, prompt: str) -> dict[str, Any]:
     settings = get_settings()
-    if not settings.gemini_api_key:
-        return {"ok": False, "error": "missing_api_key"}
-
-    model = settings.llm_primary_model.strip()
-    if model in {"gemini", "gemini-3", "gemini-2"}:
-        model = "gemini-2.0-flash"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            url,
-            params={"key": settings.gemini_api_key},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0},
-            },
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        return {"ok": False, "error": "http_error", "http_status": res.status_code, "raw": body}
-
-    text = ""
-    for candidate in body.get("candidates") or []:
-        parts = ((candidate.get("content") or {}).get("parts") or [])
-        for part in parts:
-            if isinstance(part.get("text"), str):
-                text += part["text"]
-    data = _extract_json_block(text)
-    return {"ok": True, "parsed": data, "raw": body}
+    result = await gemini.resolve_structured(
+        api_key=settings.gemini_api_key,
+        model=settings.llm_primary_model,
+        prompt=prompt,
+    )
+    attempt = result["attempt"]
+    return {
+        "ok": attempt.get("status") == "completed",
+        "error": attempt.get("error"),
+        "http_status": attempt.get("http_status"),
+        "parsed": result.get("mapped"),
+        "raw": attempt.get("raw_response"),
+    }
 
 
 async def _call_openai(*, prompt: str) -> dict[str, Any]:
     settings = get_settings()
-    if not settings.openai_api_key:
-        return {"ok": False, "error": "missing_api_key"}
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.llm_fallback_model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": "Return JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-            },
-        )
-        try:
-            body = res.json()
-        except Exception:  # noqa: BLE001
-            body = {"raw": res.text}
-
-    if res.status_code >= 400:
-        return {"ok": False, "error": "http_error", "http_status": res.status_code, "raw": body}
-
-    content = ""
-    choices = body.get("choices") or []
-    if choices:
-        content = (((choices[0] or {}).get("message") or {}).get("content") or "")
-    data = _extract_json_block(content)
-    return {"ok": True, "parsed": data, "raw": body}
+    result = await openai_provider.resolve_structured(
+        api_key=settings.openai_api_key,
+        model=settings.llm_fallback_model,
+        prompt=prompt,
+    )
+    attempt = result["attempt"]
+    return {
+        "ok": attempt.get("status") == "completed",
+        "error": attempt.get("error"),
+        "http_status": attempt.get("http_status"),
+        "parsed": result.get("mapped"),
+        "raw": attempt.get("raw_response"),
+    }
 
 
 async def execute_company_research_resolve_g2_url(
@@ -200,7 +134,6 @@ async def execute_company_research_resolve_g2_url(
 
     prompt = _build_prompt(company_name=company_name.strip(), company_domain=company_domain if isinstance(company_domain, str) else None)
 
-    start_ms = _now_ms()
     gemini = await _call_gemini(prompt=prompt)
     attempts.append(
         {
@@ -208,7 +141,6 @@ async def execute_company_research_resolve_g2_url(
             "action": "resolve_g2_url",
             "status": "failed" if not gemini.get("ok") else "completed",
             "http_status": gemini.get("http_status"),
-            "duration_ms": _now_ms() - start_ms,
             "raw_response": gemini.get("raw") or {"error": gemini.get("error")},
         }
     )
@@ -224,7 +156,6 @@ async def execute_company_research_resolve_g2_url(
     provider_used = "gemini" if g2_url else None
 
     if not g2_url:
-        start_ms = _now_ms()
         openai = await _call_openai(prompt=prompt)
         attempts.append(
             {
@@ -232,7 +163,6 @@ async def execute_company_research_resolve_g2_url(
                 "action": "resolve_g2_url",
                 "status": "failed" if not openai.get("ok") else "completed",
                 "http_status": openai.get("http_status"),
-                "duration_ms": _now_ms() - start_ms,
                 "raw_response": openai.get("raw") or {"error": openai.get("error")},
             }
         )
@@ -285,7 +215,6 @@ async def execute_company_research_resolve_pricing_page_url(
         company_domain=company_domain if isinstance(company_domain, str) else None,
     )
 
-    start_ms = _now_ms()
     gemini = await _call_gemini(prompt=prompt)
     attempts.append(
         {
@@ -293,7 +222,6 @@ async def execute_company_research_resolve_pricing_page_url(
             "action": "resolve_pricing_page_url",
             "status": "failed" if not gemini.get("ok") else "completed",
             "http_status": gemini.get("http_status"),
-            "duration_ms": _now_ms() - start_ms,
             "raw_response": gemini.get("raw") or {"error": gemini.get("error")},
         }
     )
@@ -313,7 +241,6 @@ async def execute_company_research_resolve_pricing_page_url(
     provider_used = "gemini" if pricing_page_url else None
 
     if not pricing_page_url:
-        start_ms = _now_ms()
         openai = await _call_openai(prompt=prompt)
         attempts.append(
             {
@@ -321,7 +248,6 @@ async def execute_company_research_resolve_pricing_page_url(
                 "action": "resolve_pricing_page_url",
                 "status": "failed" if not openai.get("ok") else "completed",
                 "http_status": openai.get("http_status"),
-                "duration_ms": _now_ms() - start_ms,
                 "raw_response": openai.get("raw") or {"error": openai.get("error")},
             }
         )
