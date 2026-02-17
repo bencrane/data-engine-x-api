@@ -172,6 +172,45 @@ async def test_person_enrich_include_work_history_controls_ampleleads(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_person_enrich_include_work_history_from_step_config(monkeypatch: pytest.MonkeyPatch):
+    async def _stub_prospeo(**kwargs):
+        return {
+            "attempt": {"provider": "prospeo", "action": "person_enrich_profile", "status": "not_found"},
+            "mapped": None,
+        }
+
+    async def _stub_leadmagic(**kwargs):
+        return {
+            "attempt": {"provider": "leadmagic", "action": "person_enrich_profile", "status": "not_found"},
+            "mapped": None,
+        }
+
+    called = {"ample": 0}
+
+    async def _stub_ample(**kwargs):
+        called["ample"] += 1
+        return {
+            "attempt": {"provider": "ampleleads", "action": "person_enrich_profile", "status": "not_found"},
+            "mapped": None,
+        }
+
+    monkeypatch.setattr(person_enrich_operations, "_prospeo_enrich_person", _stub_prospeo)
+    monkeypatch.setattr(person_enrich_operations, "_leadmagic_profile_search", _stub_leadmagic)
+    monkeypatch.setattr(person_enrich_operations.ampleleads, "enrich_person", _stub_ample)
+
+    result = await person_enrich_operations.execute_person_enrich_profile(
+        input_data={
+            "linkedin_url": "https://linkedin.com/in/step-config",
+            "step_config": {"include_work_history": True},
+        }
+    )
+
+    assert result["status"] == "not_found"
+    assert called["ample"] == 1
+    assert len(result["provider_attempts"]) == 3
+
+
+@pytest.mark.asyncio
 async def test_person_enrich_all_providers_fail_returns_not_found(monkeypatch: pytest.MonkeyPatch):
     async def _stub_prospeo(**kwargs):
         return {

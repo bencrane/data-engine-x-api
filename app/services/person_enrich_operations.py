@@ -433,7 +433,11 @@ async def execute_person_enrich_profile(
     company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
     email = _as_non_empty_str(input_data.get("email"))
     person_id = _as_non_empty_str(input_data.get("person_id"))
-    include_work_history = _as_bool(input_data.get("include_work_history"), default=False)
+    step_config = _as_dict(input_data.get("step_config"))
+    include_work_history = _as_bool(
+        input_data.get("include_work_history"),
+        default=_as_bool(step_config.get("include_work_history"), default=False),
+    )
 
     prospeo_result = await _prospeo_enrich_person(
         linkedin_url=linkedin_url,
