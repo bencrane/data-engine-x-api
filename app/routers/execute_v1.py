@@ -15,6 +15,7 @@ from app.services.email_operations import (
     execute_person_contact_verify_email,
 )
 from app.services.company_operations import execute_company_enrich_profile
+from app.services.person_enrich_operations import execute_person_enrich_profile
 from app.services.search_operations import execute_company_search, execute_person_search
 from app.services.adyntel_operations import (
     execute_company_ads_search_google,
@@ -37,6 +38,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.contact.resolve_mobile_phone",
     "person.contact.verify_email",
     "person.search",
+    "person.enrich.profile",
     "company.enrich.profile",
     "company.search",
     "company.ads.search.linkedin",
@@ -140,6 +142,17 @@ async def execute_v1(
 
     if payload.operation_id == "person.search":
         result = await execute_person_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.enrich.profile":
+        result = await execute_person_enrich_profile(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
