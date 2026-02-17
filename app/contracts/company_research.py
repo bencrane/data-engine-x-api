@@ -17,3 +17,15 @@ class ResolvePricingPageUrlOutput(BaseModel):
     pricing_page_url: str | None
     confidence: float
     provider_used: str | None
+
+
+class CompetitorItem(BaseModel):
+    name: str | None = None
+    domain: str | None = None
+    linkedin_url: str | None = None
+
+
+class DiscoverCompetitorsOutput(BaseModel):
+    competitors: list[CompetitorItem]
+    competitor_count: int
+    source_provider: str = "revenueinfra"
