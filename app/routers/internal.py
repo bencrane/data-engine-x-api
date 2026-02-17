@@ -15,6 +15,7 @@ from app.services.entity_state import (
     upsert_company_entity,
     upsert_person_entity,
 )
+from app.services.entity_timeline import record_entity_event
 
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
@@ -81,6 +82,24 @@ class InternalEntityStateUpsertRequest(BaseModel):
     entity_type: Literal["company", "person"]
     cumulative_context: dict[str, Any]
     last_operation_id: str | None = None
+
+
+def _normalize_timeline_status(status_value: str | None) -> str:
+    if status_value in {"found", "not_found", "failed", "skipped"}:
+        return status_value
+    if status_value == "succeeded":
+        return "found"
+    return "failed"
+
+
+def _select_provider_from_attempts(provider_attempts: list[dict[str, Any]] | None) -> str | None:
+    if not provider_attempts:
+        return None
+    for attempt in provider_attempts:
+        if attempt.get("status") in {"found", "succeeded"} and attempt.get("provider"):
+            return str(attempt["provider"])
+    first_provider = provider_attempts[0].get("provider")
+    return str(first_provider) if first_provider else None
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
@@ -260,7 +279,7 @@ async def internal_upsert_entity_state(
     client = get_supabase_client()
     run_result = (
         client.table("pipeline_runs")
-        .select("id, org_id, company_id, status")
+        .select("id, org_id, company_id, submission_id, status")
         .eq("id", payload.pipeline_run_id)
         .limit(1)
         .execute()
@@ -271,6 +290,24 @@ async def internal_upsert_entity_state(
     run = run_result.data[0]
     if run.get("status") != "succeeded":
         return error_response("Entity state upsert requires a succeeded pipeline run", 400)
+
+    last_step_result = (
+        client.table("step_results")
+        .select("step_position, output_payload")
+        .eq("pipeline_run_id", payload.pipeline_run_id)
+        .eq("status", "succeeded")
+        .order("step_position", desc=True)
+        .limit(1)
+        .execute()
+    )
+    latest_output_payload = last_step_result.data[0].get("output_payload") if last_step_result.data else {}
+    operation_result = (
+        latest_output_payload.get("operation_result")
+        if isinstance(latest_output_payload, dict)
+        else {}
+    )
+    if not isinstance(operation_result, dict):
+        operation_result = {}
 
     try:
         if payload.entity_type == "company":
@@ -293,5 +330,46 @@ async def internal_upsert_entity_state(
             )
     except EntityStateVersionError as exc:
         return error_response(str(exc), 400)
+
+    operation_id = (
+        operation_result.get("operation_id")
+        or payload.last_operation_id
+        or upserted.get("last_operation_id")
+        or "unknown.operation"
+    )
+    operation_output = operation_result.get("output")
+    fields_updated = (
+        sorted([key for key in operation_output.keys() if operation_output.get(key) is not None])
+        if isinstance(operation_output, dict)
+        else None
+    )
+    provider_attempts = operation_result.get("provider_attempts")
+    provider = _select_provider_from_attempts(provider_attempts if isinstance(provider_attempts, list) else None)
+    timeline_status = _normalize_timeline_status(operation_result.get("status"))
+
+    summary_provider = provider or "provider"
+    summary_fields = fields_updated[:6] if fields_updated else []
+    summary_suffix = f"found {', '.join(summary_fields)}" if summary_fields else timeline_status
+    summary = f"{summary_provider}: {summary_suffix}"
+
+    record_entity_event(
+        org_id=run["org_id"],
+        company_id=run.get("company_id"),
+        entity_type=payload.entity_type,
+        entity_id=upserted["entity_id"],
+        operation_id=str(operation_id),
+        pipeline_run_id=run["id"],
+        submission_id=run.get("submission_id"),
+        provider=provider,
+        status=timeline_status,
+        fields_updated=fields_updated,
+        summary=summary,
+        metadata={
+            "last_operation_id": payload.last_operation_id,
+            "provider_attempts": provider_attempts if isinstance(provider_attempts, list) else [],
+            "operation_status": operation_result.get("status"),
+            "pipeline_entity_type": payload.entity_type,
+        },
+    )
 
     return DataEnvelope(data=upserted)

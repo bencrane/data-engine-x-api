@@ -1,13 +1,17 @@
 # app/routers/entities_v1.py — Tenant entity intelligence query endpoints
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.auth import AuthContext, get_current_auth
+from app.auth.models import SuperAdminContext
+from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 
 router = APIRouter()
+_security = HTTPBearer(auto_error=False)
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -15,6 +19,19 @@ def _normalize_text(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned if cleaned else None
+
+
+async def _resolve_flexible_auth(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
+) -> AuthContext | SuperAdminContext:
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization token")
+    try:
+        return await get_current_super_admin(credentials)
+    except HTTPException:
+        pass
+    return await get_current_auth(request=request, credentials=credentials)
 
 
 class CompanyEntitiesListRequest(BaseModel):
@@ -29,6 +46,14 @@ class PersonEntitiesListRequest(BaseModel):
     company_id: str | None = None
     work_email: str | None = None
     linkedin_url: str | None = None
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=25, ge=1, le=100)
+
+
+class EntityTimelineRequest(BaseModel):
+    entity_type: str
+    entity_id: str
+    org_id: str | None = None
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=25, ge=1, le=100)
 
@@ -113,6 +138,56 @@ async def list_person_entities(
 
     return DataEnvelope(
         data={
+            "items": result.data,
+            "pagination": {
+                "page": payload.page,
+                "per_page": payload.per_page,
+                "returned": len(result.data),
+            },
+        }
+    )
+
+
+@router.post(
+    "/timeline",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+async def get_entity_timeline(
+    payload: EntityTimelineRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    entity_type = _normalize_text(payload.entity_type)
+    if entity_type not in {"company", "person"}:
+        return error_response("entity_type must be either 'company' or 'person'", 400)
+
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+
+    client = get_supabase_client()
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin timeline queries", 400)
+
+    start = (payload.page - 1) * payload.per_page
+    end = start + payload.per_page - 1
+    query = (
+        client.table("entity_timeline")
+        .select("*")
+        .eq("org_id", org_id)
+        .eq("entity_type", entity_type)
+        .eq("entity_id", payload.entity_id)
+    )
+
+    if not is_super_admin and auth.role in {"company_admin", "member"}:
+        if not auth.company_id:
+            return error_response("Company-scoped user missing company_id", 403)
+        query = query.eq("company_id", auth.company_id)
+
+    result = query.order("created_at", desc=True).range(start, end).execute()
+    return DataEnvelope(
+        data={
+            "entity_type": entity_type,
+            "entity_id": payload.entity_id,
             "items": result.data,
             "pagination": {
                 "page": payload.page,
