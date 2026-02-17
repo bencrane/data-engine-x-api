@@ -345,6 +345,308 @@ task_spec_find_company_hq_location_by_name_and_domain = {
     },
 }
 
+# Person Task Specs
+
+task_spec_find_person_linkedin_url_by_full_name_company_name_and_company_domain = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company the person works for.",
+                    "type": "string",
+                },
+                "company_domain": {
+                    "description": "The domain of the company the person works for.",
+                    "type": "string",
+                },
+                "full_name": {
+                    "description": "The full name of the person whose LinkedIn URL needs to be found.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "linkedin_url": {
+                    "description": "The direct URL to the LinkedIn profile of the person identified by the provided full name, company name, and company domain. If a LinkedIn profile cannot be found, return null.",
+                    "type": "string",
+                }
+            },
+            "required": ["linkedin_url"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_person_linkedin_url_by_name_and_company = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company the person works for.",
+                    "type": "string",
+                },
+                "person_name": {
+                    "description": "The name of the person to find the LinkedIn URL for.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "linkedin_url": {
+                    "description": "The direct URL to the LinkedIn profile of the person identified by the provided name and company. If a LinkedIn profile cannot be found for the specified person and company, return null.",
+                    "type": "string",
+                }
+            },
+            "required": ["linkedin_url"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_person_work_email_by_full_name_company_name_company_domain_and_linkedin_url = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company where the person works.",
+                    "type": "string",
+                },
+                "company_domain": {
+                    "description": "The domain of the company where the person works.",
+                    "type": "string",
+                },
+                "person_full_name": {
+                    "description": "The full name of the person whose work email needs to be found.",
+                    "type": "string",
+                },
+                "person_linkedin_url": {
+                    "description": "The LinkedIn profile URL of the person.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "work_email": {
+                    "description": "The professional email address of the person at the specified company. If the work email cannot be found, return null.",
+                    "type": "string",
+                }
+            },
+            "required": ["work_email"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_work_email_by_full_name_company_name_and_company_domain = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company where the person works.",
+                    "type": "string",
+                },
+                "company_domain": {
+                    "description": "The domain of the company where the person works.",
+                    "type": "string",
+                },
+                "full_name": {
+                    "description": "The full name of the person whose work email needs to be found.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "work_email": {
+                    "description": "The professional email address of the person at the specified company. If the email address cannot be found or verified, return null.",
+                    "type": "string",
+                }
+            },
+            "required": ["work_email"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_person_email_by_name_and_company = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company where the person works.",
+                    "type": "string",
+                },
+                "person_full_name": {
+                    "description": "The full name of the person whose email needs to be found.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "person_email": {
+                    "description": "The professional email address of the person at the specified company. If the email address cannot be found, return null.",
+                    "type": "string",
+                }
+            },
+            "required": ["person_email"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_person_email_and_linkedin_url_by_full_name_and_company_name = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company where the person works.",
+                    "type": "string",
+                },
+                "full_name": {
+                    "description": "The full name of the person to find the work mail and LinkedIn URL for.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "linkedin_url": {
+                    "description": "The URL to the person's LinkedIn profile. If unavailable, return null.",
+                    "type": "string",
+                },
+                "work_mail": {
+                    "description": "The professional email address of the person at the specified company. If unavailable, return null.",
+                    "type": "string",
+                },
+            },
+            "required": ["work_mail", "linkedin_url"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_person_work_email_and_linkedin_url_by_full_name_company_name_and_company_domain = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_name": {
+                    "description": "The name of the company the person works for.",
+                    "type": "string",
+                },
+                "company_domain": {
+                    "description": "The domain of the company the person works for.",
+                    "type": "string",
+                },
+                "full_name": {
+                    "description": "The full name of the person to find the work email and LinkedIn URL for.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "linkedin_url": {
+                    "description": "The URL to the person's professional LinkedIn profile. If the LinkedIn URL cannot be found, return null.",
+                    "type": "string",
+                },
+                "work_email": {
+                    "description": "The professional email address of the person at the specified company. If the work email cannot be found, return null.",
+                    "type": "string",
+                },
+            },
+            "required": ["work_email", "linkedin_url"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
+task_spec_find_person_location_by_full_name_and_linkedin_url = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "person_full_name": {
+                    "description": "The full name of the person to find the living location for.",
+                    "type": "string",
+                },
+                "person_linkedin_url": {
+                    "description": "The LinkedIn profile URL of the person to find the living location for.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "city": {
+                    "description": "The city where the person lives. If unavailable, return null.",
+                    "type": "string",
+                },
+                "country": {
+                    "description": "The country where the person lives. If unavailable, return null.",
+                    "type": "string",
+                },
+                "state": {
+                    "description": "The state or province where the person lives. If unavailable, return null.",
+                    "type": "string",
+                },
+            },
+            "required": ["city", "state", "country"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
 
 # -----------------------------------------------------------------------------
 # Request Models
@@ -375,6 +677,39 @@ class CompanyLinkedInUrlRequest(BaseModel):
 class CompanyNameAndLinkedInUrlRequest(BaseModel):
     company_name: str
     company_linkedin_url: str
+
+
+class PersonNameAndCompanyRequest(BaseModel):
+    person_name: str
+    company_name: str
+
+
+class FullNameAndCompanyNameRequest(BaseModel):
+    full_name: str
+    company_name: str
+
+
+class FullNameCompanyNameAndDomainRequest(BaseModel):
+    full_name: str
+    company_name: str
+    company_domain: str
+
+
+class PersonFullNameAndCompanyRequest(BaseModel):
+    person_full_name: str
+    company_name: str
+
+
+class PersonFullNameCompanyNameDomainAndLinkedInUrlRequest(BaseModel):
+    person_full_name: str
+    company_name: str
+    company_domain: str
+    person_linkedin_url: str
+
+
+class PersonFullNameAndLinkedInUrlRequest(BaseModel):
+    person_full_name: str
+    person_linkedin_url: str
 
 
 def _deep_find_first(data: Any, keys: set[str]) -> Any:
@@ -748,6 +1083,219 @@ async def find_company_hq_location_by_name_and_domain(payload: CompanyNameAndDom
             },
         }
     return {"success": True, "data": {"hq_city": None, "hq_state": None, "hq_country": None}}
+
+
+# -----------------------------------------------------------------------------
+# Person Endpoints
+# -----------------------------------------------------------------------------
+
+
+@web_app.post("/person/find-linkedin-url-by-full-name-company-name-and-company-domain")
+async def find_person_linkedin_url_by_full_name_company_name_and_company_domain(
+    payload: FullNameCompanyNameAndDomainRequest,
+) -> dict[str, Any]:
+    full_name = payload.full_name.strip()
+    company_name = payload.company_name.strip()
+    company_domain = payload.company_domain.strip()
+    if not full_name or not company_name or not company_domain:
+        return {"success": False, "error": "full_name, company_name, and company_domain are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_linkedin_url_by_full_name_company_name_and_company_domain,
+            input_data={"full_name": full_name, "company_name": company_name, "company_domain": company_domain},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    linkedin_url = output.get("linkedin_url") if isinstance(output, dict) else None
+    return {"success": True, "data": {"linkedin_url": linkedin_url}}
+
+
+@web_app.post("/person/find-linkedin-url-by-name-and-company")
+async def find_person_linkedin_url_by_name_and_company(
+    payload: PersonNameAndCompanyRequest,
+) -> dict[str, Any]:
+    person_name = payload.person_name.strip()
+    company_name = payload.company_name.strip()
+    if not person_name or not company_name:
+        return {"success": False, "error": "person_name and company_name are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_linkedin_url_by_name_and_company,
+            input_data={"person_name": person_name, "company_name": company_name},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    linkedin_url = output.get("linkedin_url") if isinstance(output, dict) else None
+    return {"success": True, "data": {"linkedin_url": linkedin_url}}
+
+
+@web_app.post("/person/find-work-email-by-full-name-company-name-company-domain-and-linkedin-url")
+async def find_person_work_email_by_full_name_company_name_company_domain_and_linkedin_url(
+    payload: PersonFullNameCompanyNameDomainAndLinkedInUrlRequest,
+) -> dict[str, Any]:
+    person_full_name = payload.person_full_name.strip()
+    company_name = payload.company_name.strip()
+    company_domain = payload.company_domain.strip()
+    person_linkedin_url = payload.person_linkedin_url.strip()
+    if not person_full_name or not company_name or not company_domain or not person_linkedin_url:
+        return {"success": False, "error": "person_full_name, company_name, company_domain, and person_linkedin_url are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_work_email_by_full_name_company_name_company_domain_and_linkedin_url,
+            input_data={
+                "person_full_name": person_full_name,
+                "company_name": company_name,
+                "company_domain": company_domain,
+                "person_linkedin_url": person_linkedin_url,
+            },
+            processor="pro",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    work_email = output.get("work_email") if isinstance(output, dict) else None
+    return {"success": True, "data": {"work_email": work_email}}
+
+
+@web_app.post("/person/find-work-email-by-full-name-company-name-and-company-domain")
+async def find_work_email_by_full_name_company_name_and_company_domain(
+    payload: FullNameCompanyNameAndDomainRequest,
+) -> dict[str, Any]:
+    full_name = payload.full_name.strip()
+    company_name = payload.company_name.strip()
+    company_domain = payload.company_domain.strip()
+    if not full_name or not company_name or not company_domain:
+        return {"success": False, "error": "full_name, company_name, and company_domain are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_work_email_by_full_name_company_name_and_company_domain,
+            input_data={"full_name": full_name, "company_name": company_name, "company_domain": company_domain},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    work_email = output.get("work_email") if isinstance(output, dict) else None
+    return {"success": True, "data": {"work_email": work_email}}
+
+
+@web_app.post("/person/find-email-by-name-and-company")
+async def find_person_email_by_name_and_company(
+    payload: PersonFullNameAndCompanyRequest,
+) -> dict[str, Any]:
+    person_full_name = payload.person_full_name.strip()
+    company_name = payload.company_name.strip()
+    if not person_full_name or not company_name:
+        return {"success": False, "error": "person_full_name and company_name are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_email_by_name_and_company,
+            input_data={"person_full_name": person_full_name, "company_name": company_name},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    person_email = output.get("person_email") if isinstance(output, dict) else None
+    return {"success": True, "data": {"person_email": person_email}}
+
+
+@web_app.post("/person/find-email-and-linkedin-url-by-full-name-and-company-name")
+async def find_person_email_and_linkedin_url_by_full_name_and_company_name(
+    payload: FullNameAndCompanyNameRequest,
+) -> dict[str, Any]:
+    full_name = payload.full_name.strip()
+    company_name = payload.company_name.strip()
+    if not full_name or not company_name:
+        return {"success": False, "error": "full_name and company_name are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_email_and_linkedin_url_by_full_name_and_company_name,
+            input_data={"full_name": full_name, "company_name": company_name},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    if isinstance(output, dict):
+        return {
+            "success": True,
+            "data": {
+                "work_mail": output.get("work_mail"),
+                "linkedin_url": output.get("linkedin_url"),
+            },
+        }
+    return {"success": True, "data": {"work_mail": None, "linkedin_url": None}}
+
+
+@web_app.post("/person/find-work-email-and-linkedin-url-by-full-name-company-name-and-company-domain")
+async def find_person_work_email_and_linkedin_url_by_full_name_company_name_and_company_domain(
+    payload: FullNameCompanyNameAndDomainRequest,
+) -> dict[str, Any]:
+    full_name = payload.full_name.strip()
+    company_name = payload.company_name.strip()
+    company_domain = payload.company_domain.strip()
+    if not full_name or not company_name or not company_domain:
+        return {"success": False, "error": "full_name, company_name, and company_domain are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_work_email_and_linkedin_url_by_full_name_company_name_and_company_domain,
+            input_data={"full_name": full_name, "company_name": company_name, "company_domain": company_domain},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    if isinstance(output, dict):
+        return {
+            "success": True,
+            "data": {
+                "work_email": output.get("work_email"),
+                "linkedin_url": output.get("linkedin_url"),
+            },
+        }
+    return {"success": True, "data": {"work_email": None, "linkedin_url": None}}
+
+
+@web_app.post("/person/find-location-by-full-name-and-linkedin-url")
+async def find_person_location_by_full_name_and_linkedin_url(
+    payload: PersonFullNameAndLinkedInUrlRequest,
+) -> dict[str, Any]:
+    person_full_name = payload.person_full_name.strip()
+    person_linkedin_url = payload.person_linkedin_url.strip()
+    if not person_full_name or not person_linkedin_url:
+        return {"success": False, "error": "person_full_name and person_linkedin_url are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_person_location_by_full_name_and_linkedin_url,
+            input_data={"person_full_name": person_full_name, "person_linkedin_url": person_linkedin_url},
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    if isinstance(output, dict):
+        return {
+            "success": True,
+            "data": {
+                "city": output.get("city"),
+                "state": output.get("state"),
+                "country": output.get("country"),
+            },
+        }
+    return {"success": True, "data": {"city": None, "state": None, "country": None}}
 
 
 @app.function(
