@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     companyenrich_api_key: str | None = None
     adyntel_api_key: str | None = None
     adyntel_account_email: str | None = None
+    revenueinfra_api_url: str = "https://api.revenueinfra.com"
+    revenueinfra_api_key: str | None = None
     parallel_processor: str = "core"
     icypeas_poll_interval_ms: int = 2000
     icypeas_max_wait_ms: int = 45000

@@ -28,6 +28,9 @@ from app.services.research_operations import (
     execute_company_research_resolve_g2_url,
     execute_company_research_resolve_pricing_page_url,
 )
+from app.services.pricing_intelligence_operations import (
+    execute_company_derive_pricing_intelligence,
+)
 
 router = APIRouter()
 
@@ -46,6 +49,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.ads.search.google",
     "company.research.resolve_g2_url",
     "company.research.resolve_pricing_page_url",
+    "company.derive.pricing_intelligence",
 }
 
 
@@ -230,6 +234,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.resolve_pricing_page_url":
         result = await execute_company_research_resolve_pricing_page_url(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.derive.pricing_intelligence":
+        result = await execute_company_derive_pricing_intelligence(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
