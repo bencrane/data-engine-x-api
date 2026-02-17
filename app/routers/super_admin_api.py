@@ -56,6 +56,7 @@ class OrgUpdateRequest(BaseModel):
 class CompanyCreateRequest(BaseModel):
     org_id: str
     name: str
+    domain: str | None = None
     external_ref: str | None = None
 
 
