@@ -26,6 +26,7 @@ async def resolve_structured(
             json={
                 "model": model,
                 "temperature": 0,
+                "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": "Return JSON only."},
                     {"role": "user", "content": prompt},
@@ -41,8 +42,27 @@ async def resolve_structured(
     content = ""
     choices = body.get("choices") or []
     if choices:
-        content = (((choices[0] or {}).get("message") or {}).get("content") or "")
+        message = ((choices[0] or {}).get("message") or {})
+        raw_content = message.get("content")
+        if isinstance(raw_content, str):
+            content = raw_content
+        elif isinstance(raw_content, list):
+            chunks: list[str] = []
+            for part in raw_content:
+                if not isinstance(part, dict):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str):
+                    chunks.append(text)
+            content = "".join(chunks)
+    mapped = extract_json_block(content)
     return {
-        "attempt": {"provider": "openai", "action": "llm_resolve", "status": "completed", "raw_response": body},
-        "mapped": extract_json_block(content),
+        "attempt": {
+            "provider": "openai",
+            "action": "llm_resolve",
+            "status": "completed" if mapped is not None else "failed",
+            "provider_status": "invalid_json_output" if mapped is None else "ok",
+            "raw_response": body,
+        },
+        "mapped": mapped,
     }

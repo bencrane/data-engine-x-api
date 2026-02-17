@@ -46,7 +46,10 @@ async def resolve_structured(
         res = await client.post(
             url,
             params={"key": api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0}},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0, "response_mime_type": "application/json"},
+            },
         )
         body = parse_json_or_raw(res.text, res.json)
     if res.status_code >= 400:
@@ -56,11 +59,26 @@ async def resolve_structured(
         }
     text = ""
     for candidate in body.get("candidates") or []:
-        parts = ((candidate.get("content") or {}).get("parts") or [])
+        if not isinstance(candidate, dict):
+            continue
+        content = candidate.get("content")
+        parts = content.get("parts") if isinstance(content, dict) else []
+        if not isinstance(parts, list):
+            continue
         for part in parts:
-            if isinstance(part.get("text"), str):
-                text += part["text"]
+            if not isinstance(part, dict):
+                continue
+            value = part.get("text")
+            if isinstance(value, str):
+                text += value
+    mapped = extract_json_block(text)
     return {
-        "attempt": {"provider": "gemini", "action": "llm_resolve", "status": "completed", "raw_response": body},
-        "mapped": extract_json_block(text),
+        "attempt": {
+            "provider": "gemini",
+            "action": "llm_resolve",
+            "status": "completed" if mapped is not None else "failed",
+            "provider_status": "invalid_json_output" if mapped is None else "ok",
+            "raw_response": body,
+        },
+        "mapped": mapped,
     }

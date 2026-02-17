@@ -7,6 +7,35 @@ import httpx
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _flatten_results(value: Any) -> list[dict[str, Any]]:
+    flat: list[dict[str, Any]] = []
+    for item in _as_list(value):
+        if isinstance(item, dict):
+            flat.append(item)
+            continue
+        if isinstance(item, list):
+            for nested in item:
+                if isinstance(nested, dict):
+                    flat.append(nested)
+    return flat
+
+
+def _extract_provider_error(body: dict[str, Any]) -> str | None:
+    error_obj = _as_dict(body.get("error"))
+    for candidate in (error_obj.get("message"), body.get("message")):
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return None
+
+
 async def _post(
     *,
     endpoint: str,
@@ -49,13 +78,18 @@ async def search_linkedin_ads(
 ) -> ProviderAdapterResult:
     start_ms = now_ms()
     status_code, body = await _post(endpoint="linkedin", payload={"api_key": api_key, "email": email, **payload}, timeout_seconds=timeout_seconds)
-    ads = body.get("ads") or []
+    ads = _flatten_results(body.get("ads"))
+    provider_error = _extract_provider_error(body)
+    status = "found" if status_code == 200 and ads else "not_found" if status_code == 204 else "failed"
+    if status_code == 200 and not ads and provider_error:
+        status = "failed"
     return {
         "attempt": {
             "provider": "adyntel",
             "action": "search_linkedin_ads",
-            "status": "found" if status_code == 200 and ads else "not_found" if status_code == 204 else "failed",
+            "status": status,
             "http_status": status_code,
+            "provider_status": provider_error,
             "duration_ms": now_ms() - start_ms,
             "raw_response": body,
         },
@@ -80,13 +114,20 @@ async def search_meta_ads(
 ) -> ProviderAdapterResult:
     start_ms = now_ms()
     status_code, body = await _post(endpoint=endpoint, payload={"api_key": api_key, "email": email, **payload}, timeout_seconds=timeout_seconds)
-    results = body.get("results") or body.get("ads") or []
+    results = _flatten_results(body.get("results"))
+    if not results:
+        results = _flatten_results(body.get("ads"))
+    provider_error = _extract_provider_error(body)
+    status = "found" if status_code == 200 and results else "not_found" if status_code == 204 else "failed"
+    if status_code == 200 and not results and provider_error:
+        status = "failed"
     return {
         "attempt": {
             "provider": "adyntel",
             "action": "search_meta_ads",
-            "status": "found" if status_code == 200 and results else "not_found" if status_code == 204 else "failed",
+            "status": status,
             "http_status": status_code,
+            "provider_status": provider_error,
             "duration_ms": now_ms() - start_ms,
             "raw_response": body,
         },
@@ -111,13 +152,18 @@ async def search_google_ads(
 ) -> ProviderAdapterResult:
     start_ms = now_ms()
     status_code, body = await _post(endpoint="google", payload={"api_key": api_key, "email": email, **payload}, timeout_seconds=timeout_seconds)
-    ads = body.get("ads") or []
+    ads = _flatten_results(body.get("ads"))
+    provider_error = _extract_provider_error(body)
+    status = "found" if status_code == 200 and ads else "not_found" if status_code == 204 else "failed"
+    if status_code == 200 and not ads and provider_error:
+        status = "failed"
     return {
         "attempt": {
             "provider": "adyntel",
             "action": "search_google_ads",
-            "status": "found" if status_code == 200 and ads else "not_found" if status_code == 204 else "failed",
+            "status": status,
             "http_status": status_code,
+            "provider_status": provider_error,
             "duration_ms": now_ms() - start_ms,
             "raw_response": body,
         },

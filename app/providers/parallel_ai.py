@@ -8,11 +8,20 @@ import httpx
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 
+def _as_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 def deep_find_first_str(data: Any, keys: set[str]) -> str | None:
     if isinstance(data, dict):
         for key, value in data.items():
-            if key in keys and isinstance(value, str) and value.strip():
-                return value.strip()
+            if key in keys:
+                candidate = _as_str(value)
+                if candidate:
+                    return candidate
             nested = deep_find_first_str(value, keys)
             if nested:
                 return nested
@@ -91,12 +100,14 @@ async def findability_email(
             "mapped": None,
         }
 
+    provider_error = deep_find_first_str(body, {"error", "message"})
     email = deep_find_first_str(body, {"email"})
     return {
         "attempt": {
             "provider": "parallel",
             "action": "findability_email",
-            "status": "found" if email else "not_found",
+            "status": "found" if email else "failed" if provider_error else "not_found",
+            "provider_status": provider_error,
             "duration_ms": now_ms() - start_ms,
             "raw_response": body,
         },

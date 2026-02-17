@@ -7,48 +7,74 @@ import httpx
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 
-def _extract_location_name(value: Any) -> str | None:
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
     if isinstance(value, str):
-        cleaned = value.strip()
-        return cleaned or None
-    if not isinstance(value, dict):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_location_name(value: Any) -> str | None:
+    candidate = _as_str(value)
+    if candidate:
+        return candidate
+    location = _as_dict(value)
+    if not location:
         return None
     for key in ("name", "full", "address", "formatted"):
-        candidate = value.get(key)
-        if isinstance(candidate, str) and candidate.strip():
-            return candidate.strip()
+        candidate = _as_str(location.get(key))
+        if candidate:
+            return candidate
     parts: list[str] = []
     for key in ("city", "state", "state_code", "country", "country_name", "country_code"):
-        candidate = value.get(key)
-        if isinstance(candidate, str):
-            cleaned = candidate.strip()
-            if cleaned:
-                parts.append(cleaned)
+        candidate = _as_str(location.get(key))
+        if candidate:
+            parts.append(candidate)
     if not parts:
-        country_obj = value.get("country")
+        country_obj = _as_dict(location.get("country"))
         if isinstance(country_obj, dict):
-            country_name = country_obj.get("name")
-            country_code = country_obj.get("code")
-            for candidate in (country_name, country_code):
-                if isinstance(candidate, str) and candidate.strip():
-                    parts.append(candidate.strip())
+            for candidate in (_as_str(country_obj.get("name")), _as_str(country_obj.get("code"))):
+                if candidate:
+                    parts.append(candidate)
     return ", ".join(parts) if parts else None
 
 
 def _extract_country_code(person: dict[str, Any]) -> str | None:
-    country_code = person.get("country_code")
-    if isinstance(country_code, str) and country_code.strip():
-        return country_code.strip()
-    location = person.get("location")
-    if isinstance(location, dict):
-        direct = location.get("country_code")
-        if isinstance(direct, str) and direct.strip():
-            return direct.strip()
-        country_obj = location.get("country")
-        if isinstance(country_obj, dict):
-            nested = country_obj.get("code")
-            if isinstance(nested, str) and nested.strip():
-                return nested.strip()
+    country_code = _as_str(person.get("country_code"))
+    if country_code:
+        return country_code
+    location = _as_dict(person.get("location"))
+    if location:
+        direct = _as_str(location.get("country_code"))
+        if direct:
+            return direct
+        nested = _as_str(_as_dict(location.get("country")).get("code"))
+        if nested:
+            return nested
     return None
 
 
@@ -145,7 +171,7 @@ async def search_companies(
         body = parse_json_or_raw(res.text, res.json)
 
     if res.status_code >= 400 or body.get("error") is True:
-        code = body.get("error_code")
+        code = _as_str(body.get("error_code"))
         return {
             "attempt": {
                 "provider": "prospeo",
@@ -160,9 +186,10 @@ async def search_companies(
         }
 
     mapped: list[dict[str, Any]] = []
-    for item in body.get("results") or []:
-        company = item.get("company") or {}
-        location = company.get("location") or {}
+    for item in _as_list(body.get("results")):
+        item_dict = _as_dict(item)
+        company = _as_dict(item_dict.get("company"))
+        location = _as_dict(company.get("location"))
         mapped.append(
             canonical_company_result(
                 provider="prospeo",
@@ -172,9 +199,9 @@ async def search_companies(
                 linkedin_url=company.get("linkedin_url"),
                 industry=company.get("industry"),
                 employee_range=company.get("employee_range"),
-                founded_year=company.get("founded"),
+                founded_year=_as_int(company.get("founded")),
                 hq_country_code=location.get("country_code"),
-                source_company_id=company.get("company_id"),
+                source_company_id=str(company.get("company_id")) if company.get("company_id") is not None else None,
                 raw=company,
             )
         )
@@ -223,7 +250,7 @@ async def search_people(
         )
         body = parse_json_or_raw(res.text, res.json)
     if res.status_code >= 400 or body.get("error") is True:
-        code = body.get("error_code")
+        code = _as_str(body.get("error_code"))
         return {
             "attempt": {
                 "provider": "prospeo",
@@ -238,9 +265,10 @@ async def search_people(
         }
 
     mapped: list[dict[str, Any]] = []
-    for item in body.get("results") or []:
-        person = item.get("person") or {}
-        company = item.get("company") or {}
+    for item in _as_list(body.get("results")):
+        item_dict = _as_dict(item)
+        person = _as_dict(item_dict.get("person"))
+        company = _as_dict(item_dict.get("company"))
         mapped.append(
             canonical_person_result(
                 provider="prospeo",
@@ -288,8 +316,8 @@ async def enrich_company(
             json={"data": payload_data},
         )
         body = parse_json_or_raw(res.text, res.json)
-    if res.status_code >= 400:
-        code = body.get("error_code")
+    if res.status_code >= 400 or body.get("error") is True:
+        code = _as_str(body.get("error_code"))
         return {
             "attempt": {
                 "provider": "prospeo",
@@ -302,8 +330,8 @@ async def enrich_company(
             },
             "mapped": None,
         }
-    company = body.get("company")
-    found = bool(company and isinstance(company, dict))
+    company = _as_dict(body.get("company"))
+    found = bool(company)
     return {
         "attempt": {
             "provider": "prospeo",

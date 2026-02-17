@@ -10,6 +10,21 @@ from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_ra
 PENDING_ICYPEAS_STATUSES = {"NONE", "SCHEDULED", "IN_PROGRESS"}
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 async def resolve_email(
     *,
     api_key: str | None,
@@ -79,7 +94,7 @@ async def resolve_email(
                 "mapped": None,
             }
 
-        search_id = submit_body.get("item", {}).get("_id")
+        search_id = _as_dict(submit_body.get("item")).get("_id")
         if not search_id:
             return {
                 "attempt": {
@@ -116,14 +131,15 @@ async def resolve_email(
                     "mapped": None,
                 }
 
-            item = (last_body.get("items") or [{}])[0]
-            final_status = str(item.get("status") or "")
+            items = _as_list(last_body.get("items"))
+            item = _as_dict(items[0]) if items else {}
+            final_status = (_as_str(item.get("status")) or "").upper()
             if final_status not in PENDING_ICYPEAS_STATUSES:
-                emails = item.get("results", {}).get("emails") or []
+                emails = _as_list(_as_dict(item.get("results")).get("emails"))
                 resolved_email = None
-                if emails and isinstance(emails, list):
-                    first_email = emails[0] or {}
-                    resolved_email = first_email.get("email")
+                if emails:
+                    first_email = _as_dict(emails[0])
+                    resolved_email = _as_str(first_email.get("email"))
                 return {
                     "attempt": {
                         "provider": "icypeas",

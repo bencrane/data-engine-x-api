@@ -7,11 +7,26 @@ import httpx
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 def canonical_company_result(
     *,
     company: dict[str, Any],
 ) -> dict[str, Any]:
-    hq = company.get("hq") or {}
+    hq = _as_dict(company.get("hq"))
     return {
         "company_name": company.get("name"),
         "company_domain": company.get("domain"),
@@ -32,14 +47,12 @@ def canonical_person_result(
     person: dict[str, Any],
     raw: dict[str, Any],
 ) -> dict[str, Any]:
-    location = person.get("location") or {}
-    experiences = person.get("experiences") or []
+    location = _as_dict(person.get("location"))
+    experiences = _as_list(person.get("experiences"))
     current = next((exp for exp in experiences if isinstance(exp, dict) and exp.get("job_is_current")), None)
     if not isinstance(current, dict):
         current = experiences[0] if experiences and isinstance(experiences[0], dict) else {}
-    location_name = location.get("city")
-    if not isinstance(location_name, str) or not location_name.strip():
-        location_name = location.get("country_code")
+    location_name = _as_str(location.get("city")) or _as_str(location.get("country_code"))
     return {
         "full_name": person.get("full_name"),
         "first_name": person.get("first_name"),
@@ -89,7 +102,7 @@ async def domain_to_linkedin(
         "attempt": {
             "provider": "blitzapi",
             "action": "domain_to_linkedin",
-            "status": "not_found" if res.status_code in {404, 422} else "failed",
+            "status": "not_found" if res.status_code in {404} else "failed",
             "http_status": res.status_code,
             "duration_ms": now_ms() - start_ms,
             "raw_response": body,
@@ -126,7 +139,7 @@ async def company_search(
             "attempt": {"provider": "blitzapi", "action": "company_search", "status": "not_found" if res.status_code == 404 else "failed", "http_status": res.status_code, "duration_ms": now_ms() - start_ms, "raw_response": body},
             "mapped": {"results": [], "pagination": None},
         }
-    company = body.get("company") or {}
+    company = _as_dict(body.get("company"))
     if not body.get("found") or not company:
         return {
             "attempt": {"provider": "blitzapi", "action": "company_search", "status": "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
@@ -174,7 +187,7 @@ async def person_search(
                     "attempt": {"provider": "blitzapi", "action": "person_search", "status": "failed", "http_status": res.status_code, "duration_ms": now_ms() - start_ms, "raw_response": body},
                     "mapped": {"results": [], "pagination": None},
                 }
-            mapped = [canonical_person_result(person=row.get("person") or {}, raw=row) for row in body.get("results") or []]
+            mapped = [canonical_person_result(person=_as_dict(_as_dict(row).get("person")), raw=_as_dict(row)) for row in _as_list(body.get("results"))]
             return {
                 "attempt": {"provider": "blitzapi", "action": "person_search", "status": "found" if mapped else "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
                 "mapped": {"results": mapped, "pagination": {"page": 1, "totalPages": 1, "totalItems": len(mapped)}},
@@ -192,7 +205,7 @@ async def person_search(
             "attempt": {"provider": "blitzapi", "action": "person_search", "status": "failed", "http_status": res.status_code, "duration_ms": now_ms() - start_ms, "raw_response": body},
             "mapped": {"results": [], "pagination": None},
         }
-    mapped = [canonical_person_result(person=person, raw=person) for person in body.get("results") or []]
+    mapped = [canonical_person_result(person=_as_dict(person), raw=_as_dict(person)) for person in _as_list(body.get("results"))]
     return {
         "attempt": {"provider": "blitzapi", "action": "person_search", "status": "found" if mapped else "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
         "mapped": {"results": mapped, "pagination": {"page": body.get("page"), "totalPages": body.get("total_pages"), "totalItems": body.get("results_length")}},
@@ -227,7 +240,7 @@ async def phone_enrich(
             "attempt": {"provider": "blitzapi", "action": "resolve_mobile_phone", "status": "failed", "http_status": res.status_code, "duration_ms": now_ms() - start_ms, "raw_response": body},
             "mapped": None,
         }
-    phone = body.get("phone")
+    phone = _as_str(body.get("phone"))
     found = bool(body.get("found") and phone)
     return {
         "attempt": {"provider": "blitzapi", "action": "resolve_mobile_phone", "status": "found" if found else "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},

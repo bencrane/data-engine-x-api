@@ -7,6 +7,13 @@ import httpx
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 
+def _as_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 async def resolve_email(
     *,
     api_key: str | None,
@@ -77,7 +84,7 @@ async def resolve_email(
             "mapped": None,
         }
 
-    email = body.get("email")
+    email = _as_str(body.get("email"))
     return {
         "attempt": {
             "provider": "leadmagic",
@@ -149,7 +156,7 @@ async def resolve_mobile_phone(
             "mapped": None,
         }
 
-    mobile = body.get("mobile_number")
+    mobile = _as_str(body.get("mobile_number"))
     return {
         "attempt": {
             "provider": "leadmagic",
@@ -212,7 +219,7 @@ async def enrich_company(
             "mapped": None,
         }
 
-    found = bool(body.get("companyName") or body.get("companyId"))
+    found = bool(_as_str(body.get("companyName")) or body.get("companyId"))
     return {
         "attempt": {
             "provider": "leadmagic",
