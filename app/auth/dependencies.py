@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.config import get_settings
 from app.auth.models import AuthContext
 from app.auth.tokens import (
     InvalidJWTTypeError,
@@ -25,6 +26,7 @@ def _parse_timestamp(value: str | None) -> datetime | None:
 
 
 async def get_current_auth(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> AuthContext:
     """
@@ -39,6 +41,24 @@ async def get_current_auth(
         )
 
     token = credentials.credentials
+    settings = get_settings()
+
+    # Service-level internal auth for Trigger.dev -> FastAPI calls.
+    if token == settings.internal_api_key:
+        internal_org_id = request.headers.get("x-internal-org-id")
+        if not internal_org_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing x-internal-org-id for internal authorization",
+            )
+        internal_company_id = request.headers.get("x-internal-company-id")
+        return AuthContext(
+            user_id=None,
+            org_id=internal_org_id,
+            company_id=internal_company_id,
+            role="org_admin",
+            auth_method="api_token",
+        )
 
     # First: try tenant session JWT.
     try:

@@ -47,6 +47,7 @@ class InternalPipelineRunStatusUpdateRequest(BaseModel):
 class InternalStepResultUpdateRequest(BaseModel):
     step_result_id: str
     status: Literal["queued", "running", "succeeded", "failed", "skipped", "retrying"]
+    input_payload: dict[str, Any] | list[Any] | None = None
     output_payload: dict[str, Any] | list[Any] | None = None
     error_message: str | None = None
     error_details: dict[str, Any] | None = None
@@ -59,6 +60,10 @@ class InternalStepResultUpdateRequest(BaseModel):
 class InternalSubmissionStatusUpdateRequest(BaseModel):
     submission_id: str
     status: Literal["received", "validated", "queued", "running", "completed", "failed", "canceled"]
+
+
+class InternalSubmissionSyncStatusRequest(BaseModel):
+    submission_id: str
 
 
 class InternalMarkRemainingSkippedRequest(BaseModel):
@@ -183,4 +188,49 @@ async def internal_update_submission_status(
     )
     if not result.data:
         return error_response("Submission not found", 404)
+    return DataEnvelope(data=result.data[0])
+
+
+@router.post("/submissions/sync-status", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
+async def internal_sync_submission_status(
+    payload: InternalSubmissionSyncStatusRequest,
+    _: None = Depends(require_internal_key),
+):
+    client = get_supabase_client()
+    submission_result = (
+        client.table("submissions")
+        .select("id")
+        .eq("id", payload.submission_id)
+        .limit(1)
+        .execute()
+    )
+    if not submission_result.data:
+        return error_response("Submission not found", 404)
+
+    runs = (
+        client.table("pipeline_runs")
+        .select("status")
+        .eq("submission_id", payload.submission_id)
+        .execute()
+    )
+    statuses = [row.get("status") for row in runs.data]
+    if not statuses:
+        submission_status = "received"
+    elif all(status == "succeeded" for status in statuses):
+        submission_status = "completed"
+    elif any(status == "failed" for status in statuses):
+        submission_status = "failed"
+    elif any(status == "running" for status in statuses):
+        submission_status = "running"
+    elif any(status == "queued" for status in statuses):
+        submission_status = "queued"
+    else:
+        submission_status = "running"
+
+    result = (
+        client.table("submissions")
+        .update({"status": submission_status})
+        .eq("id", payload.submission_id)
+        .execute()
+    )
     return DataEnvelope(data=result.data[0])
