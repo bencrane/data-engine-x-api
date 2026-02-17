@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.auth import AuthContext, get_current_auth
+from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.email_operations import (
     execute_person_contact_resolve_email,
@@ -59,6 +60,10 @@ class BatchSubmitRequest(BaseModel):
     company_id: str | None = None
     source: str | None = "api_v1_batch"
     metadata: dict[str, Any] | None = None
+
+
+class BatchStatusRequest(BaseModel):
+    submission_id: str
 
 
 @router.post(
@@ -252,4 +257,104 @@ async def batch_submit(
         return error_response(str(exc), 400)
 
     return DataEnvelope(data=result)
+
+
+def _map_pipeline_status(status: str | None) -> str:
+    if status == "succeeded":
+        return "completed"
+    if status == "running":
+        return "running"
+    if status in {"failed", "canceled"}:
+        return "failed"
+    return "pending"
+
+
+@router.post(
+    "/batch/status",
+    response_model=DataEnvelope,
+    responses={403: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+async def batch_status(
+    payload: BatchStatusRequest,
+    auth: AuthContext = Depends(get_current_auth),
+):
+    client = get_supabase_client()
+    submission_result = (
+        client.table("submissions")
+        .select("*")
+        .eq("id", payload.submission_id)
+        .eq("org_id", auth.org_id)
+        .limit(1)
+        .execute()
+    )
+    if not submission_result.data:
+        return error_response("Submission not found", 404)
+
+    submission = submission_result.data[0]
+    if auth.role in {"company_admin", "member"} and submission.get("company_id") != auth.company_id:
+        return error_response("Forbidden submission access", 403)
+
+    runs_result = (
+        client.table("pipeline_runs")
+        .select("*")
+        .eq("submission_id", payload.submission_id)
+        .eq("org_id", auth.org_id)
+        .order("created_at")
+        .execute()
+    )
+    run_rows = runs_result.data
+    per_entity: list[dict[str, Any]] = []
+    summary = {"total": len(run_rows), "completed": 0, "failed": 0, "pending": 0, "running": 0}
+
+    for run in run_rows:
+        mapped_status = _map_pipeline_status(run.get("status"))
+        summary[mapped_status] = summary.get(mapped_status, 0) + 1
+        entity_meta = (run.get("blueprint_snapshot") or {}).get("entity") or {}
+        final_context = None
+        if mapped_status == "completed":
+            step_results = (
+                client.table("step_results")
+                .select("step_position, status, output_payload")
+                .eq("pipeline_run_id", run["id"])
+                .eq("org_id", auth.org_id)
+                .order("step_position", desc=True)
+                .execute()
+            )
+            for step in step_results.data:
+                if step.get("status") == "succeeded":
+                    payload_data = step.get("output_payload") or {}
+                    if isinstance(payload_data, dict):
+                        final_context = payload_data.get("cumulative_context")
+                    if final_context is not None:
+                        break
+
+        per_entity.append(
+            {
+                "entity_index": entity_meta.get("index"),
+                "entity_type": entity_meta.get("entity_type"),
+                "pipeline_run_id": run["id"],
+                "trigger_run_id": run.get("trigger_run_id"),
+                "status": mapped_status,
+                "final_context": final_context,
+                "error_message": run.get("error_message"),
+            }
+        )
+
+    return DataEnvelope(
+        data={
+            "submission": {
+                "id": submission["id"],
+                "org_id": submission["org_id"],
+                "company_id": submission.get("company_id"),
+                "blueprint_id": submission["blueprint_id"],
+                "status": submission["status"],
+                "source": submission.get("source"),
+                "metadata": submission.get("metadata"),
+                "created_at": submission.get("created_at"),
+                "updated_at": submission.get("updated_at"),
+            },
+            "summary": summary,
+            "runs": per_entity,
+        }
+    )
 
