@@ -198,25 +198,25 @@ async def execute_person_contact_resolve_email(
             "provider_attempts": attempts,
         }
 
-    resolved_email = await _icypeas_email_search(
+    resolved_email = await _leadmagic_email_finder(
         first_name=first_name,
         last_name=last_name,
-        domain_or_company=domain_or_company,
+        full_name=full_name,
+        domain=company_domain,
+        company_name=company_name,
         attempts=attempts,
     )
-    source = "icypeas" if resolved_email else None
+    source = "leadmagic" if resolved_email else None
 
     if not resolved_email:
-        resolved_email = await _leadmagic_email_finder(
+        resolved_email = await _icypeas_email_search(
             first_name=first_name,
             last_name=last_name,
-            full_name=full_name,
-            domain=company_domain,
-            company_name=company_name,
+            domain_or_company=domain_or_company,
             attempts=attempts,
         )
         if resolved_email:
-            source = "leadmagic"
+            source = "icypeas"
 
     if not resolved_email:
         has_parallel_inputs = bool((full_name or (first_name and last_name)) and (company_name or company_domain))
