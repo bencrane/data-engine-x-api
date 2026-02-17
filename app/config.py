@@ -26,6 +26,32 @@ class Settings(BaseSettings):
     super_admin_jwt_secret: str
     internal_api_key: str
 
+    # Provider keys and operation runtime settings (email operations v1)
+    icypeas_api_key: str | None = None
+    leadmagic_api_key: str | None = None
+    millionverifier_api_key: str | None = None
+    reoon_api_key: str | None = None
+    parallel_api_key: str | None = None
+    prospeo_api_key: str | None = None
+    blitzapi_api_key: str | None = None
+    companyenrich_api_key: str | None = None
+    adyntel_api_key: str | None = None
+    adyntel_email: str | None = None
+    parallel_processor: str = "core"
+    icypeas_poll_interval_ms: int = 2000
+    icypeas_max_wait_ms: int = 45000
+    millionverifier_timeout_seconds: int = 10
+    reoon_mode: str = "power"
+    company_enrich_profile_order: str = "prospeo,blitzapi,companyenrich,leadmagic"
+    company_search_order: str = "prospeo,blitzapi,companyenrich"
+    person_search_order: str = "prospeo,blitzapi,companyenrich"
+    person_resolve_mobile_order: str = "leadmagic,blitzapi"
+    adyntel_timeout_seconds: int = 90
+    llm_primary_model: str = "gemini"
+    llm_fallback_model: str = "gpt-4"
+    gemini_api_key: str | None = None
+    openai_api_key: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

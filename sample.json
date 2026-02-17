@@ -1,0 +1,78 @@
+{
+    "url": "https://www.linkedin.com/company/mutinyhq",
+    "name": "Mutiny",
+    "size": "51-200 employees",
+    "slug": "mutinyhq",
+    "type": "Privately Held",
+    "domain": "mutinyhq.com",
+    "org_id": 28451273,
+    "country": "US",
+    "founded": 2018,
+    "website": "http://mutinyhq.com",
+    "industry": "Software Development",
+    "locality": "San Francisco, CA",
+    "logo_url": "https://d878vporrm2hj.cloudfront.net/company/50412842_company_logo",
+    "locations": [
+      {
+        "address": "San Francisco, CA 94110, US",
+        "is_primary": true,
+        "inferred_location": {
+          "name": "94110, CA",
+          "latitude": 37.75298691,
+          "locality": "San Francisco",
+          "longitude": -122.41742706,
+          "country_iso": "US",
+          "locationstr": "San Francisco, CA 94110, US",
+          "postal_code": "94110",
+          "address_line": "",
+          "neighborhood": "",
+          "admin_district": "CA",
+          "country_region": "United States",
+          "admin_district2": "San Francisco County",
+          "formatted_address": "94110, CA"
+        }
+      }
+    ],
+    "company_id": 111171123,
+    "description": "Your AI agent for creating anything customer facing. Create executive business cases, deal follow-ups, landing pages, ABM campaigns and more, all by yourself.\n\nWe are backed by Sequoia Capital, Tiger Global, Insight Partners, Cowboy Ventures, and Y Combinator.",
+    "specialties": [
+      "SaaS",
+      "Marketing",
+      "Account Based Marketing"
+    ],
+    "last_refresh": "2026-02-15T23:30:17.856882+00:00",
+    "annual_revenue": "10M-25M",
+    "employee_count": 50,
+    "follower_count": 21660,
+    "clay_company_id": 50412842,
+    "resolved_domain": {
+      "is_live": true,
+      "resolved_domain": "mutinyhq.com",
+      "redirects_to_another_domain": false
+    },
+    "derived_datapoints": {
+      "industry": [
+        "Software and IT"
+      ],
+      "description": "Mutiny is an AI-powered account-based marketing (ABM) platform designed to help B2B companies generate pipeline and revenue from their target accounts. It offers tools for creating personalized 1:1 microsites, gathering account intelligence, and unifying sales and marketing efforts. Mutiny's platform aims to scale personalized go-to-market strategies and improve conversion rates by leveraging AI to understand account priorities and pain points.",
+      "scale_scope": "global; Modifier: digital",
+      "subindustry": [
+        "Enterprise Software Solutions"
+      ],
+      "pattern_tags": "B2B, ABM, Personalization",
+      "business_type": [
+        "B2B"
+      ],
+      "business_stage": "Growth Stage",
+      "revenue_streams": [
+        "Subscriptions/Recurring"
+      ],
+      "primary_offerings": [
+        "AI-powered ABM platform",
+        "1:1 microsite creation",
+        "Account intelligence",
+        "Sales and marketing collaboration tools"
+      ]
+    },
+    "total_funding_amount_range_usd": "$50M - $100M"
+  }

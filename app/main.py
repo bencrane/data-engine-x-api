@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.routers import (
     auth,
+    execute_v1,
     health,
     internal,
     super_admin_api,
@@ -75,4 +76,9 @@ app.include_router(
     tenant_flow.router,
     prefix="/api",
     tags=["tenant-flow"],
+)
+app.include_router(
+    execute_v1.router,
+    prefix="/api/v1",
+    tags=["execute-v1"],
 )

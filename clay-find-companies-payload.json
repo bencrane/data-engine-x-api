@@ -1,0 +1,23 @@
+{
+    "name": "Perplexity",
+    "size": "201-500 employees",
+    "type": "Privately Held",
+    "domain": "perplexity.ai",
+    "country": "United States",
+    "industry": "Software Development",
+    "location": "San Francisco, California",
+    "industries": [
+      "Software Development"
+    ],
+    "description": "The most powerful answer engine. Powering curiosity with answers backed by up-to-date sources. This is where knowledge begins.",
+    "linkedin_url": "https://www.linkedin.com/company/perplexity-ai",
+    "annual_revenue": "500M-1B",
+    "clay_company_id": 27197763,
+    "resolved_domain": {
+      "is_live": true,
+      "resolved_domain": "perplexity.ai",
+      "redirects_to_another_domain": false
+    },
+    "linkedin_company_id": -5772459,
+    "total_funding_amount_range_usd": "$250M+"
+  }

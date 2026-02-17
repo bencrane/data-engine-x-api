@@ -2,6 +2,20 @@
 
 Authoritative context for AI agents working in `data-engine-x-api`.
 
+## Strategic Directive (Read First)
+
+Before making architecture or implementation decisions, read:
+
+- `docs/STRATEGIC_DIRECTIVE.md`
+
+This directive is mandatory guidance for:
+
+- no-guessing behavior,
+- canonical operation/action structure,
+- config-driven provider ordering,
+- durable execution logging requirements,
+- current locked v1 provider decisions.
+
 ## Project Overview
 
 `data-engine-x-api` is a multi-tenant data processing backend for internal/operator teams that need to ingest raw CRM/company data, run deterministic processing pipelines, and return transformed outputs to dashboards, CRMs, or both.
