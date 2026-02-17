@@ -13,6 +13,9 @@ Apply migrations in filename order:
 5. `005_operation_execution_history.sql` - Adds durable operation history tables (`operation_runs`, `operation_attempts`).
 6. `006_blueprint_operation_steps.sql` - Adds operation-native blueprint fields (`operation_id`, `step_config`) and relaxes legacy `step_id` nullability.
 7. `007_entity_state.sql` - Adds canonical entity state tables (`company_entities`, `person_entities`) and indexes.
+8. `008_companies_domain.sql` - Adds canonical company domain fields and supporting indexes.
+9. `009_entity_timeline.sql` - Adds `entity_timeline` table and timeline lineage indexes.
+10. `010_fan_out.sql` - Adds fan-out parent/child pipeline run linkage and indexes.
 
 ## Run Command
 
@@ -44,3 +47,5 @@ Re-running should still be done intentionally and with migration history awarene
 - `005` depends on `001` for `orgs`, `companies`, `users`, and `update_updated_at_column()`.
 - `006` depends on `001` for `blueprint_steps` and `step_results`.
 - `007` depends on `001` for `orgs`, `companies`, `pipeline_runs`, and `update_updated_at_column()`.
+- `009` depends on `001` for base tenancy/run tables and `update_updated_at_column()`.
+- `010` depends on `001` for `pipeline_runs` and base table definitions.

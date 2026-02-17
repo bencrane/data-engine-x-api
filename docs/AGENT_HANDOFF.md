@@ -1,164 +1,127 @@
 # AGENT_HANDOFF
 
-Date: 2026-02-16
+Date: 2026-02-17
 Repository: `data-engine-x-api`
 Primary branch: `main`
-Current HEAD at handoff update: `f9eca25` (local `main`)
+Current HEAD at handoff update: `26bcbf6` (local `main`)
 
 ## 1) Project Snapshot
 
-`data-engine-x-api` is a multi-tenant entity intelligence API with operation execution, batch orchestration, and persistent entity state.
+`data-engine-x-api` is a multi-tenant entity intelligence backend with operation-native execution, batch orchestration, fan-out child pipelines, canonical entity state, and timeline history.
 
 Core stack:
-- FastAPI API layer
-- Trigger.dev tasks
-- Supabase/Postgres persistence
-
-Core architectural direction:
-- Contract-first operations
-- Provider adapters behind canonical operation IDs
-- Durable execution logs (`operation_runs`, `operation_attempts`)
-- Single-entity execution via `POST /api/v1/execute`
-- Batch execution via `POST /api/v1/batch/submit` + `POST /api/v1/batch/status`
-- Entity state upsert/query via internal callbacks and `/api/v1/entities/*`
+- FastAPI
+- Trigger.dev
+- Supabase/Postgres
 
 Read first:
 - `CLAUDE.md`
 - `docs/STRATEGIC_DIRECTIVE.md`
-- `docs/ENTITY_INTELLIGENCE_ARCHITECTURE.md`
-- `docs/EXPORT_CONTRACT_V1.md`
+- `docs/ARCHITECTURE.md`
 
 ## 2) Current Git/State Notes
 
-Repository has multiple local commits ahead of `origin/main`; use `git status` and `git log` before release operations.
+Local `main` may be ahead of `origin/main`. Verify with `git status` and `git log` before release actions.
 
-At handoff time, local uncommitted items may exist (check `git status`), commonly:
-- `docs/POSTMORTEM_2026-02-16_DEPLOY_FLOW_MISFIRE.md`
-- `.tmp-docker-config/`
-
-Treat `.tmp-docker-config/` as local temp unless user explicitly asks to keep/commit.
+Local temp artifacts can exist (for example `.tmp-docker-config/`) and should remain uncommitted unless explicitly requested.
 
 ## 3) Live Operation IDs (execute v1)
 
-All below are wired through `POST /api/v1/execute` and persisted via `persist_operation_execution(...)`.
+All are wired through `POST /api/v1/execute` and persisted to `operation_runs` / `operation_attempts`:
 
-Person/contact:
-- `person.contact.resolve_email`
-- `person.contact.verify_email`
-- `person.contact.resolve_mobile_phone`
-
-Search:
-- `company.search`
-- `person.search`
-
-Company enrichment/research:
-- `company.enrich.profile`
-- `company.research.resolve_g2_url`
-- `company.research.resolve_pricing_page_url`
-
-Ads (Adyntel only):
-- `company.ads.search.linkedin`
-- `company.ads.search.meta`
-- `company.ads.search.google`
+1. `person.contact.resolve_email`
+2. `person.contact.resolve_mobile_phone`
+3. `person.contact.verify_email`
+4. `person.search`
+5. `company.search`
+6. `company.enrich.profile`
+7. `company.research.resolve_g2_url`
+8. `company.research.resolve_pricing_page_url`
+9. `company.ads.search.linkedin`
+10. `company.ads.search.meta`
+11. `company.ads.search.google`
 
 ## 4) Provider Order / Config Defaults
 
-Defined in `app/config.py` + `.env.example`:
+Defined in `app/config.py` and `.env.example` (non-prefixed env names):
 
-- `DATA_ENGINE_COMPANY_SEARCH_ORDER=prospeo,blitzapi,companyenrich`
-- `DATA_ENGINE_PERSON_SEARCH_ORDER=prospeo,blitzapi,companyenrich`
-- `DATA_ENGINE_PERSON_RESOLVE_MOBILE_ORDER=leadmagic,blitzapi`
-- `DATA_ENGINE_COMPANY_ENRICH_PROFILE_ORDER=prospeo,blitzapi,companyenrich,leadmagic`
+- `COMPANY_SEARCH_ORDER=prospeo,blitzapi,companyenrich`
+- `PERSON_SEARCH_ORDER=prospeo,blitzapi,companyenrich`
+- `PERSON_RESOLVE_MOBILE_ORDER=leadmagic,blitzapi`
+- `COMPANY_ENRICH_PROFILE_ORDER=prospeo,blitzapi,companyenrich,leadmagic`
+
+`person.contact.resolve_email` runtime waterfall is LeadMagic-first (`leadmagic -> icypeas -> parallel` fallback), with verification after resolution (`millionverifier -> reoon`).
 
 LLM routing:
-- `DATA_ENGINE_LLM_PRIMARY_MODEL=gemini`
-- `DATA_ENGINE_LLM_FALLBACK_MODEL=gpt-4`
+- `LLM_PRIMARY_MODEL=gemini`
+- `LLM_FALLBACK_MODEL=gpt-4`
 
 Adyntel:
-- `DATA_ENGINE_ADYNTEL_API_KEY`
-- `DATA_ENGINE_ADYNTEL_EMAIL`
-- `DATA_ENGINE_ADYNTEL_TIMEOUT_SECONDS=90`
+- `ADYNTEL_API_KEY`
+- `ADYNTEL_ACCOUNT_EMAIL`
+- `ADYNTEL_TIMEOUT_SECONDS=90`
 
 ## 5) What Is Implemented
 
-Implemented:
-- Operation endpoints and provider-adapter-backed execution (`POST /api/v1/execute`)
-- Durable operation history (`operation_runs`, `operation_attempts`)
-- Config-driven provider ordering in `app/config.py`
-- Batch orchestration:
-  - `POST /api/v1/batch/submit` creates one submission and one pipeline run per entity
-  - `POST /api/v1/batch/status` aggregates per-entity run status and final context
-- Trigger orchestrator bridge:
-  - FastAPI triggers `run-pipeline`
-  - Trigger uses internal HTTP callbacks under `/api/internal/*`
-  - Internal service auth via `DATA_ENGINE_INTERNAL_API_KEY`
-- Cumulative output chaining across operation steps in Trigger runtime
-- Entity state persistence (`company_entities`, `person_entities`) with versioned upserts
-- Entity query endpoints:
-  - `POST /api/v1/entities/companies`
-  - `POST /api/v1/entities/persons`
-- Test suite coverage for contracts, batch flow, and entity state in `tests/`
+- Batch orchestration (`/api/v1/batch/submit`, `/api/v1/batch/status`)
+- Fan-out parent/child pipeline runs from operation outputs
+- Entity state upsert/versioning (`company_entities`, `person_entities`)
+- Entity timeline recording (`entity_timeline`) for upsert and fan-out events
+- Provider adapter audit trail in `operation_attempts`
+- Canonical operation contracts in `app/contracts/`
+- 11 active operation IDs in execute v1
+- Trigger.dev <-> FastAPI internal callback path (`/api/internal/*`)
+- Doppler-based secrets management (`doppler run` in `Dockerfile`, `DOPPLER_TOKEN` on Railway)
 
-## 6) Immediate Recommended Next Steps
+## 6) Recommended Next Steps
 
-1. Deployment readiness validation:
-   - run the manual smoke script against deployed FastAPI + Trigger + DB
-   - verify entity upsert and query round-trip in live environment
+1. Add `person.enrich.profile` operation.
+2. Add `max_results` and `provider_overrides` support to `person.search`.
+3. Increase entity enrichment log depth (per-step timeline events, not only upsert/fan-out summaries).
+4. Improve frontend batch-status display for parent/child run lineage and per-entity context.
 
-2. Operational hardening:
-   - add dashboard/alerts for pipeline run failure rates and internal callback failures
-   - establish runbook for provider outages and timeout tuning
+## 7) Non-Negotiable Guardrails
 
-3. Contract quality guardrails:
-   - expand canonical output assertions for all operation IDs and fallback paths
-   - enforce schema-level constraints where drift risk remains
+1. Keep changes scope-bound to explicit user requests.
+2. Do not run deploy commands unless explicitly requested.
+3. Do not alter provider adapters without explicit scope.
+4. Keep operation contracts canonical and provider-agnostic.
 
-4. Release process:
-   - execute migration manifest in order on target DB
-   - validate environment variable completeness before production deploy
+## 8) Quick File Map
 
-## 7) Non-Negotiable Execution Guardrails
-
-This is critical for continuity with the operator.
-
-1. Do only what the user explicitly asks.
-2. Do not add extra commands/actions "proactively."
-3. Do not run platform deploy commands unless explicitly requested.
-4. For this repo’s deploy flow, default is `git commit` + `git push`; Railway deploy is GitHub-driven.
-5. If ambiguous, ask one short clarification, then wait.
-6. Keep responses concise and scope-bound.
-
-## 8) Quick File Map for New Agent
-
-Main entrypoints:
+Main API/flow entrypoints:
+- `app/main.py`
 - `app/routers/execute_v1.py`
 - `app/routers/entities_v1.py`
 - `app/routers/internal.py`
+- `app/services/submission_flow.py` (batch + fan-out)
+- `app/services/entity_state.py`
+- `app/services/entity_timeline.py`
+
+Operation services:
 - `app/services/email_operations.py`
 - `app/services/search_operations.py`
 - `app/services/company_operations.py`
 - `app/services/research_operations.py`
 - `app/services/adyntel_operations.py`
-- `app/services/submission_flow.py`
-- `app/services/entity_state.py`
 - `app/services/operation_history.py`
-- `app/services/trigger.py`
-- `app/config.py`
 
 Contracts/providers:
 - `app/contracts/`
 - `app/providers/`
 
-Trigger runtime:
+Runtime/orchestration:
 - `trigger/src/tasks/run-pipeline.ts`
-- `trigger/src/tasks/execute-step.ts` (legacy generic executor path)
+- `trigger/src/tasks/execute-step.ts` (legacy path)
+
+Infra/tooling:
+- `Dockerfile`
+- `scripts/`
 
 Tests:
-- `tests/test_contracts.py`
-- `tests/test_batch_flow.py`
-- `tests/test_entity_state.py`
+- `tests/`
 
-Schema/migrations (current):
+Schema:
 - `supabase/migrations/001_initial_schema.sql`
 - `supabase/migrations/002_users_password_hash.sql`
 - `supabase/migrations/003_api_tokens_user_id.sql`
@@ -166,12 +129,12 @@ Schema/migrations (current):
 - `supabase/migrations/005_operation_execution_history.sql`
 - `supabase/migrations/006_blueprint_operation_steps.sql`
 - `supabase/migrations/007_entity_state.sql`
+- `supabase/migrations/008_companies_domain.sql`
+- `supabase/migrations/009_entity_timeline.sql`
+- `supabase/migrations/010_fan_out.sql`
 
 ## 9) Operator Intent Summary
 
-Top product intent:
-- Single-company to outbound-intelligence flow
-- High pragmatism, low ceremony
-- Minimal overengineering
-- Provider costs and control matter
-- User authority is the hard boundary for execution behavior
+- Keep architecture pragmatic and contract-first.
+- Preserve deterministic run lineage and provider auditability.
+- Prioritize production-safe behavior under mixed/noisy context inputs.
