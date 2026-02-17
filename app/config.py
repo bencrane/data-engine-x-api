@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     reoon_api_key: str | None = None
     parallel_api_key: str | None = None
     prospeo_api_key: str | None = None
+    ampleleads_api_key: str | None = None
     blitzapi_api_key: str | None = None
     companyenrich_api_key: str | None = None
     adyntel_api_key: str | None = None
