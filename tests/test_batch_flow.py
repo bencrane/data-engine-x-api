@@ -118,3 +118,55 @@ async def test_create_batch_submission_and_trigger_pipeline_runs(monkeypatch: py
     assert async_trigger.await_count == 2
     assert run_snapshots[0]["entity"]["input"] == {"domain": "acme.com"}
     assert run_snapshots[1]["entity"]["input"] == {"linkedin_url": "https://linkedin.com/in/alex"}
+
+
+@pytest.mark.asyncio
+async def test_create_fan_out_child_pipeline_runs(monkeypatch: pytest.MonkeyPatch):
+    supabase = _SupabaseStub()
+    create_calls: list[dict] = []
+    step_row_calls: list[dict] = []
+    run_counter = {"value": 0}
+    async_trigger = AsyncMock(side_effect=["child-trigger-1", "child-trigger-2"])
+
+    def _create_pipeline_run_row(**kwargs):
+        run_counter["value"] += 1
+        run_id = f"child-run-{run_counter['value']}"
+        create_calls.append(kwargs)
+        return {"id": run_id, "status": "queued"}
+
+    def _create_step_result_rows(**kwargs):
+        step_row_calls.append(kwargs)
+
+    monkeypatch.setattr(submission_flow, "get_supabase_client", lambda: supabase)
+    monkeypatch.setattr(submission_flow, "_create_pipeline_run_row", _create_pipeline_run_row)
+    monkeypatch.setattr(submission_flow, "_create_step_result_rows", _create_step_result_rows)
+    monkeypatch.setattr(submission_flow, "trigger_pipeline_run", async_trigger)
+
+    child_runs = await submission_flow.create_fan_out_child_pipeline_runs(
+        org_id="11111111-1111-1111-1111-111111111111",
+        company_id="22222222-2222-2222-2222-222222222222",
+        submission_id="submission-1",
+        parent_pipeline_run_id="parent-run-1",
+        blueprint_id="33333333-3333-3333-3333-333333333333",
+        blueprint_snapshot={
+            "blueprint": {"id": "blueprint-1"},
+            "steps": [
+                {"id": "bs-1", "position": 1, "operation_id": "company.enrich.profile"},
+                {"id": "bs-2", "position": 2, "operation_id": "person.search", "fan_out": True},
+                {"id": "bs-3", "position": 3, "operation_id": "person.contact.resolve_email"},
+            ],
+        },
+        fan_out_entities=[
+            {"entity_type": "person", "full_name": "Alex A", "linkedin_url": "https://linkedin.com/in/alexa"},
+            {"entity_type": "person", "full_name": "Sam B", "linkedin_url": "https://linkedin.com/in/samb"},
+        ],
+        start_from_position=3,
+        parent_cumulative_context={"canonical_domain": "acme.com"},
+    )
+
+    assert len(child_runs) == 2
+    assert async_trigger.await_count == 2
+    assert all(call["parent_pipeline_run_id"] == "parent-run-1" for call in create_calls)
+    assert all(call["start_from_position"] == 3 for call in step_row_calls)
+    assert child_runs[0]["entity_input"]["canonical_domain"] == "acme.com"
+    assert child_runs[0]["entity_input"]["full_name"] == "Alex A"

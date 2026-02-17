@@ -20,6 +20,7 @@ interface InternalPipelineRun {
       position: number;
       operation_id?: string | null;
       step_config?: Record<string, unknown> | null;
+      fan_out?: boolean;
       is_enabled?: boolean;
     }>;
     entity?: {
@@ -37,6 +38,18 @@ interface InternalPipelineRun {
     id: string;
     input_payload: Record<string, unknown> | unknown[];
   };
+}
+
+interface FanOutChildRunsResponse {
+  parent_pipeline_run_id: string;
+  child_runs: Array<{
+    pipeline_run_id: string;
+    pipeline_run_status: string;
+    trigger_run_id?: string | null;
+    entity_type?: string;
+    entity_input?: Record<string, unknown>;
+  }>;
+  child_run_ids: string[];
 }
 
 interface ExecuteResponseEnvelope {
@@ -127,6 +140,13 @@ function mergeContext(
 ): Record<string, unknown> {
   if (!output) return current;
   return { ...current, ...output };
+}
+
+function extractFanOutResults(output: Record<string, unknown> | null | undefined): Array<Record<string, unknown>> {
+  if (!output) return [];
+  const value = output["results"];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => typeof item === "object" && item !== null) as Array<Record<string, unknown>>;
 }
 
 export const runPipeline = task({
@@ -258,6 +278,87 @@ export const runPipeline = task({
           },
         });
         lastSuccessfulOperationId = operationId;
+
+        const fanOutEnabled =
+          stepSnapshot.fan_out === true ||
+          stepSnapshot.step_config?.fan_out === true;
+        if (fanOutEnabled) {
+          const fanOutEntities = extractFanOutResults(result.output);
+          const providerAttempts = Array.isArray(result.provider_attempts)
+            ? result.provider_attempts
+            : [];
+          const fanOutProvider = providerAttempts.find(
+            (attempt) => attempt?.status === "found" || attempt?.status === "succeeded",
+          )?.provider as string | undefined;
+
+          const fanOutResponse = await internalPost<FanOutChildRunsResponse>(
+            internalConfig,
+            "/api/internal/pipeline-runs/fan-out",
+            {
+              parent_pipeline_run_id: pipeline_run_id,
+              submission_id: run.submission_id,
+              org_id,
+              company_id,
+              blueprint_snapshot: run.blueprint_snapshot,
+              fan_out_entities: fanOutEntities,
+              start_from_position: stepSnapshot.position + 1,
+              parent_cumulative_context: cumulativeContext,
+              fan_out_operation_id: operationId,
+              provider: fanOutProvider ?? null,
+              provider_attempts: providerAttempts,
+            },
+          );
+
+          await internalPost(internalConfig, "/api/internal/step-results/update", {
+            step_result_id: stepResult.id,
+            status: "succeeded",
+            output_payload: {
+              operation_result: result,
+              cumulative_context: cumulativeContext,
+              fan_out: {
+                child_run_ids: fanOutResponse.child_run_ids,
+                child_count: fanOutResponse.child_run_ids.length,
+                start_from_position: stepSnapshot.position + 1,
+              },
+            },
+          });
+
+          await internalPost(internalConfig, "/api/internal/pipeline-runs/update-status", {
+            pipeline_run_id,
+            status: "succeeded",
+            error_message: null,
+            error_details: null,
+          });
+          try {
+            await internalPost(internalConfig, "/api/internal/entity-state/upsert", {
+              pipeline_run_id,
+              entity_type: entityType,
+              cumulative_context: cumulativeContext,
+              last_operation_id: lastSuccessfulOperationId,
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await internalPost(internalConfig, "/api/internal/pipeline-runs/update-status", {
+              pipeline_run_id,
+              status: "failed",
+              error_message: "Entity state upsert failed",
+              error_details: { error: message },
+            });
+            await internalPost(internalConfig, "/api/internal/submissions/sync-status", {
+              submission_id: run.submission_id,
+            });
+            return { pipeline_run_id, status: "failed", error: message };
+          }
+          await internalPost(internalConfig, "/api/internal/submissions/sync-status", {
+            submission_id: run.submission_id,
+          });
+          return {
+            pipeline_run_id,
+            status: "succeeded",
+            fan_out_child_run_ids: fanOutResponse.child_run_ids,
+            fan_out_child_count: fanOutResponse.child_run_ids.length,
+          };
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await internalPost(internalConfig, "/api/internal/step-results/update", {

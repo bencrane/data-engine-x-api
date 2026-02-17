@@ -118,6 +118,8 @@ def _create_step_result_rows(
         if start_from_position is not None
         else blueprint_steps
     )
+    if not relevant_steps:
+        return
     rows = [
         {
             "org_id": org_id,

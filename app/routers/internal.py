@@ -16,6 +16,7 @@ from app.services.entity_state import (
     upsert_person_entity,
 )
 from app.services.entity_timeline import record_entity_event
+from app.services.submission_flow import create_fan_out_child_pipeline_runs
 
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
@@ -82,6 +83,17 @@ class InternalEntityStateUpsertRequest(BaseModel):
     entity_type: Literal["company", "person"]
     cumulative_context: dict[str, Any]
     last_operation_id: str | None = None
+
+
+class InternalPipelineRunFanOutRequest(BaseModel):
+    parent_pipeline_run_id: str
+    submission_id: str
+    org_id: str
+    company_id: str
+    blueprint_snapshot: dict[str, Any]
+    fan_out_entities: list[dict[str, Any]]
+    start_from_position: int
+    parent_cumulative_context: dict[str, Any] | None = None
 
 
 def _normalize_timeline_status(status_value: str | None) -> str:
@@ -265,6 +277,58 @@ async def internal_sync_submission_status(
         .execute()
     )
     return DataEnvelope(data=result.data[0])
+
+
+@router.post(
+    "/pipeline-runs/fan-out",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+async def internal_fan_out_pipeline_runs(
+    payload: InternalPipelineRunFanOutRequest,
+    _: None = Depends(require_internal_key),
+):
+    client = get_supabase_client()
+    parent_result = (
+        client.table("pipeline_runs")
+        .select("id, org_id, company_id, submission_id, blueprint_id, blueprint_snapshot")
+        .eq("id", payload.parent_pipeline_run_id)
+        .limit(1)
+        .execute()
+    )
+    if not parent_result.data:
+        return error_response("Parent pipeline run not found", 404)
+    parent_run = parent_result.data[0]
+
+    if (
+        parent_run.get("org_id") != payload.org_id
+        or parent_run.get("company_id") != payload.company_id
+        or parent_run.get("submission_id") != payload.submission_id
+    ):
+        return error_response("Parent run tenancy/submission mismatch", 400)
+
+    if payload.start_from_position <= 0:
+        return error_response("start_from_position must be greater than 0", 400)
+
+    child_runs = await create_fan_out_child_pipeline_runs(
+        org_id=payload.org_id,
+        company_id=payload.company_id,
+        submission_id=payload.submission_id,
+        parent_pipeline_run_id=payload.parent_pipeline_run_id,
+        blueprint_id=parent_run["blueprint_id"],
+        blueprint_snapshot=payload.blueprint_snapshot,
+        fan_out_entities=payload.fan_out_entities,
+        start_from_position=payload.start_from_position,
+        parent_cumulative_context=payload.parent_cumulative_context,
+    )
+
+    return DataEnvelope(
+        data={
+            "parent_pipeline_run_id": payload.parent_pipeline_run_id,
+            "child_runs": child_runs,
+            "child_run_ids": [row["pipeline_run_id"] for row in child_runs],
+        }
+    )
 
 
 @router.post(
