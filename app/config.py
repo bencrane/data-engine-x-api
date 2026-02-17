@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret: str
     super_admin_jwt_secret: str
+    super_admin_api_key: str | None = None
     internal_api_key: str
 
     # Provider keys and operation runtime settings (email operations v1)

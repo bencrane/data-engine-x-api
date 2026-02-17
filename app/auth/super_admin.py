@@ -72,11 +72,25 @@ def create_super_admin_jwt(
     return jwt.encode(payload, settings.super_admin_jwt_secret, algorithm="HS256")
 
 
+async def _resolve_super_admin_from_api_key(token: str) -> SuperAdminContext | None:
+    """If token matches the super-admin API key, return a platform-level context."""
+    settings = get_settings()
+    if not settings.super_admin_api_key:
+        return None
+    if token != settings.super_admin_api_key:
+        return None
+    # API key grants full super-admin access without a specific admin record.
+    return SuperAdminContext(
+        super_admin_id=UUID("00000000-0000-0000-0000-000000000000"),
+        email="api-key@super-admin",
+    )
+
+
 async def get_current_super_admin(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> SuperAdminContext:
     """
-    Validate super-admin JWT and ensure active super_admin record exists.
+    Validate super-admin auth via API key or JWT.
     """
     if credentials is None:
         raise HTTPException(
@@ -85,6 +99,13 @@ async def get_current_super_admin(
         )
 
     token = credentials.credentials
+
+    # Try super-admin API key first.
+    api_key_result = await _resolve_super_admin_from_api_key(token)
+    if api_key_result is not None:
+        return api_key_result
+
+    # Fall back to JWT.
     payload = decode_super_admin_jwt(token)
 
     client = get_supabase_client()
