@@ -8,8 +8,15 @@ from app.contracts.company_ads import GoogleAdsOutput, LinkedInAdsOutput, MetaAd
 from app.providers import adyntel
 
 
-def _normalize_domain(value: str | None) -> str | None:
-    if not value or not isinstance(value, str):
+def _as_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _normalize_domain(value: Any) -> str | None:
+    if not isinstance(value, str):
         return None
     cleaned = value.strip().lower()
     if cleaned.startswith("http://"):
@@ -35,6 +42,18 @@ def _validate_adyntel_settings(attempts: list[dict[str, Any]], action: str) -> t
     return settings.adyntel_api_key, settings.adyntel_account_email
 
 
+def _normalize_optional_text_fields(
+    input_data: dict[str, Any],
+    keys: set[str],
+) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for key in keys:
+        value = _as_non_empty_str(input_data.get(key))
+        if value:
+            normalized[key] = value
+    return normalized
+
+
 async def execute_company_ads_search_linkedin(
     *,
     input_data: dict[str, Any],
@@ -51,7 +70,7 @@ async def execute_company_ads_search_linkedin(
         }
 
     company_domain = _normalize_domain(input_data.get("company_domain"))
-    linkedin_page_id = input_data.get("linkedin_page_id")
+    linkedin_page_id = _as_non_empty_str(input_data.get("linkedin_page_id"))
     if not company_domain and not linkedin_page_id:
         return {
             "run_id": run_id,
@@ -66,8 +85,9 @@ async def execute_company_ads_search_linkedin(
         payload["company_domain"] = company_domain
     if linkedin_page_id:
         payload["linkedin_page_id"] = linkedin_page_id
-    if input_data.get("continuation_token"):
-        payload["continuation_token"] = input_data["continuation_token"]
+    optional = _normalize_optional_text_fields(input_data, {"continuation_token"})
+    if "continuation_token" in optional:
+        payload["continuation_token"] = optional["continuation_token"]
 
     settings = get_settings()
     result = await adyntel.search_linkedin_ads(
@@ -79,7 +99,19 @@ async def execute_company_ads_search_linkedin(
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
     ads = mapped.get("ads") or []
-    output = LinkedInAdsOutput.model_validate(mapped).model_dump()
+    try:
+        output = LinkedInAdsOutput.model_validate(mapped).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.ads.search.linkedin",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
     return {
         "run_id": run_id,
         "operation_id": "company.ads.search.linkedin",
@@ -105,29 +137,28 @@ async def execute_company_ads_search_meta(
         }
 
     company_domain = _normalize_domain(input_data.get("company_domain"))
-    facebook_url = input_data.get("facebook_url")
-    keyword = input_data.get("keyword")
+    facebook_url = _as_non_empty_str(input_data.get("facebook_url"))
+    keyword = _as_non_empty_str(input_data.get("keyword"))
+    optional = _normalize_optional_text_fields(
+        input_data,
+        {"country_code", "continuation_token", "media_type", "active_status"},
+    )
 
     payload: dict[str, Any] = {}
     endpoint = "facebook"
-    if isinstance(keyword, str) and keyword.strip():
+    if keyword:
         endpoint = "facebook_ad_search"
-        payload["keyword"] = keyword.strip()
-        if input_data.get("country_code"):
-            payload["country_code"] = input_data["country_code"]
+        payload["keyword"] = keyword
+        if "country_code" in optional:
+            payload["country_code"] = optional["country_code"]
     else:
         if company_domain:
             payload["company_domain"] = company_domain
-        if isinstance(facebook_url, str) and facebook_url.strip():
-            payload["facebook_url"] = facebook_url.strip()
-        if input_data.get("continuation_token"):
-            payload["continuation_token"] = input_data["continuation_token"]
-        if input_data.get("media_type"):
-            payload["media_type"] = input_data["media_type"]
-        if input_data.get("country_code"):
-            payload["country_code"] = input_data["country_code"]
-        if input_data.get("active_status"):
-            payload["active_status"] = input_data["active_status"]
+        if facebook_url:
+            payload["facebook_url"] = facebook_url
+        for key in {"continuation_token", "media_type", "country_code", "active_status"}:
+            if key in optional:
+                payload[key] = optional[key]
 
         if "company_domain" not in payload and "facebook_url" not in payload:
             return {
@@ -149,7 +180,19 @@ async def execute_company_ads_search_meta(
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
     results = mapped.get("results") or []
-    output = MetaAdsOutput.model_validate(mapped).model_dump()
+    try:
+        output = MetaAdsOutput.model_validate(mapped).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.ads.search.meta",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
     return {
         "run_id": run_id,
         "operation_id": "company.ads.search.meta",
@@ -185,10 +228,11 @@ async def execute_company_ads_search_google(
         }
 
     payload: dict[str, Any] = {"company_domain": company_domain}
-    if input_data.get("media_type"):
-        payload["media_type"] = input_data["media_type"]
-    if input_data.get("continuation_token"):
-        payload["continuation_token"] = input_data["continuation_token"]
+    optional = _normalize_optional_text_fields(input_data, {"media_type", "continuation_token"})
+    if "media_type" in optional:
+        payload["media_type"] = optional["media_type"]
+    if "continuation_token" in optional:
+        payload["continuation_token"] = optional["continuation_token"]
 
     settings = get_settings()
     result = await adyntel.search_google_ads(
@@ -200,7 +244,19 @@ async def execute_company_ads_search_google(
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
     ads = mapped.get("ads") or []
-    output = GoogleAdsOutput.model_validate(mapped).model_dump()
+    try:
+        output = GoogleAdsOutput.model_validate(mapped).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.ads.search.google",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
     return {
         "run_id": run_id,
         "operation_id": "company.ads.search.google",

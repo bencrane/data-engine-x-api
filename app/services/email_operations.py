@@ -11,8 +11,15 @@ INCONCLUSIVE_MILLIONVERIFIER_RESULTS = {"unknown", "catch_all"}
 INCONCLUSIVE_REOON_STATUSES = {"unknown", "catch_all"}
 
 
-def _split_full_name(full_name: str | None) -> tuple[str | None, str | None]:
-    if not full_name:
+def _as_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _split_full_name(full_name: Any) -> tuple[str | None, str | None]:
+    if not isinstance(full_name, str):
         return None, None
     parts = [part.strip() for part in full_name.split(" ") if part.strip()]
     if not parts:
@@ -169,16 +176,16 @@ async def execute_person_contact_resolve_email(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    full_name = input_data.get("full_name")
-    first_name = input_data.get("first_name")
-    last_name = input_data.get("last_name")
+    full_name = _as_non_empty_str(input_data.get("full_name"))
+    first_name = _as_non_empty_str(input_data.get("first_name"))
+    last_name = _as_non_empty_str(input_data.get("last_name"))
     if not first_name and not last_name:
         split_first, split_last = _split_full_name(full_name)
         first_name = first_name or split_first
         last_name = last_name or split_last
 
-    company_domain = input_data.get("company_domain")
-    company_name = input_data.get("company_name")
+    company_domain = _as_non_empty_str(input_data.get("company_domain"))
+    company_name = _as_non_empty_str(input_data.get("company_name"))
     domain_or_company = company_domain or company_name
 
     if not domain_or_company:
@@ -246,13 +253,25 @@ async def execute_person_contact_resolve_email(
             if reoon_verification is not None:
                 verification = reoon_verification
 
-    output = ResolveEmailOutput.model_validate(
-        {
-            "email": resolved_email,
-            "source_provider": source,
-            "verification": verification,
+    try:
+        output = ResolveEmailOutput.model_validate(
+            {
+                "email": resolved_email,
+                "source_provider": source,
+                "verification": verification,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "person.contact.resolve_email",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
-    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.contact.resolve_email",
@@ -268,8 +287,8 @@ async def execute_person_contact_verify_email(
 ) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
-    email = input_data.get("email")
-    if not email or not isinstance(email, str):
+    email = _as_non_empty_str(input_data.get("email"))
+    if not email:
         return {
             "run_id": run_id,
             "operation_id": "person.contact.verify_email",
@@ -284,12 +303,24 @@ async def execute_person_contact_verify_email(
         if reoon_verification is not None:
             verification = reoon_verification
 
-    output = VerifyEmailOutput.model_validate(
-        {
-            "email": email,
-            "verification": verification,
+    try:
+        output = VerifyEmailOutput.model_validate(
+            {
+                "email": email,
+                "verification": verification,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "person.contact.verify_email",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
-    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.contact.verify_email",
@@ -306,9 +337,9 @@ async def execute_person_contact_resolve_mobile_phone(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    profile_url = input_data.get("profile_url") or input_data.get("linkedin_url")
-    work_email = input_data.get("work_email")
-    personal_email = input_data.get("personal_email")
+    profile_url = _as_non_empty_str(input_data.get("profile_url")) or _as_non_empty_str(input_data.get("linkedin_url"))
+    work_email = _as_non_empty_str(input_data.get("work_email"))
+    personal_email = _as_non_empty_str(input_data.get("personal_email"))
     if not (profile_url or work_email or personal_email):
         return {
             "run_id": run_id,
@@ -340,12 +371,24 @@ async def execute_person_contact_resolve_mobile_phone(
                 source = "blitzapi"
                 break
 
-    output = ResolveMobilePhoneOutput.model_validate(
-        {
-            "mobile_phone": mobile_phone,
-            "source_provider": source,
+    try:
+        output = ResolveMobilePhoneOutput.model_validate(
+            {
+                "mobile_phone": mobile_phone,
+                "source_provider": source,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "person.contact.resolve_mobile_phone",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
-    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "person.contact.resolve_mobile_phone",

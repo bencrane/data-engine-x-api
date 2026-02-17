@@ -10,7 +10,10 @@ from app.providers import gemini, openai_provider
 
 
 def _normalize_company_domain(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip().lower()
+    return cleaned or None
 
 
 def _safe_confidence(value: Any) -> float:
@@ -204,15 +207,27 @@ async def execute_company_research_resolve_g2_url(
         if g2_url:
             provider_used = "openai"
 
-    output = ResolveG2UrlOutput.model_validate(
-        {
-            "company_name": company_name.strip(),
-            "company_domain": company_domain,
-            "g2_url": g2_url,
-            "confidence": confidence,
-            "provider_used": provider_used,
+    try:
+        output = ResolveG2UrlOutput.model_validate(
+            {
+                "company_name": company_name.strip(),
+                "company_domain": company_domain,
+                "g2_url": g2_url,
+                "confidence": confidence,
+                "provider_used": provider_used,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.research.resolve_g2_url",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
-    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "company.research.resolve_g2_url",
@@ -286,15 +301,27 @@ async def execute_company_research_resolve_pricing_page_url(
         if pricing_page_url:
             provider_used = "openai"
 
-    output = ResolvePricingPageUrlOutput.model_validate(
-        {
-            "company_name": company_name.strip(),
-            "company_domain": company_domain,
-            "pricing_page_url": pricing_page_url,
-            "confidence": confidence,
-            "provider_used": provider_used,
+    try:
+        output = ResolvePricingPageUrlOutput.model_validate(
+            {
+                "company_name": company_name.strip(),
+                "company_domain": company_domain,
+                "pricing_page_url": pricing_page_url,
+                "confidence": confidence,
+                "provider_used": provider_used,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.research.resolve_pricing_page_url",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
-    ).model_dump()
     return {
         "run_id": run_id,
         "operation_id": "company.research.resolve_pricing_page_url",

@@ -8,8 +8,15 @@ from app.contracts.company_enrich import CompanyEnrichProfileOutput
 from app.providers import blitzapi, companyenrich, leadmagic, prospeo
 
 
-def _domain_from_website(website: str | None) -> str | None:
-    if not website:
+def _as_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _domain_from_website(website: Any) -> str | None:
+    if not isinstance(website, str):
         return None
     normalized = website.strip().lower()
     if normalized.startswith("http://"):
@@ -150,11 +157,16 @@ async def _prospeo_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
+    company_website = _as_non_empty_str(input_data.get("company_website"))
+    company_domain = _as_non_empty_str(input_data.get("company_domain"))
+    company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
+    company_name = _as_non_empty_str(input_data.get("company_name"))
+    source_company_id = _as_non_empty_str(input_data.get("source_company_id"))
     data = {
-        "company_website": input_data.get("company_website") or input_data.get("company_domain"),
-        "company_linkedin_url": input_data.get("company_linkedin_url"),
-        "company_name": input_data.get("company_name"),
-        "company_id": input_data.get("source_company_id"),
+        "company_website": company_website or company_domain,
+        "company_linkedin_url": company_linkedin_url,
+        "company_name": company_name,
+        "company_id": source_company_id,
     }
     result = await prospeo.enrich_company(api_key=settings.prospeo_api_key, data=data)
     attempts.append(result["attempt"])
@@ -167,8 +179,8 @@ async def _blitzapi_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    linkedin_url = input_data.get("company_linkedin_url")
-    domain = input_data.get("company_domain") or _domain_from_website(input_data.get("company_website"))
+    linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
+    domain = _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(input_data.get("company_website"))
     if not linkedin_url and domain:
         bridge = await blitzapi.domain_to_linkedin(api_key=settings.blitzapi_api_key, domain=domain)
         attempts.append(bridge["attempt"])
@@ -187,7 +199,7 @@ async def _companyenrich_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    domain = input_data.get("company_domain") or _domain_from_website(input_data.get("company_website"))
+    domain = _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(input_data.get("company_website"))
     result = await companyenrich.enrich_company(
         api_key=settings.companyenrich_api_key,
         domain=domain,
@@ -203,9 +215,9 @@ async def _leadmagic_company_enrich(
 ) -> dict[str, Any] | None:
     settings = get_settings()
     payload = {
-        "company_domain": input_data.get("company_domain") or _domain_from_website(input_data.get("company_website")),
-        "profile_url": input_data.get("company_linkedin_url"),
-        "company_name": input_data.get("company_name"),
+        "company_domain": _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(input_data.get("company_website")),
+        "profile_url": _as_non_empty_str(input_data.get("company_linkedin_url")),
+        "company_name": _as_non_empty_str(input_data.get("company_name")),
     }
     result = await leadmagic.enrich_company(api_key=settings.leadmagic_api_key, payload=payload)
     attempts.append(result["attempt"])
@@ -221,12 +233,20 @@ async def execute_company_enrich_profile(
     profile: dict[str, Any] = {}
     sources: list[str] = []
 
+    current_input: dict[str, Any] = {
+        "company_domain": _as_non_empty_str(input_data.get("company_domain")),
+        "company_website": _as_non_empty_str(input_data.get("company_website")),
+        "company_linkedin_url": _as_non_empty_str(input_data.get("company_linkedin_url")),
+        "company_name": _as_non_empty_str(input_data.get("company_name")),
+        "source_company_id": _as_non_empty_str(input_data.get("source_company_id")),
+    }
+
     has_identifier = bool(
-        input_data.get("company_domain")
-        or input_data.get("company_website")
-        or input_data.get("company_linkedin_url")
-        or input_data.get("company_name")
-        or input_data.get("source_company_id")
+        current_input.get("company_domain")
+        or current_input.get("company_website")
+        or current_input.get("company_linkedin_url")
+        or current_input.get("company_name")
+        or current_input.get("source_company_id")
     )
     if not has_identifier:
         return {
@@ -254,27 +274,39 @@ async def execute_company_enrich_profile(
         adapter = providers.get(provider)
         if not adapter:
             continue
-        raw_company = await adapter(input_data=input_data, attempts=attempts)
+        raw_company = await adapter(input_data=current_input, attempts=attempts)
         if not raw_company:
             continue
         profile = _merge_company_profile(profile, mapper[provider](raw_company))
         sources.append(provider)
 
-        input_data = {
-            **input_data,
-            "company_name": input_data.get("company_name") or profile.get("company_name"),
-            "company_domain": input_data.get("company_domain") or profile.get("company_domain"),
-            "company_website": input_data.get("company_website") or profile.get("company_website"),
-            "company_linkedin_url": input_data.get("company_linkedin_url") or profile.get("company_linkedin_url"),
-            "source_company_id": input_data.get("source_company_id") or profile.get("source_company_id"),
+        current_input = {
+            **current_input,
+            "company_name": current_input.get("company_name") or _as_non_empty_str(profile.get("company_name")),
+            "company_domain": current_input.get("company_domain") or _as_non_empty_str(profile.get("company_domain")),
+            "company_website": current_input.get("company_website") or _as_non_empty_str(profile.get("company_website")),
+            "company_linkedin_url": current_input.get("company_linkedin_url") or _as_non_empty_str(profile.get("company_linkedin_url")),
+            "source_company_id": current_input.get("source_company_id") or _as_non_empty_str(profile.get("source_company_id")),
         }
 
-    output = CompanyEnrichProfileOutput.model_validate(
-        {
-            "company_profile": profile or None,
-            "source_providers": sources,
+    try:
+        output = CompanyEnrichProfileOutput.model_validate(
+            {
+                "company_profile": profile or None,
+                "source_providers": sources,
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.profile",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
         }
-    ).model_dump()
     # Flatten profile fields to top level so downstream operations
     # can read company_name, company_domain, etc. from cumulative context.
     flat_output = {**(profile or {}), **output}
