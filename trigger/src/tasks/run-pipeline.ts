@@ -134,6 +134,11 @@ async function callExecuteV1(
   return body.data as NonNullable<ExecuteResponseEnvelope["data"]>;
 }
 
+function entityTypeFromOperationId(operationId: string): "person" | "company" {
+  if (operationId.startsWith("person.")) return "person";
+  return "company";
+}
+
 function mergeContext(
   current: Record<string, unknown>,
   output: Record<string, unknown> | null | undefined,
@@ -227,11 +232,12 @@ export const runPipeline = task({
       });
 
       try {
+        const stepEntityType = entityTypeFromOperationId(operationId);
         const result = await callExecuteV1(internalConfig, {
           orgId: org_id,
           companyId: company_id,
           operationId,
-          entityType,
+          entityType: stepEntityType,
           input: cumulativeContext,
           options: stepSnapshot.step_config || null,
         });
