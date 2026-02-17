@@ -69,10 +69,12 @@ CREATE INDEX IF NOT EXISTS idx_company_entities_org_industry
 CREATE INDEX IF NOT EXISTS idx_person_entities_org_linkedin_url
     ON person_entities(org_id, linkedin_url);
 
+DROP TRIGGER IF EXISTS update_company_entities_updated_at ON company_entities;
 CREATE TRIGGER update_company_entities_updated_at
     BEFORE UPDATE ON company_entities
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_person_entities_updated_at ON person_entities;
 CREATE TRIGGER update_person_entities_updated_at
     BEFORE UPDATE ON person_entities
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
