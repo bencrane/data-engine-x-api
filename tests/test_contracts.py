@@ -11,6 +11,7 @@ from app.contracts.person_contact import (
     ResolveMobilePhoneOutput,
     VerifyEmailOutput,
 )
+from app.contracts.person_enrich import PersonEnrichProfileOutput
 from app.contracts.search import CompanySearchOutput, PersonSearchOutput
 
 
@@ -29,6 +30,25 @@ CONTRACT_CASES = [
         ResolveMobilePhoneOutput,
         {"mobile_phone": "+15551234567", "source_provider": "leadmagic"},
         {"mobile_phone": "+15551234567"},
+    ),
+    (
+        PersonEnrichProfileOutput,
+        {
+            "full_name": "Alex Smith",
+            "first_name": "Alex",
+            "last_name": "Smith",
+            "linkedin_url": "https://linkedin.com/in/alexsmith",
+            "headline": "VP of Sales",
+            "current_title": "VP of Sales",
+            "work_history": [{"title": "VP of Sales", "current": True}],
+            "education": [{"institution_name": "Stanford University"}],
+            "skills": ["Sales", "Leadership"],
+            "source_provider": "prospeo",
+        },
+        {
+            "full_name": "Alex Smith",
+            "skills": ["Sales"],
+        },
     ),
     (
         CompanySearchOutput,
