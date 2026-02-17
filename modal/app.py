@@ -1,7 +1,5 @@
-import asyncio
 import json
 import os
-import time
 from typing import Any
 
 import httpx
@@ -15,8 +13,6 @@ app = modal.App("data-engine-x-micro")
 image = modal.Image.debian_slim().pip_install("fastapi", "httpx")
 auth_scheme = HTTPBearer(auto_error=False)
 parallel_base_url = "https://api.parallel.ai/v1/tasks/runs"
-parallel_poll_timeout_seconds = 90
-parallel_poll_interval_seconds = 2
 
 parallel_find_company_linkedin_task_spec = {
     "input_schema": {
@@ -85,25 +81,16 @@ def _as_output_dict(raw_output: Any) -> dict[str, Any] | None:
 
 def _extract_parallel_output(response_body: Any) -> dict[str, Any] | None:
     output_candidate = _deep_find_first(response_body, {"output", "result", "data"})
+    # Parallel JSON outputs commonly arrive as {"type":"json","content":{...}}.
+    if isinstance(output_candidate, dict):
+        content_value = output_candidate.get("content")
+        if isinstance(content_value, dict):
+            return content_value
     parsed_output = _as_output_dict(output_candidate)
     if parsed_output is not None:
         return parsed_output
     if isinstance(response_body, dict) and "linkedin_url" in response_body:
         return response_body
-    return None
-
-
-def _extract_run_id(response_body: Any) -> str | None:
-    run_id = _deep_find_first(response_body, {"run_id", "id"})
-    if isinstance(run_id, str) and run_id.strip():
-        return run_id.strip()
-    return None
-
-
-def _extract_status(response_body: Any) -> str | None:
-    status_value = _deep_find_first(response_body, {"status", "state"})
-    if isinstance(status_value, str):
-        return status_value.strip().lower()
     return None
 
 
@@ -145,47 +132,10 @@ async def run_parallel_task(
             )
             raise RuntimeError(error_message)
 
-        initial_output = _extract_parallel_output(create_body)
-        initial_status = _extract_status(create_body)
-        if initial_output is not None and initial_status not in {"pending", "running"}:
-            return initial_output
-
-        run_id = _extract_run_id(create_body)
-        if not run_id:
-            raise RuntimeError("Parallel response did not include a run_id for polling")
-
-        deadline = time.monotonic() + parallel_poll_timeout_seconds
-        while time.monotonic() < deadline:
-            poll_response = await client.get(f"{parallel_base_url}/{run_id}", headers=headers)
-            try:
-                poll_body = poll_response.json()
-            except Exception:
-                poll_body = {"raw_text": poll_response.text}
-
-            if poll_response.status_code >= 400:
-                error_message = _extract_error_message(poll_body) or (
-                    f"Parallel poll failed with HTTP {poll_response.status_code}"
-                )
-                raise RuntimeError(error_message)
-
-            poll_status = _extract_status(poll_body)
-            poll_output = _extract_parallel_output(poll_body)
-
-            if poll_status in {"completed", "complete", "succeeded", "success", "finished"}:
-                if poll_output is None:
-                    raise RuntimeError("Parallel run completed without output payload")
-                return poll_output
-
-            if poll_status in {"failed", "error", "cancelled", "canceled"}:
-                error_message = _extract_error_message(poll_body) or "Parallel task failed"
-                raise RuntimeError(error_message)
-
-            if poll_output is not None and poll_status not in {"pending", "running"}:
-                return poll_output
-
-            await asyncio.sleep(parallel_poll_interval_seconds)
-
-    raise RuntimeError("Parallel task timed out after 90 seconds")
+        output = _extract_parallel_output(create_body)
+        if output is None:
+            raise RuntimeError("Parallel response missing output payload")
+        return output
 
 
 def require_internal_auth(
