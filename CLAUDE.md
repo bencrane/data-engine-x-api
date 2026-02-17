@@ -18,19 +18,19 @@ This directive is mandatory guidance for:
 
 ## Project Overview
 
-`data-engine-x-api` is a multi-tenant data processing backend for internal/operator teams that need to ingest raw CRM/company data, run deterministic processing pipelines, and return transformed outputs to dashboards, CRMs, or both.
+`data-engine-x-api` is a multi-tenant data processing backend for internal/operator teams that ingest entity inputs, execute deterministic operation pipelines, and persist canonical entity intelligence with full run lineage.
 
 ## Tech Stack
 
-- **FastAPI on Railway**: API layer (auth, routing, validation, persistence).
-- **Trigger.dev**: orchestration + compute execution for processing steps.
-- **Supabase (Postgres)**: tenant data, blueprint definitions, submissions, run state, step results.
+- **FastAPI on Railway**: API layer (auth, routing, validation, persistence, Trigger orchestration trigger point).
+- **Trigger.dev**: orchestration/runtime for ordered step execution and retries.
+- **Supabase (Postgres)**: tenant data, blueprint definitions, submissions/runs/step results, operation history, entity state.
 
 ## Python vs TypeScript Boundary
 
-- **Python (FastAPI)**: owns authentication, authorization, request validation, DB writes/reads, and run triggering.
-- **TypeScript (Trigger.dev)**: owns pipeline execution and retries; tasks are stateless and run from provided input + persisted state.
-- Boundary contract is HTTP: FastAPI triggers Trigger.dev runs through Trigger API calls.
+- **Python (FastAPI)**: owns authentication/authorization, request validation, DB writes/reads, batch submission/status APIs, and Trigger run triggering.
+- **TypeScript (Trigger.dev)**: owns pipeline run execution, cumulative context chaining, internal status callbacks, and fail-fast step orchestration.
+- Boundary contract is HTTP: FastAPI triggers Trigger.dev task runs; Trigger.dev calls FastAPI internal endpoints.
 
 ## Multi-Tenancy Model
 
@@ -56,18 +56,24 @@ Scoping rules:
 
 ## Core Concepts
 
-- **Step**: globally registered atomic processor mapped to a Trigger.dev task.
-- **Blueprint**: org-scoped ordered list of steps with per-step config.
-- **Submission**: org/company data batch tied to one blueprint.
-- **Pipeline Run**: one execution attempt for a submission (multiple runs allowed).
-- **Step Result**: status + input/output/error/timing for one step execution.
+- **Operation execution (v1 execute):** canonical operation IDs run through provider adapters and emit canonical outputs plus provider attempts.
+- **Batch orchestration:** `/api/v1/batch/submit` creates one submission and per-entity pipeline runs; `/api/v1/batch/status` returns normalized run progress and final context.
+- **Output chaining:** each successful step merges canonical output into cumulative context used as input for the next operation.
+- **Entity state accumulation:** successful pipeline runs are upserted into `company_entities` or `person_entities` with versioned records and canonical payload snapshots.
+- **Blueprint + Steps:** ordered org-scoped operation workflow definition via `blueprints` + `blueprint_steps`.
 
 ## Auth Model
 
-Two auth methods produce the same `AuthContext`:
+Two external auth methods produce the same `AuthContext`:
 
 - **API token** (machine-to-machine): hashed token lookup in DB.
 - **JWT session** (user-facing): validated signature and mapped identity.
+
+Internal service auth path (Trigger.dev -> FastAPI):
+
+- `Authorization: Bearer <DATA_ENGINE_INTERNAL_API_KEY>`
+- `x-internal-org-id: <org_uuid>` (required)
+- `x-internal-company-id: <company_uuid>` (optional for org-wide calls, passed for run execution calls)
 
 `AuthContext` contains: `org_id`, `user_id`, `company_id` (nullable), `role`, `auth_method`.
 
@@ -76,14 +82,21 @@ JWT identities must be mirrored in `users` (no transient identities).
 ## API Conventions
 
 - All endpoints are `POST`.
-- `AuthContext` dependency on every endpoint.
+- `AuthContext` dependency on tenant endpoints.
 - Endpoints stay thin: validate -> delegate to service/db/orchestrator -> return.
+
+Primary v1 endpoints:
+
+- Single operation: `/api/v1/execute`
+- Batch: `/api/v1/batch/submit`, `/api/v1/batch/status`
+- Entities: `/api/v1/entities/companies`, `/api/v1/entities/persons`
+- Internal callbacks: `/api/internal/*` (requires internal API key)
 
 ## Trigger.dev Conventions
 
 - Tasks live in `trigger/src/tasks/`.
-- Pipeline orchestration logic lives in the Trigger project and executes blueprint steps in order.
-- Default behavior is fail-fast; cancellation marks pending steps as skipped.
+- `run-pipeline` is the active orchestrator task.
+- Default behavior is fail-fast; cancellation/failure marks remaining queued steps as skipped.
 
 Commands:
 
@@ -104,12 +117,27 @@ pip install -r requirements.txt
 # Run API locally
 uvicorn app.main:app --reload
 
+# Run tests
+pytest
+
 # Install Trigger dependencies
 cd trigger && npm install && cd ..
 
 # Run migration (manual execution by operator)
 psql "$DATA_ENGINE_DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
 ```
+
+## Migrations
+
+Current migration order:
+
+- `001_initial_schema.sql`
+- `002_users_password_hash.sql`
+- `003_api_tokens_user_id.sql`
+- `004_steps_executor_config.sql`
+- `005_operation_execution_history.sql`
+- `006_blueprint_operation_steps.sql`
+- `007_entity_state.sql`
 
 ## Database Connection
 
@@ -118,7 +146,8 @@ psql "$DATA_ENGINE_DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
 
 ## Directory Structure
 
-- `app/` — FastAPI app (routers, auth, models, services, config)
-- `trigger/` — Trigger.dev code (tasks + orchestration)
+- `app/` — FastAPI app (`routers/`, `auth/`, `models/`, `services/`, `providers/`, `contracts/`, `config`)
+- `trigger/` — Trigger.dev tasks/orchestration runtime
+- `tests/` — pytest suite for contracts, batch flow, and entity state
 - `supabase/migrations/` — SQL migrations
 - `docs/` — system docs and architecture decisions

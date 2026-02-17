@@ -183,3 +183,60 @@ Given the current FastAPI + Trigger.dev + Supabase stack:
 
 This aligns implementation with your goals: consistency, clarity, provider portability, and auditable entity intelligence execution.
 
+---
+
+## Current Implementation Status
+
+The architecture above is now partially-to-mostly implemented in the current codebase. The mapping below points concepts to concrete modules.
+
+### Contract + API Surface
+
+- Operation execution endpoint: `app/routers/execute_v1.py` (`POST /api/v1/execute`)
+- Batch orchestration endpoints: `app/routers/execute_v1.py` (`POST /api/v1/batch/submit`, `POST /api/v1/batch/status`)
+- Entity query endpoints: `app/routers/entities_v1.py` (`POST /api/v1/entities/companies`, `POST /api/v1/entities/persons`)
+- Shared response envelopes: `app/routers/_responses.py`
+
+### Operation Layer (Entity-Scoped Operations)
+
+- Person contact operations: `app/services/email_operations.py`
+- Company/person search operations: `app/services/search_operations.py`
+- Company enrichment operations: `app/services/company_operations.py`
+- Company research operations: `app/services/research_operations.py`
+- Company ads operations: `app/services/adyntel_operations.py`
+- Durable execution logging: `app/services/operation_history.py`
+
+### Action / Provider Adapter Layer
+
+- Provider adapters: `app/providers/*.py`
+- Canonical contracts: `app/contracts/*.py`
+- Provider ordering + runtime defaults: `app/config.py`
+
+### Batch + Pipeline Orchestration
+
+- Submission/run creation and trigger: `app/services/submission_flow.py`
+- Trigger API call bridge: `app/services/trigger.py`
+- Trigger orchestrator task (step ordering, cumulative context, fail-fast): `trigger/src/tasks/run-pipeline.ts`
+
+### Internal Callback + Service Auth
+
+- Internal callback endpoints: `app/routers/internal.py`
+- Internal auth resolution path (`x-internal-org-id`, `x-internal-company-id`): `app/auth/dependencies.py`
+
+### Persist (Run State + Entity State)
+
+- Submission/run/step persistence: `app/services/submission_flow.py` + `app/routers/internal.py`
+- Entity state upsert/versioning: `app/services/entity_state.py`
+- Entity state tables: `supabase/migrations/007_entity_state.sql`
+- Operation history tables: `supabase/migrations/005_operation_execution_history.sql`
+
+### Schema + Migration Support
+
+- Operation-native blueprint steps: `supabase/migrations/006_blueprint_operation_steps.sql`
+- Full schema baseline: `supabase/migrations/001_initial_schema.sql`
+
+### Test Coverage
+
+- Contract-focused tests: `tests/test_contracts.py`
+- Batch flow tests: `tests/test_batch_flow.py`
+- Entity state tests: `tests/test_entity_state.py`
+
