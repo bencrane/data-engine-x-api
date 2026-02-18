@@ -9,7 +9,7 @@ from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_ra
 ENIGMA_GRAPHQL_URL = "https://api.enigma.com/graphql"
 
 SEARCH_BRAND_QUERY = """
-query SearchBrand($searchInput: SearchInput!, $cardTransactionConditions: ConnectionConditions!) {
+query SearchBrand($searchInput: SearchInput!) {
   search(searchInput: $searchInput) {
     ... on Brand {
       id
@@ -22,46 +22,161 @@ query SearchBrand($searchInput: SearchInput!, $cardTransactionConditions: Connec
         }
       }
       count(field: "operatingLocations")
-      cardTransactions(first: 1, conditions: $cardTransactionConditions) {
+    }
+  }
+}
+""".strip()
+
+GET_BRAND_ANALYTICS_QUERY = """
+query GetBrandAnalytics(
+  $searchInput: SearchInput!,
+  $monthsBack: Int!,
+  $oneMonthRevenueConditions: ConnectionConditions!,
+  $twelveMonthRevenueConditions: ConnectionConditions!,
+  $oneMonthGrowthConditions: ConnectionConditions!,
+  $twelveMonthGrowthConditions: ConnectionConditions!,
+  $oneMonthCustomersConditions: ConnectionConditions!,
+  $twelveMonthCustomersConditions: ConnectionConditions!,
+  $oneMonthTransactionsConditions: ConnectionConditions!,
+  $twelveMonthTransactionsConditions: ConnectionConditions!,
+  $oneMonthAvgTxnConditions: ConnectionConditions!,
+  $twelveMonthAvgTxnConditions: ConnectionConditions!,
+  $oneMonthRefundsConditions: ConnectionConditions!,
+  $twelveMonthRefundsConditions: ConnectionConditions!
+) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      namesConnection(first: 1) {
         edges {
           node {
-            projectedQuantity
-            quantityType
-            period
-            periodStartDate
-            periodEndDate
+            name
           }
         }
       }
-      operatingLocations(first: 1) {
+      oneMonthCardRevenueAmountsConnection: cardTransactions(
+        first: $monthsBack,
+        conditions: $oneMonthRevenueConditions
+      ) {
         edges {
           node {
-            names(first: 1) {
-              edges {
-                node {
-                  name
-                }
-              }
-            }
-            addresses(first: 1) {
-              edges {
-                node {
-                  fullAddress
-                  city
-                  state
-                }
-              }
-            }
-            ranks(first: 1) {
-              edges {
-                node {
-                  position
-                  cohortSize
-                  quantityType
-                  period
-                }
-              }
-            }
+            projectedQuantity
+            periodStartDate
+          }
+        }
+      }
+      twelveMonthCardRevenueAmountsConnection: cardTransactions(
+        first: 1,
+        conditions: $twelveMonthRevenueConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+          }
+        }
+      }
+      oneMonthCardRevenueYoyGrowthsConnection: cardTransactions(
+        first: $monthsBack,
+        conditions: $oneMonthGrowthConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+            periodStartDate
+          }
+        }
+      }
+      twelveMonthCardRevenueYoyGrowthsConnection: cardTransactions(
+        first: 1,
+        conditions: $twelveMonthGrowthConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+          }
+        }
+      }
+      oneMonthCardCustomersAverageDailyCountsConnection: cardTransactions(
+        first: $monthsBack,
+        conditions: $oneMonthCustomersConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+            periodStartDate
+          }
+        }
+      }
+      twelveMonthCardCustomersAverageDailyCountsConnection: cardTransactions(
+        first: 1,
+        conditions: $twelveMonthCustomersConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+          }
+        }
+      }
+      oneMonthCardTransactionsCountsConnection: cardTransactions(
+        first: $monthsBack,
+        conditions: $oneMonthTransactionsConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+            periodStartDate
+          }
+        }
+      }
+      twelveMonthCardTransactionsCountsConnection: cardTransactions(
+        first: 1,
+        conditions: $twelveMonthTransactionsConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+          }
+        }
+      }
+      oneMonthAvgTransactionSizesConnection: cardTransactions(
+        first: $monthsBack,
+        conditions: $oneMonthAvgTxnConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+            periodStartDate
+          }
+        }
+      }
+      twelveMonthAvgTransactionSizesConnection: cardTransactions(
+        first: 1,
+        conditions: $twelveMonthAvgTxnConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+          }
+        }
+      }
+      oneMonthRefundsAmountsConnection: cardTransactions(
+        first: $monthsBack,
+        conditions: $oneMonthRefundsConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
+            periodStartDate
+          }
+        }
+      }
+      twelveMonthRefundsAmountsConnection: cardTransactions(
+        first: 1,
+        conditions: $twelveMonthRefundsConditions
+      ) {
+        edges {
+          node {
+            projectedQuantity
           }
         }
       }
@@ -76,6 +191,14 @@ def _as_str(value: Any) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _as_int(value: Any) -> int | None:
@@ -96,12 +219,20 @@ def _as_int(value: Any) -> int | None:
     return None
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    return None
 
 
 def _first_edge_node(connection: Any) -> dict[str, Any]:
@@ -113,54 +244,122 @@ def _first_edge_node(connection: Any) -> dict[str, Any]:
     return _as_dict(first_edge.get("node"))
 
 
-def _build_search_input(*, company_name: str | None, company_domain: str | None) -> dict[str, Any]:
+def _first_brand(body: dict[str, Any]) -> dict[str, Any]:
+    data = _as_dict(body.get("data"))
+    search_results = _as_list(data.get("search"))
+    if not search_results:
+        return {}
+    return _as_dict(search_results[0])
+
+
+def _extract_brand_name(brand: dict[str, Any]) -> str | None:
+    name = _as_str(_first_edge_node(brand.get("names")).get("name"))
+    if name:
+        return name
+    return _as_str(_first_edge_node(brand.get("namesConnection")).get("name"))
+
+
+def _conditions(*, period: str, quantity_type: str) -> dict[str, Any]:
+    return {
+        "filter": {
+            "AND": [
+                {"EQ": ["period", period]},
+                {"EQ": ["quantityType", quantity_type]},
+            ]
+        }
+    }
+
+
+def _series(connection: Any) -> list[dict[str, Any]] | None:
+    connection_dict = _as_dict(connection)
+    edges = _as_list(connection_dict.get("edges"))
+    if not edges:
+        return None
+    points: list[dict[str, Any]] = []
+    for edge in edges:
+        node = _as_dict(_as_dict(edge).get("node"))
+        period_start = _as_str(node.get("periodStartDate"))
+        if not period_start:
+            continue
+        points.append(
+            {
+                "period_start": period_start,
+                "value": _as_float(node.get("projectedQuantity")),
+            }
+        )
+    return points or None
+
+
+def _annual_metric(connection: Any) -> float | None:
+    node = _first_edge_node(connection)
+    return _as_float(node.get("projectedQuantity"))
+
+
+def _match_search_input(*, company_name: str | None, company_domain: str | None) -> dict[str, Any]:
     normalized_name = _as_str(company_name)
     normalized_domain = _as_str(company_domain)
-    search_name = normalized_name or normalized_domain
     payload: dict[str, Any] = {
         "entityType": "BRAND",
-        "name": search_name,
+        "name": normalized_name or normalized_domain,
     }
-    # Enigma allows website-only lookup, but omit when empty/null.
     if normalized_domain:
         payload["website"] = normalized_domain
     return payload
 
 
-def _extract_brand_payload(body: dict[str, Any]) -> dict[str, Any]:
-    data = _as_dict(body.get("data"))
-    search_results = _as_list(data.get("search"))
-    if not search_results:
-        return {}
-
-    brand = _as_dict(search_results[0])
-    card_transaction = _first_edge_node(brand.get("cardTransactions"))
-
-    top_location = _first_edge_node(brand.get("operatingLocations"))
-    top_location_name_node = _first_edge_node(top_location.get("names"))
-    top_location_address_node = _first_edge_node(top_location.get("addresses"))
-    top_location_rank_node = _first_edge_node(top_location.get("ranks"))
-
+def _analytics_search_input(*, brand_id: str) -> dict[str, Any]:
     return {
-        "enigma_brand_id": _as_str(brand.get("id")),
-        "brand_name": _as_str(_first_edge_node(brand.get("names")).get("name")),
-        "location_count": _as_int(brand.get("count")),
-        # Per Enigma docs/examples, projectedQuantity for card_revenue_amount is a currency amount
-        # unit represented by Enigma (not explicitly guaranteed as cents vs dollars in docs).
-        "annual_card_revenue": _as_int(card_transaction.get("projectedQuantity")),
-        "card_revenue_period": _as_str(card_transaction.get("period")),
-        "card_revenue_period_start": _as_str(card_transaction.get("periodStartDate")),
-        "card_revenue_period_end": _as_str(card_transaction.get("periodEndDate")),
-        "top_location_name": _as_str(top_location_name_node.get("name")),
-        "top_location_address": _as_str(top_location_address_node.get("fullAddress")),
-        "top_location_city": _as_str(top_location_address_node.get("city")),
-        "top_location_state": _as_str(top_location_address_node.get("state")),
-        "top_location_rank_position": _as_int(top_location_rank_node.get("position")),
-        "top_location_rank_cohort_size": _as_int(top_location_rank_node.get("cohortSize")),
+        "entityType": "BRAND",
+        "id": brand_id,
     }
 
 
-async def enrich_card_revenue(
+async def _graphql_post(
+    *,
+    api_key: str,
+    action: str,
+    query: str,
+    variables: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    payload = {
+        "query": query,
+        "variables": variables,
+    }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            ENIGMA_GRAPHQL_URL,
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": action,
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return attempt, {}, False
+
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors:
+        attempt["status"] = "failed"
+        return attempt, {}, False
+
+    brand = _first_brand(body)
+    if not brand:
+        attempt["status"] = "not_found"
+        return attempt, {}, True
+
+    attempt["status"] = "found"
+    return attempt, brand, True
+
+
+async def match_business(
     *,
     api_key: str | None,
     company_name: str | None,
@@ -170,7 +369,7 @@ async def enrich_card_revenue(
         return {
             "attempt": {
                 "provider": "enigma",
-                "action": "card_revenue",
+                "action": "match_business",
                 "status": "skipped",
                 "skip_reason": "missing_provider_api_key",
             },
@@ -183,86 +382,104 @@ async def enrich_card_revenue(
         return {
             "attempt": {
                 "provider": "enigma",
-                "action": "card_revenue",
+                "action": "match_business",
                 "status": "skipped",
                 "skip_reason": "missing_required_inputs",
             },
             "mapped": None,
         }
 
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="match_business",
+        query=SEARCH_BRAND_QUERY,
+        variables={
+            "searchInput": _match_search_input(company_name=normalized_name, company_domain=normalized_domain),
+        },
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    mapped = {
+        "enigma_brand_id": _as_str(brand.get("id")) or _as_str(brand.get("enigmaId")),
+        "brand_name": _extract_brand_name(brand),
+        "location_count": _as_int(brand.get("count")),
+    }
+    if not mapped["enigma_brand_id"]:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    return {"attempt": attempt, "mapped": mapped}
+
+
+async def get_card_analytics(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+    months_back: int,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_card_analytics",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_card_analytics",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    safe_months_back = max(1, min(int(months_back), 24))
     variables = {
-        "searchInput": _build_search_input(company_name=normalized_name, company_domain=normalized_domain),
-        "cardTransactionConditions": {
-            "filter": {
-                "AND": [
-                    {"EQ": ["period", "12m"]},
-                    {"EQ": ["quantityType", "card_revenue_amount"]},
-                    {"EQ": ["rank", 0]},
-                ]
-            }
-        },
+        "searchInput": _analytics_search_input(brand_id=normalized_brand_id),
+        "monthsBack": safe_months_back,
+        "oneMonthRevenueConditions": _conditions(period="1m", quantity_type="card_revenue_amount"),
+        "twelveMonthRevenueConditions": _conditions(period="12m", quantity_type="card_revenue_amount"),
+        "oneMonthGrowthConditions": _conditions(period="1m", quantity_type="card_revenue_yoy_growth"),
+        "twelveMonthGrowthConditions": _conditions(period="12m", quantity_type="card_revenue_yoy_growth"),
+        "oneMonthCustomersConditions": _conditions(period="1m", quantity_type="card_customers_average_daily_count"),
+        "twelveMonthCustomersConditions": _conditions(period="12m", quantity_type="card_customers_average_daily_count"),
+        "oneMonthTransactionsConditions": _conditions(period="1m", quantity_type="card_transactions_count"),
+        "twelveMonthTransactionsConditions": _conditions(period="12m", quantity_type="card_transactions_count"),
+        "oneMonthAvgTxnConditions": _conditions(period="1m", quantity_type="average_transaction_size"),
+        "twelveMonthAvgTxnConditions": _conditions(period="12m", quantity_type="average_transaction_size"),
+        "oneMonthRefundsConditions": _conditions(period="1m", quantity_type="refunds_amount"),
+        "twelveMonthRefundsConditions": _conditions(period="12m", quantity_type="refunds_amount"),
     }
 
-    payload = {
-        "query": SEARCH_BRAND_QUERY,
-        "variables": variables,
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_card_analytics",
+        query=GET_BRAND_ANALYTICS_QUERY,
+        variables=variables,
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    mapped = {
+        "brand_name": _extract_brand_name(brand),
+        "annual_card_revenue": _annual_metric(brand.get("twelveMonthCardRevenueAmountsConnection")),
+        "annual_card_revenue_yoy_growth": _annual_metric(brand.get("twelveMonthCardRevenueYoyGrowthsConnection")),
+        "annual_avg_daily_customers": _annual_metric(brand.get("twelveMonthCardCustomersAverageDailyCountsConnection")),
+        "annual_transaction_count": _annual_metric(brand.get("twelveMonthCardTransactionsCountsConnection")),
+        "annual_avg_transaction_size": _annual_metric(brand.get("twelveMonthAvgTransactionSizesConnection")),
+        "annual_refunds": _annual_metric(brand.get("twelveMonthRefundsAmountsConnection")),
+        "monthly_revenue": _series(brand.get("oneMonthCardRevenueAmountsConnection")),
+        "monthly_revenue_growth": _series(brand.get("oneMonthCardRevenueYoyGrowthsConnection")),
+        "monthly_avg_daily_customers": _series(brand.get("oneMonthCardCustomersAverageDailyCountsConnection")),
+        "monthly_transactions": _series(brand.get("oneMonthCardTransactionsCountsConnection")),
+        "monthly_avg_transaction_size": _series(brand.get("oneMonthAvgTransactionSizesConnection")),
+        "monthly_refunds": _series(brand.get("oneMonthRefundsAmountsConnection")),
     }
-
-    start_ms = now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            ENIGMA_GRAPHQL_URL,
-            headers={"x-api-key": api_key, "Content-Type": "application/json"},
-            json=payload,
-        )
-        body = parse_json_or_raw(response.text, response.json)
-
-    if response.status_code >= 400:
-        return {
-            "attempt": {
-                "provider": "enigma",
-                "action": "card_revenue",
-                "status": "failed",
-                "http_status": response.status_code,
-                "duration_ms": now_ms() - start_ms,
-                "raw_response": body,
-            },
-            "mapped": None,
-        }
-
-    errors = body.get("errors")
-    if isinstance(errors, list) and errors:
-        return {
-            "attempt": {
-                "provider": "enigma",
-                "action": "card_revenue",
-                "status": "failed",
-                "duration_ms": now_ms() - start_ms,
-                "raw_response": body,
-            },
-            "mapped": None,
-        }
-
-    mapped = _extract_brand_payload(body)
-    if not mapped:
-        return {
-            "attempt": {
-                "provider": "enigma",
-                "action": "card_revenue",
-                "status": "not_found",
-                "duration_ms": now_ms() - start_ms,
-                "raw_response": body,
-            },
-            "mapped": None,
-        }
-
-    return {
-        "attempt": {
-            "provider": "enigma",
-            "action": "card_revenue",
-            "status": "found",
-            "duration_ms": now_ms() - start_ms,
-            "raw_response": body,
-        },
-        "mapped": mapped,
-    }
+    return {"attempt": attempt, "mapped": mapped}
