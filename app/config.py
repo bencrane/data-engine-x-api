@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     blitzapi_api_key: str | None = None
     companyenrich_api_key: str | None = None
     storeleads_api_key: str | None = None
+    theirstack_api_key: str | None = None
     enigma_api_key: str | None = None
     fmcsa_api_key: str | None = None
     adyntel_api_key: str | None = None
