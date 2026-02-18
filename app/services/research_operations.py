@@ -6,6 +6,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.contracts.company_research import (
+    CheckVCFundingOutput,
     DiscoverCompetitorsOutput,
     LookupAlumniOutput,
     LookupChampionTestimonialsOutput,
@@ -403,6 +404,109 @@ def _extract_company_research_lookup_alumni_inputs(
     return _normalize_company_domain(
         context.get("company_domain") or profile.get("company_domain")
     )
+
+
+def _extract_company_research_check_vc_funding_inputs(
+    input_data: dict[str, Any],
+) -> str | None:
+    context = _company_research_context(input_data)
+    company_profile = context.get("company_profile")
+    profile = company_profile if isinstance(company_profile, dict) else {}
+    return _normalize_company_domain(
+        context.get("company_domain") or profile.get("company_domain")
+    )
+
+
+async def execute_company_research_check_vc_funding(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    operation_id = "company.research.check_vc_funding"
+
+    company_domain = _extract_company_research_check_vc_funding_inputs(input_data)
+    if not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await revenueinfra.check_vc_funding(
+        base_url=settings.revenueinfra_api_url,
+        domain=company_domain,
+    )
+    attempt = result.get("attempt") if isinstance(result, dict) else {}
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result, dict) else None
+
+    status = attempt.get("status") if isinstance(attempt, dict) else "failed"
+    if status in {"failed", "skipped"}:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+        }
+
+    has_raised_vc = False
+    vc_count = 0
+    vc_names: list[str] = []
+    vcs: list[dict[str, str | None]] = []
+    founded_date: str | None = None
+    if isinstance(mapped, dict):
+        has_raised_vc = bool(mapped.get("has_raised_vc"))
+        if isinstance(mapped.get("vc_names"), list):
+            vc_names = mapped.get("vc_names") or []
+        if isinstance(mapped.get("vcs"), list):
+            vcs = mapped.get("vcs") or []
+        founded_date = _as_non_empty_str(mapped.get("founded_date"))
+        if isinstance(mapped.get("vc_count"), int):
+            vc_count = mapped.get("vc_count") or 0
+
+    vc_count = max(vc_count, len(vc_names), len(vcs))
+
+    try:
+        output = CheckVCFundingOutput.model_validate(
+            {
+                "has_raised_vc": has_raised_vc,
+                "vc_count": vc_count,
+                "vc_names": vc_names,
+                "vcs": vcs,
+                "founded_date": founded_date,
+                "source_provider": "revenueinfra",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "found",
+        "output": {
+            "has_raised_vc": output["has_raised_vc"],
+            "vc_count": output["vc_count"],
+            "vc_names": output["vc_names"],
+            "vcs": output["vcs"],
+            "founded_date": output["founded_date"],
+            "source_provider": output["source_provider"],
+        },
+        "provider_attempts": attempts,
+    }
 
 
 async def execute_company_research_lookup_customers(
