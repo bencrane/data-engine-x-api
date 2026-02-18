@@ -4,8 +4,8 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.search import CompanySearchOutput, PersonSearchOutput
-from app.providers import blitzapi, companyenrich, leadmagic, prospeo
+from app.contracts.search import CompanySearchOutput, EcommerceSearchOutput, PersonSearchOutput
+from app.providers import blitzapi, companyenrich, leadmagic, prospeo, storeleads_search
 
 
 def _domain_from_value(value: Any) -> str | None:
@@ -63,6 +63,19 @@ def _as_non_empty_str_or_list(value: Any) -> str | list[str] | None:
     if parsed_str:
         return parsed_str
     return _as_non_empty_str_list(value)
+
+
+def _as_int_or_none(value: Any) -> int | None:
+    try:
+        if value is None or isinstance(value, bool):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _as_list_of_dicts(value: Any) -> list[dict[str, Any]] | None:
@@ -249,6 +262,102 @@ async def execute_company_search(
         "run_id": run_id,
         "operation_id": "company.search",
         "status": "found" if deduped else "not_found",
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+def _first_present(input_data: dict[str, Any], step_config: dict[str, Any], key: str) -> Any:
+    direct = input_data.get(key)
+    if direct is not None:
+        return direct
+    return step_config.get(key)
+
+
+def _extract_ecommerce_filters(input_data: dict[str, Any], step_config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "platform": _as_non_empty_str(_first_present(input_data, step_config, "platform")),
+        "country_code": _as_non_empty_str(_first_present(input_data, step_config, "country_code")),
+        "app_installed": _as_non_empty_str(_first_present(input_data, step_config, "app_installed")),
+        "category": _as_non_empty_str(_first_present(input_data, step_config, "category")),
+        "domain_state": _as_non_empty_str(_first_present(input_data, step_config, "domain_state")) or "Active",
+        "rank_min": _as_int_or_none(_first_present(input_data, step_config, "rank_min")),
+        "rank_max": _as_int_or_none(_first_present(input_data, step_config, "rank_max")),
+        "monthly_app_spend_min": _as_int_or_none(_first_present(input_data, step_config, "monthly_app_spend_min")),
+        "monthly_app_spend_max": _as_int_or_none(_first_present(input_data, step_config, "monthly_app_spend_max")),
+        "page": _as_int_or_none(_first_present(input_data, step_config, "page")) or 0,
+        "page_size": min(max(_as_int_or_none(_first_present(input_data, step_config, "page_size")) or 50, 1), 50),
+    }
+
+
+async def execute_company_search_ecommerce(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    step_config = _as_dict(input_data.get("step_config"))
+    filters = _extract_ecommerce_filters(input_data, step_config)
+
+    if not (filters.get("platform") or filters.get("category") or filters.get("app_installed")):
+        return {
+            "run_id": run_id,
+            "operation_id": "company.search.ecommerce",
+            "status": "failed",
+            "missing_inputs": ["platform|category|app_installed"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    provider_result = await storeleads_search.search_ecommerce(
+        api_key=settings.storeleads_api_key,
+        filters=filters,
+    )
+    attempts.append(provider_result["attempt"])
+    mapped = provider_result.get("mapped") or {"results": [], "result_count": 0}
+    mapped_results = mapped.get("results") or []
+    canonical_results = [
+        {
+            "merchant_name": result.get("merchant_name"),
+            "domain": result.get("domain"),
+            "ecommerce_platform": result.get("platform"),
+            "ecommerce_plan": result.get("plan"),
+            "estimated_monthly_sales_cents": result.get("estimated_monthly_sales_cents"),
+            "global_rank": result.get("rank"),
+            "country_code": result.get("country_code"),
+            "description": result.get("description"),
+            "source_provider": "storeleads",
+        }
+        for result in mapped_results
+        if isinstance(result, dict)
+    ]
+
+    try:
+        output = EcommerceSearchOutput.model_validate(
+            {
+                "results": canonical_results,
+                "result_count": len(canonical_results),
+                "page": filters["page"],
+                "source_provider": "storeleads",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.search.ecommerce",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {"code": "output_validation_failed", "message": str(exc)},
+        }
+
+    status_from_attempt = provider_result["attempt"].get("status")
+    final_status = "not_found" if not canonical_results else "found"
+    if status_from_attempt == "failed":
+        final_status = "failed"
+    return {
+        "run_id": run_id,
+        "operation_id": "company.search.ecommerce",
+        "status": final_status,
         "output": output,
         "provider_attempts": attempts,
     }
