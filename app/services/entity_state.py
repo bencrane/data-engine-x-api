@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import logging
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 from app.database import get_supabase_client
+
+logger = logging.getLogger(__name__)
 
 
 class EntityStateVersionError(ValueError):
@@ -407,6 +410,40 @@ def _load_person_by_id(org_id: str, entity_id: str) -> dict[str, Any] | None:
     return result.data[0] if result.data else None
 
 
+def _capture_entity_snapshot(
+    *,
+    org_id: str,
+    entity_type: str,
+    entity_id: str,
+    record_version: int,
+    canonical_payload: dict[str, Any],
+    source_run_id: str | None,
+) -> None:
+    try:
+        client = get_supabase_client()
+        client.table("entity_snapshots").insert(
+            {
+                "org_id": org_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "record_version": record_version,
+                "canonical_payload": canonical_payload,
+                "source_run_id": source_run_id,
+            }
+        ).execute()
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Failed to capture entity snapshot",
+            extra={
+                "org_id": org_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "record_version": record_version,
+                "source_run_id": source_run_id,
+            },
+        )
+
+
 def upsert_company_entity(
     *,
     org_id: str,
@@ -445,6 +482,18 @@ def upsert_company_entity(
     if next_version <= existing_version:
         raise EntityStateVersionError(
             f"Incoming record_version ({next_version}) must be greater than existing ({existing_version})"
+        )
+
+    if existing:
+        _capture_entity_snapshot(
+            org_id=str(existing.get("org_id") or org_id),
+            entity_type="company",
+            entity_id=str(existing["entity_id"]),
+            record_version=existing_version,
+            canonical_payload=existing.get("canonical_payload")
+            if isinstance(existing.get("canonical_payload"), dict)
+            else {},
+            source_run_id=run_uuid,
         )
 
     merged_payload = _merge_non_null(existing.get("canonical_payload") if existing else {}, canonical_fields)
@@ -557,6 +606,18 @@ def upsert_person_entity(
     if next_version <= existing_version:
         raise EntityStateVersionError(
             f"Incoming record_version ({next_version}) must be greater than existing ({existing_version})"
+        )
+
+    if existing:
+        _capture_entity_snapshot(
+            org_id=str(existing.get("org_id") or org_id),
+            entity_type="person",
+            entity_id=str(existing["entity_id"]),
+            record_version=existing_version,
+            canonical_payload=existing.get("canonical_payload")
+            if isinstance(existing.get("canonical_payload"), dict)
+            else {},
+            source_run_id=run_uuid,
         )
 
     merged_payload = _merge_non_null(existing.get("canonical_payload") if existing else {}, canonical_fields)
