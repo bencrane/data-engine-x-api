@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     ampleleads_api_key: str | None = None
     blitzapi_api_key: str | None = None
     companyenrich_api_key: str | None = None
+    storeleads_api_key: str | None = None
     adyntel_api_key: str | None = None
     adyntel_account_email: str | None = None
     revenueinfra_api_url: str = "https://api.revenueinfra.com"
