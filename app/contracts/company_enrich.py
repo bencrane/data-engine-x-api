@@ -85,3 +85,20 @@ class EcommerceEnrichOutput(BaseModel):
     sales_carriers: list[str] | None = None
     features: list[str] | None = None
     source_provider: str = "storeleads"
+
+
+class CardRevenueOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    location_count: int | None = None
+    annual_card_revenue: int | None = None
+    card_revenue_period: str | None = None
+    card_revenue_period_start: str | None = None
+    card_revenue_period_end: str | None = None
+    top_location_name: str | None = None
+    top_location_address: str | None = None
+    top_location_city: str | None = None
+    top_location_state: str | None = None
+    top_location_rank_position: int | None = None
+    top_location_rank_cohort_size: int | None = None
+    source_provider: str = "enigma"
