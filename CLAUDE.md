@@ -137,6 +137,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/internal/submissions/update-status`
 - `POST /api/internal/submissions/sync-status`
 - `POST /api/internal/entity-state/upsert`
+- `POST /api/internal/entity-timeline/record-step-event`
 
 ## Trigger.dev Conventions
 
@@ -177,6 +178,7 @@ Migration order:
 8. `008_companies_domain.sql`
 9. `009_entity_timeline.sql`
 10. `010_fan_out.sql`
+11. `011_entity_timeline_submission_lookup.sql`
 
 ## Environment Configuration
 

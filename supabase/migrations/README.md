@@ -16,6 +16,7 @@ Apply migrations in filename order:
 8. `008_companies_domain.sql` - Adds canonical company domain fields and supporting indexes.
 9. `009_entity_timeline.sql` - Adds `entity_timeline` table and timeline lineage indexes.
 10. `010_fan_out.sql` - Adds fan-out parent/child pipeline run linkage and indexes.
+11. `011_entity_timeline_submission_lookup.sql` - Adds timeline submission lookup index for run-level investigations.
 
 ## Run Command
 
