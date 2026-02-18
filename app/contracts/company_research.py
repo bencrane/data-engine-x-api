@@ -68,3 +68,21 @@ class LookupChampionTestimonialsOutput(BaseModel):
     champions: list[ChampionTestimonialItem]
     champion_count: int
     source_provider: str = "revenueinfra"
+
+
+class AlumniItem(BaseModel):
+    full_name: str | None = None
+    linkedin_url: str | None = None
+    current_company_name: str | None = None
+    current_company_domain: str | None = None
+    current_company_linkedin_url: str | None = None
+    current_job_title: str | None = None
+    past_company_name: str | None = None
+    past_company_domain: str | None = None
+    past_job_title: str | None = None
+
+
+class LookupAlumniOutput(BaseModel):
+    alumni: list[AlumniItem]
+    alumni_count: int
+    source_provider: str = "revenueinfra"
