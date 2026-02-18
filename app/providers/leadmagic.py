@@ -14,6 +14,207 @@ def _as_str(value: Any) -> str | None:
     return cleaned or None
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _canonical_person_result(
+    *,
+    raw: dict[str, Any],
+    fallback_company_name: str | None,
+    fallback_company_domain: str | None,
+) -> dict[str, Any]:
+    return {
+        "full_name": _as_str(raw.get("full_name")),
+        "first_name": _as_str(raw.get("first_name")),
+        "last_name": _as_str(raw.get("last_name")),
+        "linkedin_url": _as_str(raw.get("profile_url")),
+        "headline": _as_str(raw.get("job_title")),
+        "current_title": _as_str(raw.get("job_title")),
+        "current_company_name": _as_str(raw.get("company_name")) or fallback_company_name,
+        "current_company_domain": _as_str(raw.get("company_website")) or fallback_company_domain,
+        "location_name": _as_str(raw.get("location")),
+        "country_code": None,
+        "source_person_id": None,
+        "source_provider": "leadmagic",
+        "raw": raw,
+    }
+
+
+async def search_employees(
+    *,
+    api_key: str | None,
+    company_domain: str | None,
+    company_name: str | None,
+    limit: int,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "employee_finder",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+    if not _as_str(company_domain) and not _as_str(company_name):
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "employee_finder",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    payload: dict[str, Any] = {"limit": max(limit, 1)}
+    if _as_str(company_domain):
+        payload["company_domain"] = _as_str(company_domain)
+    if _as_str(company_name):
+        payload["company_name"] = _as_str(company_name)
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await client.post(
+            "https://api.leadmagic.io/v1/people/employee-finder",
+            headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "employee_finder",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    mapped = [
+        _canonical_person_result(
+            raw=_as_dict(employee),
+            fallback_company_name=_as_str(company_name),
+            fallback_company_domain=_as_str(company_domain),
+        )
+        for employee in _as_list(body.get("employees"))
+    ]
+    pagination = {
+        "page": 1,
+        "totalPages": 1,
+        "totalItems": body.get("total_count", len(mapped)),
+    }
+    return {
+        "attempt": {
+            "provider": "leadmagic",
+            "action": "employee_finder",
+            "status": "found" if mapped else "not_found",
+            "provider_status": body.get("message"),
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {"results": mapped, "pagination": pagination},
+    }
+
+
+async def search_by_role(
+    *,
+    api_key: str | None,
+    company_domain: str | None,
+    company_name: str | None,
+    job_title: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "role_finder",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+    if not _as_str(job_title) or (not _as_str(company_domain) and not _as_str(company_name)):
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "role_finder",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    payload: dict[str, Any] = {"job_title": _as_str(job_title)}
+    if _as_str(company_domain):
+        payload["company_domain"] = _as_str(company_domain)
+    if _as_str(company_name):
+        payload["company_name"] = _as_str(company_name)
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await client.post(
+            "https://api.leadmagic.io/v1/people/role-finder",
+            headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "role_finder",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    profile_url = _as_str(body.get("profile_url"))
+    if not profile_url:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "role_finder",
+                "status": "not_found",
+                "provider_status": body.get("message"),
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"results": [], "pagination": {"page": 1, "totalPages": 1, "totalItems": 0}},
+        }
+
+    mapped_person = _canonical_person_result(
+        raw=body,
+        fallback_company_name=_as_str(company_name),
+        fallback_company_domain=_as_str(company_domain),
+    )
+    return {
+        "attempt": {
+            "provider": "leadmagic",
+            "action": "role_finder",
+            "status": "found",
+            "provider_status": body.get("message"),
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {"results": [mapped_person], "pagination": {"page": 1, "totalPages": 1, "totalItems": 1}},
+    }
+
+
 async def resolve_email(
     *,
     api_key: str | None,
