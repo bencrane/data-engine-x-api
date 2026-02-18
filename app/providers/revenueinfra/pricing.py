@@ -4,20 +4,16 @@ from typing import Any, Callable
 
 import httpx
 
-from app.config import get_settings
-from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
+from app.providers.revenueinfra._common import (
+    _PROVIDER,
+    _as_str,
+    _configured_base_url,
+    now_ms,
+    parse_json_or_raw,
+    ProviderAdapterResult,
+)
 
-_BASE_URL = "https://api.revenueinfra.com"
 _TIMEOUT_SECONDS = 30.0
-_COMPETITORS_TIMEOUT_SECONDS = 180.0
-_PROVIDER = "revenueinfra"
-
-
-def _as_str(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
 
 
 def _extract_value(body: dict[str, Any], field_name: str) -> Any:
@@ -70,149 +66,6 @@ def _normalize_yes_no(value: Any) -> bool | str | None:
     if cleaned == "no":
         return False
     return cleaned
-
-
-def _normalize_competitor_item(value: Any) -> dict[str, str | None] | None:
-    if not isinstance(value, dict):
-        return None
-    return {
-        "name": _as_str(value.get("name")),
-        "domain": _as_str(value.get("domain")),
-        "linkedin_url": _as_str(value.get("linkedin_url")),
-    }
-
-
-def _normalize_competitors(value: Any) -> list[dict[str, str | None]]:
-    if not isinstance(value, list):
-        return []
-    normalized: list[dict[str, str | None]] = []
-    for item in value:
-        parsed = _normalize_competitor_item(item)
-        if parsed is None:
-            continue
-        normalized.append(parsed)
-    return normalized
-
-
-def _configured_base_url() -> str:
-    configured = _as_str(get_settings().revenueinfra_api_url)
-    return (configured or _BASE_URL).rstrip("/")
-
-
-async def discover_competitors(
-    *,
-    base_url: str,
-    domain: str,
-    company_name: str,
-    company_linkedin_url: str | None = None,
-) -> ProviderAdapterResult:
-    normalized_base_url = _as_str(base_url) or _configured_base_url()
-    normalized_domain = _as_str(domain)
-    normalized_company_name = _as_str(company_name)
-    normalized_linkedin_url = _as_str(company_linkedin_url)
-    action = "discover_competitors"
-
-    if not normalized_domain or not normalized_company_name:
-        return {
-            "attempt": {
-                "provider": _PROVIDER,
-                "action": action,
-                "status": "skipped",
-                "skip_reason": "missing_required_inputs",
-            },
-            "mapped": None,
-        }
-
-    payload: dict[str, Any] = {
-        "domain": normalized_domain,
-        "company_name": normalized_company_name,
-    }
-    if normalized_linkedin_url:
-        payload["company_linkedin_url"] = normalized_linkedin_url
-
-    url = f"{normalized_base_url.rstrip('/')}/run/companies/parallel-task/competitors/infer/db-direct"
-    start_ms = now_ms()
-
-    try:
-        async with httpx.AsyncClient(timeout=_COMPETITORS_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json=payload)
-            body = parse_json_or_raw(response.text, response.json)
-    except httpx.TimeoutException:
-        return {
-            "attempt": {
-                "provider": _PROVIDER,
-                "action": action,
-                "status": "failed",
-                "error": "timeout",
-                "duration_ms": now_ms() - start_ms,
-            },
-            "mapped": None,
-        }
-    except httpx.HTTPError as exc:
-        return {
-            "attempt": {
-                "provider": _PROVIDER,
-                "action": action,
-                "status": "failed",
-                "error": f"http_error:{exc.__class__.__name__}",
-                "duration_ms": now_ms() - start_ms,
-            },
-            "mapped": None,
-        }
-
-    duration_ms = now_ms() - start_ms
-    if response.status_code >= 400:
-        return {
-            "attempt": {
-                "provider": _PROVIDER,
-                "action": action,
-                "status": "failed",
-                "http_status": response.status_code,
-                "duration_ms": duration_ms,
-                "raw_response": body,
-            },
-            "mapped": None,
-        }
-
-    success = bool(body.get("success")) if isinstance(body, dict) else False
-    if not success:
-        return {
-            "attempt": {
-                "provider": _PROVIDER,
-                "action": action,
-                "status": "failed",
-                "http_status": response.status_code,
-                "duration_ms": duration_ms,
-                "raw_response": body,
-            },
-            "mapped": None,
-        }
-
-    competitors = _normalize_competitors(body.get("competitors") if isinstance(body, dict) else None)
-    if not competitors:
-        return {
-            "attempt": {
-                "provider": _PROVIDER,
-                "action": action,
-                "status": "not_found",
-                "http_status": response.status_code,
-                "duration_ms": duration_ms,
-                "raw_response": body,
-            },
-            "mapped": {"competitors": []},
-        }
-
-    return {
-        "attempt": {
-            "provider": _PROVIDER,
-            "action": action,
-            "status": "found",
-            "http_status": response.status_code,
-            "duration_ms": duration_ms,
-            "raw_response": body,
-        },
-        "mapped": {"competitors": competitors},
-    }
 
 
 async def _infer(
