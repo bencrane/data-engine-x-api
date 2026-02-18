@@ -101,12 +101,40 @@ class InternalPipelineRunFanOutRequest(BaseModel):
     provider_attempts: list[dict[str, Any]] | None = None
 
 
+class InternalRecordStepTimelineEventRequest(BaseModel):
+    org_id: str
+    company_id: str | None = None
+    submission_id: str
+    pipeline_run_id: str
+    entity_type: Literal["company", "person"]
+    cumulative_context: dict[str, Any]
+    step_result_id: str
+    step_position: int
+    operation_id: str
+    step_status: Literal["succeeded", "failed", "skipped"]
+    skip_reason: str | None = None
+    duration_ms: int | None = None
+    provider_attempts: list[dict[str, Any]] | None = None
+    condition: dict[str, Any] | None = None
+    error_message: str | None = None
+    error_details: dict[str, Any] | None = None
+    operation_result: dict[str, Any] | None = None
+
+
 def _normalize_timeline_status(status_value: str | None) -> str:
     if status_value in {"found", "not_found", "failed", "skipped"}:
         return status_value
     if status_value == "succeeded":
         return "found"
     return "failed"
+
+
+def _map_step_status_to_timeline_status(step_status: str) -> str:
+    if step_status == "succeeded":
+        return "found"
+    if step_status == "failed":
+        return "failed"
+    return "skipped"
 
 
 def _select_provider_from_attempts(provider_attempts: list[dict[str, Any]] | None) -> str | None:
@@ -117,6 +145,59 @@ def _select_provider_from_attempts(provider_attempts: list[dict[str, Any]] | Non
             return str(attempt["provider"])
     first_provider = provider_attempts[0].get("provider")
     return str(first_provider) if first_provider else None
+
+
+def _normalize_provider_attempts(provider_attempts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    if not isinstance(provider_attempts, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for attempt in provider_attempts:
+        if isinstance(attempt, dict):
+            normalized.append(attempt)
+    return normalized
+
+
+def _extract_fields_updated_from_operation_result(
+    *,
+    step_status: str,
+    operation_result: dict[str, Any] | None,
+) -> list[str] | None:
+    if step_status != "succeeded" or not isinstance(operation_result, dict):
+        return None
+    output_payload = operation_result.get("output")
+    if not isinstance(output_payload, dict):
+        return None
+    return sorted([key for key, value in output_payload.items() if value is not None]) or None
+
+
+def _build_step_summary(
+    *,
+    step_position: int,
+    operation_id: str,
+    step_status: str,
+    provider: str | None,
+) -> str:
+    provider_suffix = f" via {provider}" if provider else ""
+    return f"step {step_position} {operation_id} {step_status}{provider_suffix}"
+
+
+def _resolve_entity_id_for_step_event(
+    *,
+    org_id: str,
+    entity_type: str,
+    cumulative_context: dict[str, Any],
+) -> str:
+    if entity_type == "company":
+        return resolve_company_entity_id(
+            org_id=org_id,
+            canonical_fields=cumulative_context,
+            entity_id=cumulative_context.get("entity_id"),
+        )
+    return resolve_person_entity_id(
+        org_id=org_id,
+        canonical_fields=cumulative_context,
+        entity_id=cumulative_context.get("entity_id"),
+    )
 
 
 def _extract_company_context_for_timeline(
@@ -133,6 +214,87 @@ def _extract_company_context_for_timeline(
             if isinstance(entity_input, dict):
                 return entity_input
     return {}
+
+
+@router.post("/entity-timeline/record-step-event", response_model=DataEnvelope)
+async def internal_record_step_timeline_event(
+    payload: InternalRecordStepTimelineEventRequest,
+    _: None = Depends(require_internal_key),
+):
+    normalized_attempts = _normalize_provider_attempts(payload.provider_attempts)
+    timeline_status = _map_step_status_to_timeline_status(payload.step_status)
+    skip_reason = payload.skip_reason
+    if payload.step_status == "skipped" and not skip_reason:
+        skip_reason = "skipped"
+
+    metadata: dict[str, Any] = {
+        "event_type": "step_execution",
+        "step_result_id": payload.step_result_id,
+        "step_position": payload.step_position,
+        "operation_id": payload.operation_id,
+        "step_status": payload.step_status,
+        "skip_reason": skip_reason,
+        "duration_ms": payload.duration_ms,
+        "provider_attempts": normalized_attempts,
+        "condition": payload.condition,
+        "error_message": payload.error_message,
+        "error_details": payload.error_details,
+    }
+
+    try:
+        entity_id = _resolve_entity_id_for_step_event(
+            org_id=payload.org_id,
+            entity_type=payload.entity_type,
+            cumulative_context=payload.cumulative_context,
+        )
+        provider = _select_provider_from_attempts(normalized_attempts)
+        fields_updated = _extract_fields_updated_from_operation_result(
+            step_status=payload.step_status,
+            operation_result=payload.operation_result,
+        )
+        summary = _build_step_summary(
+            step_position=payload.step_position,
+            operation_id=payload.operation_id,
+            step_status=payload.step_status,
+            provider=provider,
+        )
+
+        event = record_entity_event(
+            org_id=payload.org_id,
+            company_id=payload.company_id,
+            entity_type=payload.entity_type,
+            entity_id=entity_id,
+            operation_id=payload.operation_id,
+            pipeline_run_id=payload.pipeline_run_id,
+            submission_id=payload.submission_id,
+            provider=provider,
+            status=timeline_status,
+            fields_updated=fields_updated,
+            summary=summary,
+            metadata=metadata,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return DataEnvelope(
+            data={
+                "attempted": True,
+                "recorded": False,
+                "event_id": None,
+                "entity_id": None,
+                "error": str(exc),
+                "metadata": metadata,
+            }
+        )
+
+    return DataEnvelope(
+        data={
+            "attempted": True,
+            "recorded": event is not None,
+            "event_id": event.get("id") if isinstance(event, dict) else None,
+            "entity_id": entity_id,
+            "error": None if event is not None else "timeline_write_not_recorded",
+            "metadata": metadata,
+        }
+    )
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
