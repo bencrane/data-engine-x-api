@@ -47,6 +47,34 @@ def _as_int(
     return parsed
 
 
+def _as_non_empty_str_list(value: Any) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    cleaned: list[str] = []
+    for item in value:
+        parsed = _as_non_empty_str(item)
+        if parsed:
+            cleaned.append(parsed)
+    return cleaned or None
+
+
+def _as_non_empty_str_or_list(value: Any) -> str | list[str] | None:
+    parsed_str = _as_non_empty_str(value)
+    if parsed_str:
+        return parsed_str
+    return _as_non_empty_str_list(value)
+
+
+def _as_list_of_dicts(value: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(value, list):
+        return None
+    cleaned: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            cleaned.append(item)
+    return cleaned or None
+
+
 def _person_provider_filters(input_data: dict[str, Any]) -> dict[str, Any] | None:
     raw = input_data.get("provider_filters")
     if not isinstance(raw, dict):
@@ -335,17 +363,37 @@ async def execute_person_search(
     page = _as_int(input_data.get("page"), default=1, minimum=1)
     page_size = _as_int(input_data.get("page_size"), default=25, minimum=1, maximum=100)
     limit = _as_int(input_data.get("limit"), default=100, minimum=1)
+    max_results = _as_int(input_data.get("max_results"), default=limit, minimum=1)
+    limit = max_results
     company_domain = _domain_from_value(input_data.get("company_domain") or input_data.get("company_website"))
     company_name = _as_non_empty_str(input_data.get("company_name"))
     company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
+    job_title = _as_non_empty_str(input_data.get("job_title"))
+    job_level = _as_non_empty_str_or_list(input_data.get("job_level"))
+    job_function = _as_non_empty_str_or_list(input_data.get("job_function"))
+    location = _as_non_empty_str_or_list(input_data.get("location"))
+    cascade = _as_list_of_dicts(input_data.get("cascade"))
     provider_filters = _person_provider_filters(input_data)
 
-    if not query and not company_domain and not company_name and not company_linkedin_url and not provider_filters:
+    if (
+        not query
+        and not company_domain
+        and not company_name
+        and not company_linkedin_url
+        and not job_title
+        and not job_level
+        and not job_function
+        and not location
+        and not cascade
+        and not provider_filters
+    ):
         return {
             "run_id": run_id,
             "operation_id": "person.search",
             "status": "failed",
-            "missing_inputs": ["query|company_domain|company_name|company_linkedin_url|provider_filters"],
+            "missing_inputs": [
+                "query|company_domain|company_name|company_linkedin_url|job_title|job_level|job_function|location|cascade|provider_filters"
+            ],
             "provider_attempts": attempts,
         }
 
