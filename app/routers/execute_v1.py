@@ -15,6 +15,7 @@ from app.services.email_operations import (
     execute_person_contact_verify_email,
 )
 from app.services.company_operations import (
+    execute_company_enrich_card_revenue,
     execute_company_enrich_ecommerce,
     execute_company_enrich_profile,
     execute_company_enrich_technographics,
@@ -58,6 +59,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.search",
     "person.enrich.profile",
     "company.enrich.profile",
+    "company.enrich.card_revenue",
     "company.enrich.ecommerce",
     "company.enrich.technographics",
     "company.search",
@@ -193,6 +195,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.profile":
         result = await execute_company_enrich_profile(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.card_revenue":
+        result = await execute_company_enrich_card_revenue(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
