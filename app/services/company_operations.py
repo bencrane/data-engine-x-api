@@ -4,8 +4,14 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.company_enrich import CardRevenueOutput, CompanyEnrichProfileOutput, EcommerceEnrichOutput, TechnographicsOutput
-from app.providers import blitzapi, companyenrich, enigma, leadmagic, prospeo, storeleads_enrich
+from app.contracts.company_enrich import (
+    CardRevenueOutput,
+    CompanyEnrichProfileOutput,
+    EcommerceEnrichOutput,
+    FMCSACarrierEnrichOutput,
+    TechnographicsOutput,
+)
+from app.providers import blitzapi, companyenrich, enigma, fmcsa, leadmagic, prospeo, storeleads_enrich
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -13,6 +19,14 @@ def _as_non_empty_str(value: Any) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _domain_from_website(website: Any) -> str | None:
@@ -27,6 +41,35 @@ def _domain_from_website(website: Any) -> str | None:
     if normalized.startswith("www."):
         normalized = normalized[len("www.") :]
     return normalized or None
+
+
+def _extract_dot_number(input_data: dict[str, Any]) -> str | None:
+    direct = _as_non_empty_str(input_data.get("dot_number")) or _as_non_empty_str(input_data.get("dotNumber"))
+    if direct:
+        return direct
+
+    company_profile = _as_dict(input_data.get("company_profile"))
+    from_profile = _as_non_empty_str(company_profile.get("dot_number")) or _as_non_empty_str(company_profile.get("dotNumber"))
+    if from_profile:
+        return from_profile
+
+    output = _as_dict(input_data.get("output"))
+    from_output = _as_non_empty_str(output.get("dot_number")) or _as_non_empty_str(output.get("dotNumber"))
+    if from_output:
+        return from_output
+
+    for collection in [
+        _as_list(input_data.get("results")),
+        _as_list(output.get("results")),
+        _as_list(_as_dict(input_data.get("company_search")).get("results")),
+    ]:
+        for item in collection:
+            item_dict = _as_dict(item)
+            candidate = _as_non_empty_str(item_dict.get("dot_number")) or _as_non_empty_str(item_dict.get("dotNumber"))
+            if candidate:
+                return candidate
+
+    return None
 
 
 def _canonical_company_from_prospeo(company: dict[str, Any]) -> dict[str, Any]:
@@ -436,6 +479,68 @@ async def execute_company_enrich_ecommerce(
         "run_id": run_id,
         "operation_id": "company.enrich.ecommerce",
         "status": status,
+        "output": {
+            **validated_output,
+        },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_fmcsa(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    dot_number = _extract_dot_number(input_data)
+    if not dot_number:
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.fmcsa",
+            "status": "failed",
+            "missing_inputs": ["dot_number"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    adapter_result = await fmcsa.enrich_carrier(
+        api_key=settings.fmcsa_api_key,
+        dot_number=dot_number,
+    )
+    attempts.append(adapter_result["attempt"])
+
+    mapped = adapter_result.get("mapped")
+    if mapped is None:
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.fmcsa",
+            "status": adapter_result["attempt"].get("status", "failed"),
+            "provider_attempts": attempts,
+        }
+
+    try:
+        validated_output = FMCSACarrierEnrichOutput.model_validate(
+            {
+                **mapped,
+                "source_provider": "fmcsa",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.fmcsa",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": "company.enrich.fmcsa",
+        "status": adapter_result["attempt"].get("status", "failed"),
         "output": {
             **validated_output,
         },

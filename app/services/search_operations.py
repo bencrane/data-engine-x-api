@@ -4,8 +4,8 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.search import CompanySearchOutput, EcommerceSearchOutput, PersonSearchOutput
-from app.providers import blitzapi, companyenrich, leadmagic, prospeo, storeleads_search
+from app.contracts.search import CompanySearchOutput, EcommerceSearchOutput, FMCSACarrierSearchOutput, PersonSearchOutput
+from app.providers import blitzapi, companyenrich, fmcsa, leadmagic, prospeo, storeleads_search
 
 
 def _domain_from_value(value: Any) -> str | None:
@@ -76,6 +76,10 @@ def _as_int_or_none(value: Any) -> int | None:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _as_list_of_dicts(value: Any) -> list[dict[str, Any]] | None:
@@ -358,6 +362,93 @@ async def execute_company_search_ecommerce(
         "run_id": run_id,
         "operation_id": "company.search.ecommerce",
         "status": final_status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+def _first_non_empty_string(values: list[Any]) -> str | None:
+    for value in values:
+        parsed = _as_non_empty_str(value)
+        if parsed:
+            return parsed
+    return None
+
+
+def _extract_carrier_name(input_data: dict[str, Any]) -> str | None:
+    direct = _first_non_empty_string([input_data.get("carrier_name"), input_data.get("company_name")])
+    if direct:
+        return direct
+
+    company_profile = _as_dict(input_data.get("company_profile"))
+    from_profile = _first_non_empty_string(
+        [
+            company_profile.get("carrier_name"),
+            company_profile.get("company_name"),
+            company_profile.get("legal_name"),
+        ]
+    )
+    if from_profile:
+        return from_profile
+
+    output = _as_dict(input_data.get("output"))
+    return _first_non_empty_string(
+        [
+            output.get("carrier_name"),
+            output.get("company_name"),
+            output.get("legal_name"),
+        ]
+    )
+
+
+async def execute_company_search_fmcsa(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    step_config = _as_dict(input_data.get("step_config"))
+    carrier_name = _extract_carrier_name(input_data)
+    max_results = _as_int(step_config.get("max_results"), default=50, minimum=1, maximum=50)
+
+    if not carrier_name:
+        return {
+            "run_id": run_id,
+            "operation_id": "company.search.fmcsa",
+            "status": "failed",
+            "missing_inputs": ["carrier_name|company_name"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    adapter_result = await fmcsa.search_carriers(
+        api_key=settings.fmcsa_api_key,
+        name=carrier_name,
+        max_results=max_results,
+    )
+    attempts.append(adapter_result["attempt"])
+    mapped = adapter_result.get("mapped") or {"results": [], "result_count": 0}
+
+    try:
+        output = FMCSACarrierSearchOutput.model_validate(
+            {
+                **mapped,
+                "source_provider": "fmcsa",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.search.fmcsa",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {"code": "output_validation_failed", "message": str(exc)},
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": "company.search.fmcsa",
+        "status": adapter_result["attempt"].get("status", "failed"),
         "output": output,
         "provider_attempts": attempts,
     }
