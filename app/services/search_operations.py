@@ -5,7 +5,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.contracts.search import CompanySearchOutput, PersonSearchOutput
-from app.providers import blitzapi, companyenrich, prospeo
+from app.providers import blitzapi, companyenrich, leadmagic, prospeo
 
 
 def _domain_from_value(value: Any) -> str | None:
@@ -79,7 +79,11 @@ def _person_provider_filters(input_data: dict[str, Any]) -> dict[str, Any] | Non
     raw = input_data.get("provider_filters")
     if not isinstance(raw, dict):
         return None
-    sanitized = {key: value for key, value in raw.items() if key in {"prospeo", "blitzapi", "companyenrich"} and isinstance(value, dict)}
+    sanitized = {
+        key: value
+        for key, value in raw.items()
+        if key in {"prospeo", "blitzapi", "companyenrich", "leadmagic"} and isinstance(value, dict)
+    }
     return sanitized or None
 
 
@@ -254,9 +258,82 @@ async def execute_company_search(
 def _person_search_provider_order() -> list[str]:
     settings = get_settings()
     parsed = [item.strip() for item in settings.person_search_order.split(",") if item.strip()]
-    allowed = {"prospeo", "blitzapi", "companyenrich"}
+    allowed = {"prospeo", "blitzapi", "companyenrich", "leadmagic"}
     filtered = [item for item in parsed if item in allowed]
-    return filtered or ["prospeo", "blitzapi", "companyenrich"]
+    if "leadmagic" not in filtered:
+        filtered.append("leadmagic")
+    return filtered or ["prospeo", "blitzapi", "companyenrich", "leadmagic"]
+
+
+def _as_list_from_str_or_list(value: str | list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value]
+    return value or None
+
+
+def _country_codes_from_location(location: str | list[str] | None) -> list[str] | None:
+    values = _as_list_from_str_or_list(location)
+    if not values:
+        return None
+    country_codes: list[str] = []
+    for value in values:
+        token = value.strip().upper()
+        if len(token) == 2 and token.isalpha():
+            country_codes.append(token)
+    return country_codes or None
+
+
+def _title_to_blitz_job_levels(job_title: str | None) -> list[str] | None:
+    if not job_title:
+        return None
+    normalized = job_title.lower()
+    if any(token in normalized for token in ("chief ", " cxo", " ceo", " cfo", " coo", " cmo", " cto", " cio", "founder", "owner", "president")):
+        return ["C-Team"]
+    if "vp" in normalized or "vice president" in normalized:
+        return ["VP"]
+    if "director" in normalized or normalized.startswith("head ") or " head of " in normalized:
+        return ["Director"]
+    if "manager" in normalized:
+        return ["Manager"]
+    return None
+
+
+def _merge_dict(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _build_prospeo_filters(
+    *,
+    query: str | None,
+    job_title: str | None,
+    company_domain: str | None,
+    company_name: str | None,
+    location: str | list[str] | None,
+    provider_filters: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    existing = ((provider_filters or {}).get("prospeo") or {}) if isinstance((provider_filters or {}).get("prospeo"), dict) else {}
+    computed: dict[str, Any] = {}
+    title_query = job_title or query
+    if title_query:
+        computed["person_job_title"] = {"include": [title_query]}
+    location_values = _as_list_from_str_or_list(location)
+    if location_values:
+        computed["person_location_search"] = {"include": location_values}
+    if company_domain:
+        computed.setdefault("company", {}).setdefault("websites", {})["include"] = [company_domain]
+    elif company_name:
+        computed.setdefault("company", {}).setdefault("names", {})["include"] = [company_name]
+    if not existing and not computed:
+        return None
+    return _merge_dict(existing, computed)
 
 
 async def _search_people_prospeo(
@@ -284,27 +361,42 @@ async def _search_people_prospeo(
 
 async def _search_people_blitzapi(
     *,
-    query: str | None,
-    company_domain: str | None,
     company_linkedin_url: str | None,
-    limit: int,
+    job_level: str | list[str] | None,
+    job_function: str | list[str] | None,
+    country_code: str | list[str] | None,
+    max_results: int,
+    page: int,
     attempts: list[dict[str, Any]],
-    provider_filters: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     settings = get_settings()
-    blitz_input = (provider_filters or {}).get("blitzapi") or {}
-    linkedin_url = blitz_input.get("company_linkedin_url") or company_linkedin_url
-    domain = blitz_input.get("company_domain") or company_domain
-    if not linkedin_url and domain:
-        bridge = await blitzapi.domain_to_linkedin(api_key=settings.blitzapi_api_key, domain=domain)
-        attempts.append(bridge["attempt"])
-        linkedin_url = (bridge.get("mapped") or {}).get("company_linkedin_url")
-    result = await blitzapi.person_search(
+    result = await blitzapi.search_employees(
         api_key=settings.blitzapi_api_key,
-        company_linkedin_url=linkedin_url,
-        query=query,
-        limit=limit,
-        blitz_input=blitz_input,
+        company_linkedin_url=company_linkedin_url,
+        job_level=job_level,
+        job_function=job_function,
+        country_code=country_code,
+        max_results=max_results,
+        page=page,
+    )
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
+
+
+async def _search_people_blitzapi_waterfall(
+    *,
+    company_linkedin_url: str | None,
+    cascade: list[dict[str, Any]] | None,
+    max_results: int,
+    attempts: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    settings = get_settings()
+    result = await blitzapi.search_icp_waterfall(
+        api_key=settings.blitzapi_api_key,
+        company_linkedin_url=company_linkedin_url,
+        cascade=cascade,
+        max_results=max_results,
     )
     attempts.append(result["attempt"])
     mapped = result.get("mapped") or {}
@@ -336,6 +428,44 @@ async def _search_people_companyenrich(
     return mapped.get("results") or [], mapped.get("pagination")
 
 
+async def _search_people_leadmagic_employees(
+    *,
+    company_domain: str | None,
+    company_name: str | None,
+    max_results: int,
+    attempts: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    settings = get_settings()
+    result = await leadmagic.search_employees(
+        api_key=settings.leadmagic_api_key,
+        company_domain=company_domain,
+        company_name=company_name,
+        limit=max_results,
+    )
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
+
+
+async def _search_people_leadmagic_role(
+    *,
+    company_domain: str | None,
+    company_name: str | None,
+    job_title: str | None,
+    attempts: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    settings = get_settings()
+    result = await leadmagic.search_by_role(
+        api_key=settings.leadmagic_api_key,
+        company_domain=company_domain,
+        company_name=company_name,
+        job_title=job_title,
+    )
+    attempts.append(result["attempt"])
+    mapped = result.get("mapped") or {}
+    return mapped.get("results") or [], mapped.get("pagination")
+
+
 def _dedupe_people(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     deduped: list[dict[str, Any]] = []
@@ -361,7 +491,6 @@ async def execute_person_search(
     attempts: list[dict[str, Any]] = []
     query = _as_non_empty_str(input_data.get("query"))
     page = _as_int(input_data.get("page"), default=1, minimum=1)
-    page_size = _as_int(input_data.get("page_size"), default=25, minimum=1, maximum=100)
     limit = _as_int(input_data.get("limit"), default=100, minimum=1)
     max_results = _as_int(input_data.get("max_results"), default=limit, minimum=1)
     limit = max_results
@@ -374,6 +503,18 @@ async def execute_person_search(
     location = _as_non_empty_str_or_list(input_data.get("location"))
     cascade = _as_list_of_dicts(input_data.get("cascade"))
     provider_filters = _person_provider_filters(input_data)
+    prospeo_filters = _build_prospeo_filters(
+        query=query,
+        job_title=job_title,
+        company_domain=company_domain,
+        company_name=company_name,
+        location=location,
+        provider_filters=provider_filters,
+    )
+
+    effective_provider_filters = dict(provider_filters or {})
+    if prospeo_filters:
+        effective_provider_filters["prospeo"] = prospeo_filters
 
     if (
         not query
@@ -399,36 +540,86 @@ async def execute_person_search(
 
     combined: list[dict[str, Any]] = []
     pagination_by_provider: dict[str, Any] = {}
+    provider_order = _person_search_provider_order()
+    ordered_general = [provider for provider in provider_order if provider in {"prospeo", "blitzapi", "companyenrich", "leadmagic"}]
 
-    for provider in _person_search_provider_order():
+    if cascade:
+        execution_plan: list[str] = ["blitzapi_waterfall"]
+    elif job_title:
+        execution_plan = ["leadmagic_role"] + [provider for provider in ordered_general if provider in {"prospeo", "companyenrich"}]
+        if "blitzapi" in ordered_general:
+            execution_plan.append("blitzapi")
+    else:
+        execution_plan = []
+        if "prospeo" in ordered_general:
+            execution_plan.append("prospeo")
+        if "blitzapi" in ordered_general:
+            execution_plan.append("blitzapi")
+        if "companyenrich" in ordered_general:
+            execution_plan.append("companyenrich")
+        if "leadmagic" in ordered_general:
+            execution_plan.append("leadmagic_employee")
+
+    provider_order_used: list[str] = []
+
+    for provider in execution_plan:
         try:
             if provider == "prospeo":
+                provider_order_used.append("prospeo")
                 results, pagination = await _search_people_prospeo(
-                    query=query,
+                    query=job_title or query,
                     page=page,
                     company_domain=company_domain,
                     company_name=company_name,
                     attempts=attempts,
-                    provider_filters=provider_filters,
+                    provider_filters=effective_provider_filters,
                 )
             elif provider == "blitzapi":
+                provider_order_used.append("blitzapi")
+                derived_job_level = _title_to_blitz_job_levels(job_title) if job_title else None
                 results, pagination = await _search_people_blitzapi(
-                    query=query,
-                    company_domain=company_domain,
                     company_linkedin_url=company_linkedin_url,
-                    limit=limit,
+                    job_level=job_level or derived_job_level,
+                    job_function=job_function,
+                    country_code=_country_codes_from_location(location),
+                    max_results=limit,
+                    page=page,
                     attempts=attempts,
-                    provider_filters=provider_filters,
+                )
+            elif provider == "blitzapi_waterfall":
+                provider_order_used.append("blitzapi")
+                results, pagination = await _search_people_blitzapi_waterfall(
+                    company_linkedin_url=company_linkedin_url,
+                    cascade=cascade,
+                    max_results=limit,
+                    attempts=attempts,
                 )
             elif provider == "companyenrich":
+                provider_order_used.append("companyenrich")
                 results, pagination = await _search_people_companyenrich(
-                    query=query,
+                    query=job_title or query,
                     page=page,
-                    page_size=page_size,
+                    page_size=min(max(limit, 1), 100),
                     company_domain=company_domain,
                     company_name=company_name,
                     attempts=attempts,
-                    provider_filters=provider_filters,
+                    provider_filters=effective_provider_filters,
+                )
+            elif provider == "leadmagic_employee":
+                provider_order_used.append("leadmagic")
+                results, pagination = await _search_people_leadmagic_employees(
+                    company_domain=company_domain,
+                    company_name=company_name,
+                    max_results=limit,
+                    attempts=attempts,
+                )
+            elif provider == "leadmagic_role":
+                provider_order_used.append("leadmagic")
+                results, pagination = await _search_people_leadmagic_role(
+                    company_domain=company_domain,
+                    company_name=company_name,
+                    job_title=job_title,
+                    attempts=attempts,
                 )
             else:
                 continue
@@ -447,7 +638,7 @@ async def execute_person_search(
         if pagination is not None:
             pagination_by_provider[provider] = pagination
         combined.extend(results)
-        if len(combined) >= limit:
+        if results:
             break
 
     deduped = _dedupe_people(combined)[:limit]
@@ -456,7 +647,7 @@ async def execute_person_search(
             {
                 "results": deduped,
                 "result_count": len(deduped),
-                "provider_order_used": _person_search_provider_order(),
+                "provider_order_used": provider_order_used,
                 "pagination": pagination_by_provider,
             }
         ).model_dump()
