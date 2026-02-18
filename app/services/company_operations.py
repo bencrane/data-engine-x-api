@@ -4,8 +4,8 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.company_enrich import CompanyEnrichProfileOutput, EcommerceEnrichOutput, TechnographicsOutput
-from app.providers import blitzapi, companyenrich, leadmagic, prospeo, storeleads_enrich
+from app.contracts.company_enrich import CardRevenueOutput, CompanyEnrichProfileOutput, EcommerceEnrichOutput, TechnographicsOutput
+from app.providers import blitzapi, companyenrich, enigma, leadmagic, prospeo, storeleads_enrich
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -435,6 +435,75 @@ async def execute_company_enrich_ecommerce(
     return {
         "run_id": run_id,
         "operation_id": "company.enrich.ecommerce",
+        "status": status,
+        "output": {
+            **validated_output,
+        },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_card_revenue(
+    *,
+    input_data: dict,
+) -> dict:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+
+    company_name = _as_non_empty_str(input_data.get("company_name"))
+    company_domain = _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(
+        input_data.get("company_website")
+    )
+
+    if not company_name and not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.card_revenue",
+            "status": "failed",
+            "missing_inputs": ["company_name|company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    adapter_result = await enigma.enrich_card_revenue(
+        api_key=settings.enigma_api_key,
+        company_name=company_name,
+        company_domain=company_domain,
+    )
+    attempts.append(adapter_result["attempt"])
+
+    mapped = adapter_result.get("mapped")
+    status = adapter_result["attempt"].get("status", "failed")
+    if mapped is None:
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.card_revenue",
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    try:
+        validated_output = CardRevenueOutput.model_validate(
+            {
+                **mapped,
+                "source_provider": "enigma",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.card_revenue",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": "company.enrich.card_revenue",
         "status": status,
         "output": {
             **validated_output,
