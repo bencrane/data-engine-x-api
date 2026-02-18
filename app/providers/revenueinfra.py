@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 import httpx
 
+from app.config import get_settings
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
 _BASE_URL = "https://api.revenueinfra.com"
@@ -93,6 +94,11 @@ def _normalize_competitors(value: Any) -> list[dict[str, str | None]]:
     return normalized
 
 
+def _configured_base_url() -> str:
+    configured = _as_str(get_settings().revenueinfra_api_url)
+    return (configured or _BASE_URL).rstrip("/")
+
+
 async def discover_competitors(
     *,
     base_url: str,
@@ -100,7 +106,7 @@ async def discover_competitors(
     company_name: str,
     company_linkedin_url: str | None = None,
 ) -> ProviderAdapterResult:
-    normalized_base_url = _as_str(base_url) or _BASE_URL
+    normalized_base_url = _as_str(base_url) or _configured_base_url()
     normalized_domain = _as_str(domain)
     normalized_company_name = _as_str(company_name)
     normalized_linkedin_url = _as_str(company_linkedin_url)
@@ -251,7 +257,7 @@ async def _infer(
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
             for candidate in candidate_endpoints:
-                url = f"{_BASE_URL}/run/companies/gemini/{candidate}/infer"
+                url = f"{_configured_base_url()}/run/companies/gemini/{candidate}/infer"
                 tried_endpoints.append(candidate)
                 response = await client.post(url, json=payload)
                 body = parse_json_or_raw(response.text, response.json)
