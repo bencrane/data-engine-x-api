@@ -1,5 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
-import { evaluateCondition } from "../utils/evaluate-condition";
+import { evaluateCondition } from "../utils/evaluate-condition.js";
 
 interface RunPipelinePayload {
   pipeline_run_id: string;
@@ -78,6 +78,12 @@ interface InternalEnvelope<TData> {
 interface InternalConfig {
   apiUrl: string;
   internalApiKey: string;
+}
+
+interface InternalStepResult {
+  id: string;
+  step_position: number;
+  duration_ms?: number | null;
 }
 
 function getExecutionStartPosition(run: InternalPipelineRun): number {
@@ -177,7 +183,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function getStepCondition(stepSnapshot: InternalPipelineRun["blueprint_snapshot"]["steps"][number]): object | null {
+function getStepCondition(
+  stepSnapshot: InternalPipelineRun["blueprint_snapshot"]["steps"][number],
+): Record<string, unknown> | null {
   if (isObject(stepSnapshot.step_config) && "condition" in stepSnapshot.step_config) {
     const fromConfig = stepSnapshot.step_config.condition;
     if (isObject(fromConfig)) return fromConfig;
@@ -189,14 +197,89 @@ function getStepCondition(stepSnapshot: InternalPipelineRun["blueprint_snapshot"
   return null;
 }
 
+function inferFieldsUpdatedFromOperationResult(
+  operationResult: Record<string, unknown> | null | undefined,
+): string[] | null {
+  if (!isObject(operationResult) || !isObject(operationResult.output)) {
+    return null;
+  }
+  const keys = Object.entries(operationResult.output)
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([key]) => key)
+    .sort();
+  return keys.length > 0 ? keys : null;
+}
+
+function operationIdForStep(
+  step: InternalPipelineRun["blueprint_snapshot"]["steps"][number] | undefined,
+): string {
+  return step?.operation_id || "unknown.operation";
+}
+
+async function emitStepTimelineEvent(
+  internalConfig: InternalConfig,
+  payload: {
+    orgId: string;
+    companyId: string;
+    submissionId: string;
+    pipelineRunId: string;
+    entityType: "person" | "company";
+    cumulativeContext: Record<string, unknown>;
+    stepResultId: string;
+    stepPosition: number;
+    operationId: string;
+    stepStatus: "succeeded" | "failed" | "skipped";
+    skipReason?: string | null;
+    durationMs?: number | null;
+    providerAttempts?: Array<Record<string, unknown>>;
+    condition?: Record<string, unknown> | null;
+    errorMessage?: string | null;
+    errorDetails?: Record<string, unknown> | null;
+    operationResult?: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  try {
+    await internalPost(internalConfig, "/api/internal/entity-timeline/record-step-event", {
+      org_id: payload.orgId,
+      company_id: payload.companyId,
+      submission_id: payload.submissionId,
+      pipeline_run_id: payload.pipelineRunId,
+      entity_type: payload.entityType,
+      cumulative_context: payload.cumulativeContext,
+      step_result_id: payload.stepResultId,
+      step_position: payload.stepPosition,
+      operation_id: payload.operationId,
+      step_status: payload.stepStatus,
+      skip_reason: payload.skipReason ?? null,
+      duration_ms: payload.durationMs ?? null,
+      provider_attempts: payload.providerAttempts ?? [],
+      condition: payload.condition ?? null,
+      error_message: payload.errorMessage ?? null,
+      error_details: payload.errorDetails ?? null,
+      operation_result: payload.operationResult ?? null,
+      fields_updated: inferFieldsUpdatedFromOperationResult(payload.operationResult),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn("step timeline emit failed", {
+      pipeline_run_id: payload.pipelineRunId,
+      step_result_id: payload.stepResultId,
+      step_position: payload.stepPosition,
+      operation_id: payload.operationId,
+      step_status: payload.stepStatus,
+      error: message,
+    });
+  }
+}
+
 async function skipStepWithReason(
   internalConfig: InternalConfig,
   stepResultId: string,
   cumulativeContext: Record<string, unknown>,
   skipReason: string,
   metadata: Record<string, unknown>,
-): Promise<void> {
-  await internalPost(internalConfig, "/api/internal/step-results/update", {
+): Promise<InternalStepResult> {
+  return internalPost<InternalStepResult>(internalConfig, "/api/internal/step-results/update", {
     step_result_id: stepResultId,
     status: "skipped",
     input_payload: cumulativeContext,
@@ -234,6 +317,7 @@ export const runPipeline = task({
       .filter((step) => step.is_enabled !== false)
       .filter((step) => step.position >= executionStartPosition)
       .sort((a, b) => a.position - b.position);
+    const stepsByPosition = new Map(orderedSteps.map((step) => [step.position, step]));
 
     const snapshotEntity = run.blueprint_snapshot.entity || {};
     const entityType =
@@ -262,17 +346,61 @@ export const runPipeline = task({
       const operationId = stepSnapshot.operation_id;
       if (!operationId) {
         const message = `Missing operation_id for blueprint step at position ${stepSnapshot.position}`;
-        await internalPost(internalConfig, "/api/internal/step-results/update", {
-          step_result_id: stepResult.id,
-          status: "failed",
-          input_payload: cumulativeContext,
-          error_message: message,
-          error_details: { error: message },
+        const failedStep = await internalPost<InternalStepResult>(
+          internalConfig,
+          "/api/internal/step-results/update",
+          {
+            step_result_id: stepResult.id,
+            status: "failed",
+            input_payload: cumulativeContext,
+            error_message: message,
+            error_details: { error: message },
+          },
+        );
+        await emitStepTimelineEvent(internalConfig, {
+          orgId: org_id,
+          companyId: company_id,
+          submissionId: run.submission_id,
+          pipelineRunId: pipeline_run_id,
+          entityType,
+          cumulativeContext,
+          stepResultId: failedStep.id,
+          stepPosition: failedStep.step_position,
+          operationId: "unknown.operation",
+          stepStatus: "failed",
+          durationMs: failedStep.duration_ms,
+          errorMessage: message,
+          errorDetails: { error: message },
         });
-        await internalPost(internalConfig, "/api/internal/step-results/mark-remaining-skipped", {
-          pipeline_run_id,
-          from_step_position: stepSnapshot.position,
-        });
+        const skippedRows = await internalPost<Array<InternalStepResult>>(
+          internalConfig,
+          "/api/internal/step-results/mark-remaining-skipped",
+          {
+            pipeline_run_id,
+            from_step_position: stepSnapshot.position,
+          },
+        );
+        for (const skippedStep of skippedRows) {
+          const skippedBlueprintStep = stepsByPosition.get(skippedStep.step_position);
+          await emitStepTimelineEvent(internalConfig, {
+            orgId: org_id,
+            companyId: company_id,
+            submissionId: run.submission_id,
+            pipelineRunId: pipeline_run_id,
+            entityType: entityTypeFromOperationId(operationIdForStep(skippedBlueprintStep)),
+            cumulativeContext,
+            stepResultId: skippedStep.id,
+            stepPosition: skippedStep.step_position,
+            operationId: operationIdForStep(skippedBlueprintStep),
+            stepStatus: "skipped",
+            skipReason: "upstream_step_failed",
+            durationMs: skippedStep.duration_ms,
+            errorMessage: "Skipped because a prior step failed",
+            errorDetails: {
+              failed_step_position: stepSnapshot.position,
+            },
+          });
+        }
         await internalPost(internalConfig, "/api/internal/pipeline-runs/update-status", {
           pipeline_run_id,
           status: "failed",
@@ -288,7 +416,7 @@ export const runPipeline = task({
       const condition = getStepCondition(stepSnapshot);
       const shouldRun = evaluateCondition(condition, cumulativeContext);
       if (!shouldRun) {
-        await skipStepWithReason(
+        const skippedStep = await skipStepWithReason(
           internalConfig,
           stepResult.id,
           cumulativeContext,
@@ -299,6 +427,21 @@ export const runPipeline = task({
             operation_id: operationId,
           },
         );
+        await emitStepTimelineEvent(internalConfig, {
+          orgId: org_id,
+          companyId: company_id,
+          submissionId: run.submission_id,
+          pipelineRunId: pipeline_run_id,
+          entityType: entityTypeFromOperationId(operationId),
+          cumulativeContext,
+          stepResultId: skippedStep.id,
+          stepPosition: skippedStep.step_position,
+          operationId,
+          stepStatus: "skipped",
+          skipReason: "condition_not_met",
+          durationMs: skippedStep.duration_ms,
+          condition,
+        });
 
         const fanOutEnabled =
           stepSnapshot.fan_out === true ||
@@ -311,7 +454,7 @@ export const runPipeline = task({
               (sr) => sr.step_position === downstreamStep.position,
             );
             if (!downstreamStepResult) continue;
-            await skipStepWithReason(
+            const downstreamSkippedStep = await skipStepWithReason(
               internalConfig,
               downstreamStepResult.id,
               cumulativeContext,
@@ -322,6 +465,25 @@ export const runPipeline = task({
                 parent_condition: condition,
               },
             );
+            await emitStepTimelineEvent(internalConfig, {
+              orgId: org_id,
+              companyId: company_id,
+              submissionId: run.submission_id,
+              pipelineRunId: pipeline_run_id,
+              entityType: entityTypeFromOperationId(operationIdForStep(downstreamStep)),
+              cumulativeContext,
+              stepResultId: downstreamSkippedStep.id,
+              stepPosition: downstreamSkippedStep.step_position,
+              operationId: operationIdForStep(downstreamStep),
+              stepStatus: "skipped",
+              skipReason: "parent_step_condition_not_met",
+              durationMs: downstreamSkippedStep.duration_ms,
+              condition,
+              errorDetails: {
+                parent_step_position: stepSnapshot.position,
+                parent_operation_id: operationId,
+              },
+            });
           }
           shouldShortCircuitRemainingSteps = true;
         }
@@ -350,23 +512,73 @@ export const runPipeline = task({
         const stepFailed = result.status === "failed";
         if (stepFailed) {
           const message = `Operation failed: ${operationId}`;
-          await internalPost(internalConfig, "/api/internal/step-results/update", {
-            step_result_id: stepResult.id,
-            status: "failed",
-            output_payload: {
-              operation_result: result,
-              cumulative_context: cumulativeContext,
+          const failedStep = await internalPost<InternalStepResult>(
+            internalConfig,
+            "/api/internal/step-results/update",
+            {
+              step_result_id: stepResult.id,
+              status: "failed",
+              output_payload: {
+                operation_result: result,
+                cumulative_context: cumulativeContext,
+              },
+              error_message: message,
+              error_details: {
+                operation_id: operationId,
+                missing_inputs: result.missing_inputs || [],
+              },
             },
-            error_message: message,
-            error_details: {
+          );
+          await emitStepTimelineEvent(internalConfig, {
+            orgId: org_id,
+            companyId: company_id,
+            submissionId: run.submission_id,
+            pipelineRunId: pipeline_run_id,
+            entityType: stepEntityType,
+            cumulativeContext,
+            stepResultId: failedStep.id,
+            stepPosition: failedStep.step_position,
+            operationId,
+            stepStatus: "failed",
+            durationMs: failedStep.duration_ms,
+            providerAttempts: Array.isArray(result.provider_attempts) ? result.provider_attempts : [],
+            errorMessage: message,
+            errorDetails: {
               operation_id: operationId,
               missing_inputs: result.missing_inputs || [],
             },
+            operationResult: result as unknown as Record<string, unknown>,
           });
-          await internalPost(internalConfig, "/api/internal/step-results/mark-remaining-skipped", {
-            pipeline_run_id,
-            from_step_position: stepSnapshot.position,
-          });
+          const skippedRows = await internalPost<Array<InternalStepResult>>(
+            internalConfig,
+            "/api/internal/step-results/mark-remaining-skipped",
+            {
+              pipeline_run_id,
+              from_step_position: stepSnapshot.position,
+            },
+          );
+          for (const skippedStep of skippedRows) {
+            const skippedBlueprintStep = stepsByPosition.get(skippedStep.step_position);
+            await emitStepTimelineEvent(internalConfig, {
+              orgId: org_id,
+              companyId: company_id,
+              submissionId: run.submission_id,
+              pipelineRunId: pipeline_run_id,
+              entityType: entityTypeFromOperationId(operationIdForStep(skippedBlueprintStep)),
+              cumulativeContext,
+              stepResultId: skippedStep.id,
+              stepPosition: skippedStep.step_position,
+              operationId: operationIdForStep(skippedBlueprintStep),
+              stepStatus: "skipped",
+              skipReason: "upstream_step_failed",
+              durationMs: skippedStep.duration_ms,
+              errorMessage: "Skipped because a prior step failed",
+              errorDetails: {
+                failed_step_position: stepSnapshot.position,
+                failed_operation_id: operationId,
+              },
+            });
+          }
           await internalPost(internalConfig, "/api/internal/pipeline-runs/update-status", {
             pipeline_run_id,
             status: "failed",
@@ -379,13 +591,32 @@ export const runPipeline = task({
           return { pipeline_run_id, status: "failed", failed_step_position: stepSnapshot.position, error: message };
         }
 
-        await internalPost(internalConfig, "/api/internal/step-results/update", {
-          step_result_id: stepResult.id,
-          status: "succeeded",
-          output_payload: {
-            operation_result: result,
-            cumulative_context: cumulativeContext,
+        const succeededStep = await internalPost<InternalStepResult>(
+          internalConfig,
+          "/api/internal/step-results/update",
+          {
+            step_result_id: stepResult.id,
+            status: "succeeded",
+            output_payload: {
+              operation_result: result,
+              cumulative_context: cumulativeContext,
+            },
           },
+        );
+        await emitStepTimelineEvent(internalConfig, {
+          orgId: org_id,
+          companyId: company_id,
+          submissionId: run.submission_id,
+          pipelineRunId: pipeline_run_id,
+          entityType: stepEntityType,
+          cumulativeContext,
+          stepResultId: succeededStep.id,
+          stepPosition: succeededStep.step_position,
+          operationId,
+          stepStatus: "succeeded",
+          durationMs: succeededStep.duration_ms,
+          providerAttempts: Array.isArray(result.provider_attempts) ? result.provider_attempts : [],
+          operationResult: result as unknown as Record<string, unknown>,
         });
         lastSuccessfulOperationId = operationId;
 
@@ -471,16 +702,61 @@ export const runPipeline = task({
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        await internalPost(internalConfig, "/api/internal/step-results/update", {
-          step_result_id: stepResult.id,
-          status: "failed",
-          error_message: message,
-          error_details: { error: message },
+        const failedStep = await internalPost<InternalStepResult>(
+          internalConfig,
+          "/api/internal/step-results/update",
+          {
+            step_result_id: stepResult.id,
+            status: "failed",
+            error_message: message,
+            error_details: { error: message },
+          },
+        );
+        await emitStepTimelineEvent(internalConfig, {
+          orgId: org_id,
+          companyId: company_id,
+          submissionId: run.submission_id,
+          pipelineRunId: pipeline_run_id,
+          entityType: entityTypeFromOperationId(operationId),
+          cumulativeContext,
+          stepResultId: failedStep.id,
+          stepPosition: failedStep.step_position,
+          operationId,
+          stepStatus: "failed",
+          durationMs: failedStep.duration_ms,
+          errorMessage: message,
+          errorDetails: { error: message },
         });
-        await internalPost(internalConfig, "/api/internal/step-results/mark-remaining-skipped", {
-          pipeline_run_id,
-          from_step_position: stepSnapshot.position,
-        });
+        const skippedRows = await internalPost<Array<InternalStepResult>>(
+          internalConfig,
+          "/api/internal/step-results/mark-remaining-skipped",
+          {
+            pipeline_run_id,
+            from_step_position: stepSnapshot.position,
+          },
+        );
+        for (const skippedStep of skippedRows) {
+          const skippedBlueprintStep = stepsByPosition.get(skippedStep.step_position);
+          await emitStepTimelineEvent(internalConfig, {
+            orgId: org_id,
+            companyId: company_id,
+            submissionId: run.submission_id,
+            pipelineRunId: pipeline_run_id,
+            entityType: entityTypeFromOperationId(operationIdForStep(skippedBlueprintStep)),
+            cumulativeContext,
+            stepResultId: skippedStep.id,
+            stepPosition: skippedStep.step_position,
+            operationId: operationIdForStep(skippedBlueprintStep),
+            stepStatus: "skipped",
+            skipReason: "upstream_step_failed",
+            durationMs: skippedStep.duration_ms,
+            errorMessage: "Skipped because a prior step failed",
+            errorDetails: {
+              failed_step_position: stepSnapshot.position,
+              failed_operation_id: operationId,
+            },
+          });
+        }
         await internalPost(internalConfig, "/api/internal/pipeline-runs/update-status", {
           pipeline_run_id,
           status: "failed",
@@ -526,3 +802,8 @@ export const runPipeline = task({
     return { pipeline_run_id, status: "succeeded" };
   },
 });
+
+export const __testables = {
+  inferFieldsUpdatedFromOperationResult,
+  operationIdForStep,
+};
