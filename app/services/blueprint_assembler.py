@@ -182,9 +182,29 @@ def _all_desired_fields_covered(
     operation_ids: set[str],
     operation_map: dict[str, dict[str, Any]],
     desired_fields: set[str],
+    entity_type: str,
 ) -> bool:
-    produced_fields = _produced_fields_for_operations(operation_ids, operation_map)
-    return desired_fields.issubset(produced_fields)
+    for field in desired_fields:
+        producers: list[dict[str, Any]] = []
+        for operation_id in operation_ids:
+            operation = operation_map.get(operation_id)
+            if not operation:
+                continue
+            if field in _operation_produces_set(operation):
+                producers.append(operation)
+        if not producers:
+            return False
+        if entity_type == "company" and field not in _ECOMMERCE_SPECIFIC_FIELDS:
+            if all(op.get("operation_id") == "company.enrich.ecommerce" for op in producers):
+                available_non_ecommerce = [
+                    op
+                    for op in get_operations_that_produce(field)
+                    if op.get("operation_id") != "company.enrich.ecommerce"
+                    and op.get("entity_type") == "company"
+                ]
+                if available_non_ecommerce:
+                    return False
+    return True
 
 
 def _redundancy_candidate_sort_key(
@@ -241,6 +261,7 @@ def _deduplicate_redundant_operations(
                 operation_ids=remaining_ids,
                 operation_map=operation_map,
                 desired_fields=desired_fields,
+                entity_type=entity_type,
             ):
                 continue
             if not _required_inputs_satisfied_for_selection(
