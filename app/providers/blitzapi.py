@@ -22,6 +22,20 @@ def _as_str(value: Any) -> str | None:
     return cleaned or None
 
 
+def _as_str_list(value: Any) -> list[str] | None:
+    if isinstance(value, str):
+        candidate = _as_str(value)
+        return [candidate] if candidate else None
+    if not isinstance(value, list):
+        return None
+    cleaned: list[str] = []
+    for item in value:
+        candidate = _as_str(item)
+        if candidate:
+            cleaned.append(candidate)
+    return cleaned or None
+
+
 def canonical_company_result(
     *,
     company: dict[str, Any],
@@ -209,6 +223,155 @@ async def person_search(
     return {
         "attempt": {"provider": "blitzapi", "action": "person_search", "status": "found" if mapped else "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
         "mapped": {"results": mapped, "pagination": {"page": body.get("page"), "totalPages": body.get("total_pages"), "totalItems": body.get("results_length")}},
+    }
+
+
+async def search_employees(
+    *,
+    api_key: str | None,
+    company_linkedin_url: str | None,
+    job_level: str | list[str] | None,
+    job_function: str | list[str] | None,
+    country_code: str | list[str] | None,
+    max_results: int,
+    page: int,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "employee_finder", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": {"results": [], "pagination": None},
+        }
+    if not company_linkedin_url:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "employee_finder", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    payload: dict[str, Any] = {
+        "company_linkedin_url": company_linkedin_url,
+        "max_results": max(min(max_results, 100), 1),
+        "page": max(page, 1),
+    }
+    normalized_country_codes = _as_str_list(country_code)
+    normalized_job_levels = _as_str_list(job_level)
+    normalized_job_functions = _as_str_list(job_function)
+    if normalized_country_codes:
+        payload["country_code"] = normalized_country_codes
+    if normalized_job_levels:
+        payload["job_level"] = normalized_job_levels
+    if normalized_job_functions:
+        payload["job_function"] = normalized_job_functions
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await client.post(
+            "https://api.blitz-api.ai/v2/search/employee-finder",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "employee_finder",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    mapped = [canonical_person_result(person=_as_dict(person), raw=_as_dict(person)) for person in _as_list(body.get("results"))]
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "employee_finder",
+            "status": "found" if mapped else "not_found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "results": mapped,
+            "pagination": {
+                "page": body.get("page"),
+                "totalPages": body.get("total_pages"),
+                "totalItems": body.get("results_length"),
+            },
+        },
+    }
+
+
+async def search_icp_waterfall(
+    *,
+    api_key: str | None,
+    company_linkedin_url: str | None,
+    cascade: list[dict[str, Any]] | None,
+    max_results: int,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "waterfall_icp_search", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": {"results": [], "pagination": None},
+        }
+    if not company_linkedin_url or not cascade:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "waterfall_icp_search", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    payload = {
+        "company_linkedin_url": company_linkedin_url,
+        "cascade": cascade,
+        "max_results": max(min(max_results, 100), 1),
+    }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await client.post(
+            "https://api.blitz-api.ai/v2/search/waterfall-icp-keyword",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "waterfall_icp_search",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"results": [], "pagination": None},
+        }
+
+    mapped = [
+        canonical_person_result(
+            person=_as_dict(_as_dict(row).get("person")),
+            raw=_as_dict(row),
+        )
+        for row in _as_list(body.get("results"))
+    ]
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "waterfall_icp_search",
+            "status": "found" if mapped else "not_found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "results": mapped,
+            "pagination": {
+                "page": 1,
+                "totalPages": 1,
+                "totalItems": body.get("results_length", len(mapped)),
+            },
+        },
     }
 
 
