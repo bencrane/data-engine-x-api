@@ -72,6 +72,11 @@ from app.services.shovels_operations import (
     execute_contractor_search,
     execute_permit_search,
 )
+from app.services.courtlistener_operations import (
+    execute_company_research_check_court_filings,
+    execute_company_research_get_docket_detail,
+    execute_company_signal_bankruptcy_filings,
+)
 
 router = APIRouter()
 
@@ -104,6 +109,9 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.lookup_champions",
     "company.research.lookup_champion_testimonials",
     "company.research.check_vc_funding",
+    "company.research.check_court_filings",
+    "company.signal.bankruptcy_filings",
+    "company.research.get_docket_detail",
     "company.research.fetch_sec_filings",
     "company.analyze.sec_10k",
     "company.analyze.sec_10q",
@@ -465,6 +473,39 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.check_vc_funding":
         result = await execute_company_research_check_vc_funding(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.check_court_filings":
+        result = await execute_company_research_check_court_filings(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.signal.bankruptcy_filings":
+        result = await execute_company_signal_bankruptcy_filings(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.get_docket_detail":
+        result = await execute_company_research_get_docket_detail(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
