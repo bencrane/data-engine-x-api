@@ -135,7 +135,7 @@ operations:
       ]
     supports_fan_out: false
     providers: ["prospeo", "blitzapi", "companyenrich"]
-    cost_tier: "low"
+    cost_tier: "high"
 
   - operation_id: "company.search.ecommerce"
     entity_type: "company"
@@ -174,7 +174,7 @@ operations:
       ]
     supports_fan_out: false
     providers: ["storeleads"]
-    cost_tier: "medium"
+    cost_tier: "high"
 
   - operation_id: "company.ads.search.linkedin"
     entity_type: "company"

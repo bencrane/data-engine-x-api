@@ -120,7 +120,7 @@ def _wire_requirement_dependencies(
     preferred_entity_type: str,
 ) -> set[tuple[str, str]]:
     edges: set[tuple[str, str]] = set()
-    available_fields = initial_fields | _produced_fields_for_operations(operation_ids, operation_map)
+    available_fields = initial_fields | _produced_fields_for_operations(operation_ids - {operation_id}, operation_map)
     all_of, any_of = _required_inputs(operation)
 
     for expr in all_of:
@@ -155,7 +155,7 @@ def _wire_requirement_dependencies(
                     edges.add((producer_id, operation_id))
 
     # Add explicit dependencies for already-selected producers that satisfy requirements.
-    available_fields = initial_fields | _produced_fields_for_operations(operation_ids, operation_map)
+    available_fields = initial_fields | _produced_fields_for_operations(operation_ids - {operation_id}, operation_map)
     for req_expr in all_of:
         for selected_id in operation_ids:
             if selected_id == operation_id:
