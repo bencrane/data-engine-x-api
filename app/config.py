@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     adyntel_timeout_seconds: int = 90
     llm_primary_model: str = "gemini"
     llm_fallback_model: str = "gpt-4"
+    anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
     openai_api_key: str | None = None
 

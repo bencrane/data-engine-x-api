@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.auth import SuperAdminContext, get_current_super_admin
 from app.config import get_settings
-from app.providers import gemini, openai_provider
+from app.providers import anthropic_provider, gemini, openai_provider
 from app.registry.loader import get_all_operations
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.blueprint_assembler import assemble_blueprint
@@ -93,12 +93,15 @@ async def _extract_fields_and_options_from_prompt(*, prompt: str, entity_type: s
     operations = get_all_operations()
     llm_prompt = _build_nl_assembler_prompt(prompt=prompt, entity_type=entity_type, operations=operations)
 
-    gemini_result = await gemini.resolve_structured(
-        api_key=settings.gemini_api_key,
-        model=settings.llm_primary_model,
+    # Try Anthropic first
+    anthropic_result = await anthropic_provider.resolve_structured(
+        api_key=settings.anthropic_api_key,
+        model="claude-sonnet-4-20250514",
         prompt=llm_prompt,
     )
-    mapped = gemini_result.get("mapped") if isinstance(gemini_result, dict) else None
+    mapped = anthropic_result.get("mapped") if isinstance(anthropic_result, dict) else None
+
+    # Fallback to OpenAI
     if not isinstance(mapped, dict):
         openai_result = await openai_provider.resolve_structured(
             api_key=settings.openai_api_key,
@@ -106,6 +109,15 @@ async def _extract_fields_and_options_from_prompt(*, prompt: str, entity_type: s
             prompt=llm_prompt,
         )
         mapped = openai_result.get("mapped") if isinstance(openai_result, dict) else None
+
+    # Fallback to Gemini
+    if not isinstance(mapped, dict):
+        gemini_result = await gemini.resolve_structured(
+            api_key=settings.gemini_api_key,
+            model=settings.llm_primary_model,
+            prompt=llm_prompt,
+        )
+        mapped = gemini_result.get("mapped") if isinstance(gemini_result, dict) else None
 
     if not isinstance(mapped, dict):
         return [], {}
