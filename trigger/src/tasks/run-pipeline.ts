@@ -1,4 +1,5 @@
 import { logger, task } from "@trigger.dev/sdk/v3";
+import { evaluateCondition } from "../utils/evaluate-condition";
 
 interface RunPipelinePayload {
   pipeline_run_id: string;
@@ -20,6 +21,7 @@ interface InternalPipelineRun {
       position: number;
       operation_id?: string | null;
       step_config?: Record<string, unknown> | null;
+      condition?: Record<string, unknown> | null;
       fan_out?: boolean;
       is_enabled?: boolean;
     }>;
@@ -171,6 +173,40 @@ function extractFanOutResults(output: Record<string, unknown> | null | undefined
   return value.filter((item) => typeof item === "object" && item !== null) as Array<Record<string, unknown>>;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getStepCondition(stepSnapshot: InternalPipelineRun["blueprint_snapshot"]["steps"][number]): object | null {
+  if (isObject(stepSnapshot.step_config) && "condition" in stepSnapshot.step_config) {
+    const fromConfig = stepSnapshot.step_config.condition;
+    if (isObject(fromConfig)) return fromConfig;
+    if (fromConfig === null) return null;
+  }
+  if (isObject(stepSnapshot.condition)) {
+    return stepSnapshot.condition;
+  }
+  return null;
+}
+
+async function skipStepWithReason(
+  internalConfig: InternalConfig,
+  stepResultId: string,
+  cumulativeContext: Record<string, unknown>,
+  skipReason: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await internalPost(internalConfig, "/api/internal/step-results/update", {
+    step_result_id: stepResultId,
+    status: "skipped",
+    input_payload: cumulativeContext,
+    output_payload: {
+      skip_reason: skipReason,
+      metadata,
+    },
+  });
+}
+
 export const runPipeline = task({
   id: "run-pipeline",
   retry: { maxAttempts: 1 },
@@ -213,8 +249,13 @@ export const runPipeline = task({
     const initialInput = snapshotEntity.input || submissionInput;
     let cumulativeContext: Record<string, unknown> = { ...initialInput };
     let lastSuccessfulOperationId: string | null = null;
+    let shouldShortCircuitRemainingSteps = false;
 
     for (const stepSnapshot of orderedSteps) {
+      if (shouldShortCircuitRemainingSteps) {
+        break;
+      }
+
       const stepResult = run.step_results.find((sr) => sr.step_position === stepSnapshot.position);
       if (!stepResult) throw new Error(`Missing step_result for position ${stepSnapshot.position}`);
 
@@ -242,6 +283,50 @@ export const runPipeline = task({
           submission_id: run.submission_id,
         });
         return { pipeline_run_id, status: "failed", failed_step_position: stepSnapshot.position, error: message };
+      }
+
+      const condition = getStepCondition(stepSnapshot);
+      const shouldRun = evaluateCondition(condition, cumulativeContext);
+      if (!shouldRun) {
+        await skipStepWithReason(
+          internalConfig,
+          stepResult.id,
+          cumulativeContext,
+          "condition_not_met",
+          {
+            condition,
+            step_position: stepSnapshot.position,
+            operation_id: operationId,
+          },
+        );
+
+        const fanOutEnabled =
+          stepSnapshot.fan_out === true ||
+          stepSnapshot.step_config?.fan_out === true;
+
+        if (fanOutEnabled) {
+          for (const downstreamStep of orderedSteps) {
+            if (downstreamStep.position <= stepSnapshot.position) continue;
+            const downstreamStepResult = run.step_results.find(
+              (sr) => sr.step_position === downstreamStep.position,
+            );
+            if (!downstreamStepResult) continue;
+            await skipStepWithReason(
+              internalConfig,
+              downstreamStepResult.id,
+              cumulativeContext,
+              "parent_step_condition_not_met",
+              {
+                parent_step_position: stepSnapshot.position,
+                parent_operation_id: operationId,
+                parent_condition: condition,
+              },
+            );
+          }
+          shouldShortCircuitRemainingSteps = true;
+        }
+
+        continue;
       }
 
       await internalPost(internalConfig, "/api/internal/step-results/update", {
