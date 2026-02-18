@@ -19,7 +19,11 @@ from app.services.company_operations import (
     execute_company_enrich_technographics,
 )
 from app.services.person_enrich_operations import execute_person_enrich_profile
-from app.services.search_operations import execute_company_search, execute_person_search
+from app.services.search_operations import (
+    execute_company_search,
+    execute_company_search_ecommerce,
+    execute_person_search,
+)
 from app.services.adyntel_operations import (
     execute_company_ads_search_google,
     execute_company_ads_search_linkedin,
@@ -52,6 +56,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.enrich.profile",
     "company.enrich.technographics",
     "company.search",
+    "company.search.ecommerce",
     "company.ads.search.linkedin",
     "company.ads.search.meta",
     "company.ads.search.google",
@@ -202,6 +207,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.search":
         result = await execute_company_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.search.ecommerce":
+        result = await execute_company_search_ecommerce(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
