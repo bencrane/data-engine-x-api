@@ -29,3 +29,17 @@ class DiscoverCompetitorsOutput(BaseModel):
     competitors: list[CompetitorItem]
     competitor_count: int
     source_provider: str = "revenueinfra"
+
+
+class CustomerItem(BaseModel):
+    customer_name: str | None = None
+    customer_domain: str | None = None
+    customer_linkedin_url: str | None = None
+    origin_company_name: str | None = None
+    origin_company_domain: str | None = None
+
+
+class LookupCustomersOutput(BaseModel):
+    customers: list[CustomerItem]
+    customer_count: int
+    source_provider: str = "revenueinfra"
