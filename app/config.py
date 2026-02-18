@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     theirstack_api_key: str | None = None
     enigma_api_key: str | None = None
     fmcsa_api_key: str | None = None
+    shovels_api_key: str | None = None
     adyntel_api_key: str | None = None
     adyntel_account_email: str | None = None
     revenueinfra_api_url: str = "https://api.revenueinfra.com"
