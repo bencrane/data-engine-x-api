@@ -64,6 +64,13 @@ class EntityTimelineRequest(BaseModel):
     per_page: int = Field(default=25, ge=1, le=100)
 
 
+class EntitySnapshotsRequest(BaseModel):
+    entity_type: str
+    entity_id: str
+    limit: int = Field(default=10, ge=1, le=100)
+    org_id: str | None = None
+
+
 @router.post(
     "/companies",
     response_model=DataEnvelope,
@@ -219,5 +226,45 @@ async def get_entity_timeline(
                 "per_page": payload.per_page,
                 "returned": len(result.data),
             },
+        }
+    )
+
+
+@router.post(
+    "/snapshots",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def get_entity_snapshots(
+    payload: EntitySnapshotsRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    entity_type = _normalize_text(payload.entity_type)
+    if entity_type not in {"company", "person"}:
+        return error_response("entity_type must be either 'company' or 'person'", 400)
+
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin snapshots queries", 400)
+
+    client = get_supabase_client()
+    result = (
+        client.table("entity_snapshots")
+        .select("*")
+        .eq("org_id", org_id)
+        .eq("entity_type", entity_type)
+        .eq("entity_id", payload.entity_id)
+        .order("captured_at", desc=True)
+        .limit(payload.limit)
+        .execute()
+    )
+
+    return DataEnvelope(
+        data={
+            "entity_type": entity_type,
+            "entity_id": payload.entity_id,
+            "items": result.data,
+            "returned": len(result.data),
         }
     )
