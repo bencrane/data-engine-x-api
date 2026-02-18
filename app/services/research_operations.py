@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.contracts.company_research import (
     CheckVCFundingOutput,
     DiscoverCompetitorsOutput,
+    FindSimilarCompaniesOutput,
     LookupAlumniOutput,
     LookupChampionTestimonialsOutput,
     LookupChampionsOutput,
@@ -374,6 +375,17 @@ def _extract_company_research_discover_competitors_inputs(
 
 
 def _extract_company_research_lookup_customers_inputs(
+    input_data: dict[str, Any],
+) -> str | None:
+    context = _company_research_context(input_data)
+    company_profile = context.get("company_profile")
+    profile = company_profile if isinstance(company_profile, dict) else {}
+    return _normalize_company_domain(
+        context.get("company_domain") or profile.get("company_domain")
+    )
+
+
+def _extract_company_research_find_similar_companies_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
     context = _company_research_context(input_data)
@@ -912,5 +924,93 @@ async def execute_company_research_discover_competitors(
         "operation_id": operation_id,
         "status": "not_found" if status == "not_found" else "found",
         "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_research_find_similar_companies(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    operation_id = "company.research.find_similar_companies"
+
+    company_domain = _extract_company_research_find_similar_companies_inputs(input_data)
+    if not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await revenueinfra.find_similar_companies(
+        base_url=settings.revenueinfra_api_url,
+        domain=company_domain,
+    )
+    attempt = result.get("attempt") if isinstance(result, dict) else {}
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result, dict) else None
+
+    status = attempt.get("status") if isinstance(attempt, dict) else "failed"
+    if status == "failed":
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+        }
+    if status == "skipped":
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    similar_companies: list[dict[str, Any]] = []
+    similar_count = 0
+    if isinstance(mapped, dict):
+        if isinstance(mapped.get("similar_companies"), list):
+            similar_companies = mapped.get("similar_companies") or []
+        if isinstance(mapped.get("similar_count"), int):
+            similar_count = mapped.get("similar_count") or 0
+
+    if similar_count != len(similar_companies):
+        similar_count = len(similar_companies)
+
+    try:
+        output = FindSimilarCompaniesOutput.model_validate(
+            {
+                "similar_companies": similar_companies,
+                "similar_count": similar_count,
+                "source_provider": "revenueinfra",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "not_found" if status == "not_found" else "found",
+        "output": {
+            "similar_companies": output["similar_companies"],
+            "similar_count": output["similar_count"],
+            "source_provider": output["source_provider"],
+        },
         "provider_attempts": attempts,
     }
