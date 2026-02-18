@@ -76,16 +76,100 @@ def _normalize_extracted_options(raw_options: Any) -> dict[str, Any]:
     return options
 
 
+def _extract_available_fields(operations: list[dict[str, Any]], entity_type: str) -> dict[str, list[str]]:
+    """Extract and categorize available fields from operations registry."""
+    all_fields: set[str] = set()
+    for op in operations:
+        if op.get("entity_type") != entity_type:
+            continue
+        produces = op.get("produces")
+        if isinstance(produces, list):
+            all_fields.update(f for f in produces if isinstance(f, str))
+
+    # Categorize fields
+    categories: dict[str, list[str]] = {
+        "identity": [],
+        "contact": [],
+        "company_info": [],
+        "location": [],
+        "employment": [],
+        "financials": [],
+        "research": [],
+        "ecommerce": [],
+        "ads": [],
+        "metadata": [],
+    }
+
+    for field in sorted(all_fields):
+        if field in ("email", "email_status", "mobile_phone", "mobile_status", "verification", "contact_info"):
+            categories["contact"].append(field)
+        elif field in ("full_name", "first_name", "last_name", "linkedin_url", "headline", "bio", "company_name", "company_domain", "company_website", "company_linkedin_url", "company_linkedin_id", "company_type", "brand_name", "merchant_name"):
+            categories["identity"].append(field)
+        elif field in ("hq_locality", "hq_country_code", "location", "location_name", "country", "country_code", "city", "top_location_name", "top_location_address", "top_location_city", "top_location_state"):
+            categories["location"].append(field)
+        elif field in ("current_title", "current_company_name", "current_company_domain", "current_company_linkedin_url", "current_job_title", "past_company_name", "past_company_domain", "past_job_title", "job_title", "seniority", "department", "work_history", "education", "skills", "certifications", "honors", "recommendations", "total_tenure_years"):
+            categories["employment"].append(field)
+        elif field in ("employee_count", "employee_range", "industry_primary", "industry_derived", "founded_year", "description", "description_raw", "specialties", "follower_count", "connections_count", "logo_url", "technologies", "categories", "technology_count", "features"):
+            categories["company_info"].append(field)
+        elif field in ("annual_revenue_range", "annual_card_revenue", "card_revenue_period", "card_revenue_period_start", "card_revenue_period_end", "estimated_monthly_sales_cents", "monthly_app_spend_cents", "has_raised_vc", "vc_count", "vc_names", "vcs", "founded_date"):
+            categories["financials"].append(field)
+        elif field in ("competitors", "competitor_count", "similar_companies", "similar_count", "similarity_score", "customers", "customer_count", "customer_name", "customer_domain", "customer_linkedin_url", "alumni", "alumni_count", "champions", "champion_count", "case_study_url", "testimonial", "g2_url", "pricing_page_url", "confidence"):
+            categories["research"].append(field)
+        elif field in ("ecommerce_platform", "ecommerce_plan", "product_count", "global_rank", "platform_rank", "installed_apps", "store_created_at", "shipping_carriers", "sales_carriers", "domain_state", "location_count", "top_location_rank_position", "top_location_rank_cohort_size"):
+            categories["ecommerce"].append(field)
+        elif field in ("ads", "ads_count", "total_ads", "number_of_ads", "continuation_token", "is_last_page", "is_result_complete", "page_id", "search_type", "endpoint_used", "media_type", "active_status"):
+            categories["ads"].append(field)
+        elif field in ("free_trial", "pricing_visibility", "sales_motion", "pricing_model", "billing_default", "number_of_tiers", "add_ons_offered", "enterprise_tier_exists", "security_compliance_gating", "annual_commitment_required", "plan_naming_style", "custom_pricing_mentioned", "money_back_guarantee", "minimum_seats", "fields_resolved"):
+            categories["research"].append(field)
+        else:
+            categories["metadata"].append(field)
+
+    # Remove empty categories
+    return {k: v for k, v in categories.items() if v}
+
+
 def _build_nl_assembler_prompt(*, prompt: str, entity_type: str, operations: list[dict[str, Any]]) -> str:
-    return (
-        "You convert user intent into a blueprint assembly payload.\n"
-        "Return JSON only with keys: desired_fields (string[]), options (object).\n"
-        "Options keys allowed: include_work_history (bool), max_results (int), job_title (string), include_pricing_intelligence (bool).\n"
-        "Use only fields and operations that exist in this registry context.\n"
-        f"entity_type: {entity_type}\n"
-        f"registry: {json.dumps(operations)}\n"
-        f"user_prompt: {prompt}"
-    )
+    categorized_fields = _extract_available_fields(operations, entity_type)
+
+    field_list_str = ""
+    for category, fields in categorized_fields.items():
+        field_list_str += f"\n  {category.upper()}: {', '.join(fields)}"
+
+    all_valid_fields = []
+    for fields in categorized_fields.values():
+        all_valid_fields.extend(fields)
+
+    return f"""You convert user intent into a blueprint assembly payload for {entity_type} enrichment.
+
+TASK: Parse the user's request and return a JSON object with:
+- desired_fields: array of field names the user wants (ONLY use fields from the valid list below)
+- options: object with optional settings
+
+AVAILABLE FIELDS FOR {entity_type.upper()}:{field_list_str}
+
+VALID FIELD NAMES (use exactly these strings):
+{json.dumps(sorted(all_valid_fields))}
+
+OPTIONS (include only if relevant to the request):
+- include_work_history (bool): Set true if user wants employment history
+- max_results (int): Limit for search results
+- job_title (string): Filter by job title
+- include_pricing_intelligence (bool): Set true if user wants pricing page analysis
+
+EXAMPLES:
+
+Input: "I need company profiles with LinkedIn and employee count"
+Output: {{"desired_fields": ["company_name", "company_domain", "company_linkedin_url", "employee_count", "employee_range"], "options": {{}}}}
+
+Input: "Find people at this company with their emails and phone numbers"
+Output: {{"desired_fields": ["full_name", "linkedin_url", "email", "mobile_phone", "current_title"], "options": {{}}}}
+
+Input: "Get competitor analysis and similar companies"
+Output: {{"desired_fields": ["competitors", "competitor_count", "similar_companies", "similar_count"], "options": {{}}}}
+
+USER REQUEST: {prompt}
+
+Return JSON only. Do not include any explanation or markdown."""
 
 
 async def _extract_fields_and_options_from_prompt(*, prompt: str, entity_type: str) -> tuple[list[str], dict[str, Any]]:
