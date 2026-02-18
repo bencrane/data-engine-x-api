@@ -9,6 +9,7 @@ from app.routers import (
     execute_v1,
     health,
     internal,
+    registry_v1,
     super_admin_api,
     super_admin_auth,
     super_admin_flow,
@@ -87,4 +88,9 @@ app.include_router(
     entities_v1.router,
     prefix="/api/v1/entities",
     tags=["entities-v1"],
+)
+app.include_router(
+    registry_v1.router,
+    prefix="/api/v1/registry",
+    tags=["registry-v1"],
 )
