@@ -7,6 +7,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.company_research import (
     DiscoverCompetitorsOutput,
+    LookupAlumniOutput,
     LookupChampionTestimonialsOutput,
     LookupChampionsOutput,
     LookupCustomersOutput,
@@ -393,6 +394,17 @@ def _extract_company_research_lookup_champions_inputs(
     )
 
 
+def _extract_company_research_lookup_alumni_inputs(
+    input_data: dict[str, Any],
+) -> str | None:
+    context = _company_research_context(input_data)
+    company_profile = context.get("company_profile")
+    profile = company_profile if isinstance(company_profile, dict) else {}
+    return _normalize_company_domain(
+        context.get("company_domain") or profile.get("company_domain")
+    )
+
+
 async def execute_company_research_lookup_customers(
     *,
     input_data: dict[str, Any],
@@ -467,6 +479,86 @@ async def execute_company_research_lookup_customers(
         "output": {
             "customers": output["customers"],
             "customer_count": output["customer_count"],
+            "source_provider": output["source_provider"],
+        },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_research_lookup_alumni(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    operation_id = "company.research.lookup_alumni"
+
+    company_domain = _extract_company_research_lookup_alumni_inputs(input_data)
+    if not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await revenueinfra.lookup_alumni(
+        base_url=settings.revenueinfra_api_url,
+        domain=company_domain,
+    )
+    attempt = result.get("attempt") if isinstance(result, dict) else {}
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result, dict) else None
+
+    status = attempt.get("status") if isinstance(attempt, dict) else "failed"
+    if status in {"failed", "skipped"}:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+        }
+
+    alumni = []
+    alumni_count = 0
+    if isinstance(mapped, dict):
+        if isinstance(mapped.get("alumni"), list):
+            alumni = mapped.get("alumni") or []
+        if isinstance(mapped.get("alumni_count"), int):
+            alumni_count = mapped.get("alumni_count") or 0
+
+    if alumni_count != len(alumni):
+        alumni_count = len(alumni)
+
+    try:
+        output = LookupAlumniOutput.model_validate(
+            {
+                "alumni": alumni,
+                "alumni_count": alumni_count,
+                "source_provider": "revenueinfra",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "not_found" if status == "not_found" else "found",
+        "output": {
+            "alumni": output["alumni"],
+            "alumni_count": output["alumni_count"],
             "source_provider": output["source_provider"],
         },
         "provider_attempts": attempts,
