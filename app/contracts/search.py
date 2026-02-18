@@ -47,3 +47,22 @@ class PersonSearchOutput(BaseModel):
     result_count: int
     provider_order_used: list[str]
     pagination: dict[str, Any]
+
+
+class EcommerceSearchResultItem(BaseModel):
+    merchant_name: str | None = None
+    domain: str | None = None
+    ecommerce_platform: str | None = None
+    ecommerce_plan: str | None = None
+    estimated_monthly_sales_cents: int | None = None
+    global_rank: int | None = None
+    country_code: str | None = None
+    description: str | None = None
+    source_provider: str = "storeleads"
+
+
+class EcommerceSearchOutput(BaseModel):
+    results: list[EcommerceSearchResultItem]
+    result_count: int
+    page: int
+    source_provider: str = "storeleads"
