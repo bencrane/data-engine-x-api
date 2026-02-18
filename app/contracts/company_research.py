@@ -43,3 +43,28 @@ class LookupCustomersOutput(BaseModel):
     customers: list[CustomerItem]
     customer_count: int
     source_provider: str = "revenueinfra"
+
+
+class ChampionItem(BaseModel):
+    full_name: str | None = None
+    job_title: str | None = None
+    company_name: str | None = None
+    company_domain: str | None = None
+    company_linkedin_url: str | None = None
+    case_study_url: str | None = None
+
+
+class ChampionTestimonialItem(ChampionItem):
+    testimonial: str | None = None
+
+
+class LookupChampionsOutput(BaseModel):
+    champions: list[ChampionItem]
+    champion_count: int
+    source_provider: str = "revenueinfra"
+
+
+class LookupChampionTestimonialsOutput(BaseModel):
+    champions: list[ChampionTestimonialItem]
+    champion_count: int
+    source_provider: str = "revenueinfra"
