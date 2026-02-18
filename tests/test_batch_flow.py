@@ -142,7 +142,7 @@ async def test_create_fan_out_child_pipeline_runs(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(submission_flow, "_create_step_result_rows", _create_step_result_rows)
     monkeypatch.setattr(submission_flow, "trigger_pipeline_run", async_trigger)
 
-    child_runs = await submission_flow.create_fan_out_child_pipeline_runs(
+    fan_out_result = await submission_flow.create_fan_out_child_pipeline_runs(
         org_id="11111111-1111-1111-1111-111111111111",
         company_id="22222222-2222-2222-2222-222222222222",
         submission_id="submission-1",
@@ -164,9 +164,12 @@ async def test_create_fan_out_child_pipeline_runs(monkeypatch: pytest.MonkeyPatc
         parent_cumulative_context={"canonical_domain": "acme.com"},
     )
 
+    child_runs = fan_out_result["child_runs"]
     assert len(child_runs) == 2
     assert async_trigger.await_count == 2
     assert all(call["parent_pipeline_run_id"] == "parent-run-1" for call in create_calls)
     assert all(call["start_from_position"] == 3 for call in step_row_calls)
     assert child_runs[0]["entity_input"]["canonical_domain"] == "acme.com"
     assert child_runs[0]["entity_input"]["full_name"] == "Alex A"
+    assert fan_out_result["skipped_duplicates_count"] == 0
+    assert fan_out_result["skipped_duplicate_identifiers"] == []

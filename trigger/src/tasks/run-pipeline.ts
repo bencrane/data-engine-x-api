@@ -56,6 +56,8 @@ interface FanOutChildRunsResponse {
     entity_input?: Record<string, unknown>;
   }>;
   child_run_ids: string[];
+  skipped_duplicates_count?: number;
+  skipped_duplicate_identifiers?: string[];
 }
 
 interface ExecuteResponseEnvelope {
@@ -659,6 +661,9 @@ export const runPipeline = task({
               fan_out: {
                 child_run_ids: fanOutResponse.child_run_ids,
                 child_count: fanOutResponse.child_run_ids.length,
+                child_count_created: fanOutResponse.child_run_ids.length,
+                child_count_skipped_duplicates: fanOutResponse.skipped_duplicates_count ?? 0,
+                skipped_duplicate_identifiers: fanOutResponse.skipped_duplicate_identifiers ?? [],
                 start_from_position: stepSnapshot.position + 1,
               },
             },

@@ -101,6 +101,12 @@ class InternalPipelineRunFanOutRequest(BaseModel):
     provider_attempts: list[dict[str, Any]] | None = None
 
 
+class InternalFanOutCreateResult(BaseModel):
+    child_runs: list[dict[str, Any]]
+    skipped_duplicates_count: int = 0
+    skipped_duplicate_identifiers: list[str] = []
+
+
 class InternalRecordStepTimelineEventRequest(BaseModel):
     org_id: str
     company_id: str | None = None
@@ -495,7 +501,7 @@ async def internal_fan_out_pipeline_runs(
     if payload.start_from_position <= 0:
         return error_response("start_from_position must be greater than 0", 400)
 
-    child_runs = await create_fan_out_child_pipeline_runs(
+    fan_out_result = await create_fan_out_child_pipeline_runs(
         org_id=payload.org_id,
         company_id=payload.company_id,
         submission_id=payload.submission_id,
@@ -506,6 +512,7 @@ async def internal_fan_out_pipeline_runs(
         start_from_position=payload.start_from_position,
         parent_cumulative_context=payload.parent_cumulative_context,
     )
+    child_runs = fan_out_result["child_runs"]
 
     fan_out_operation_id = payload.fan_out_operation_id or "person.search"
     company_context = _extract_company_context_for_timeline(
@@ -533,6 +540,9 @@ async def internal_fan_out_pipeline_runs(
         metadata={
             "event_type": "fan_out_discovery",
             "child_pipeline_run_ids": [row["pipeline_run_id"] for row in child_runs],
+            "child_count_created": len(child_runs),
+            "child_count_skipped_duplicates": fan_out_result["skipped_duplicates_count"],
+            "skipped_duplicate_identifiers": fan_out_result["skipped_duplicate_identifiers"],
             "provider_attempts": payload.provider_attempts or [],
         },
     )
@@ -572,6 +582,8 @@ async def internal_fan_out_pipeline_runs(
             "parent_pipeline_run_id": payload.parent_pipeline_run_id,
             "child_runs": child_runs,
             "child_run_ids": [row["pipeline_run_id"] for row in child_runs],
+            "skipped_duplicates_count": fan_out_result["skipped_duplicates_count"],
+            "skipped_duplicate_identifiers": fan_out_result["skipped_duplicate_identifiers"],
         }
     )
 

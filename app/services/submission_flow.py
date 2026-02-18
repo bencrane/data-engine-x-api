@@ -21,6 +21,49 @@ def _is_uuid(value: str) -> bool:
         return False
 
 
+def _normalize_identity_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text.lower()
+
+
+def _extract_fan_out_identity_tokens(entity: dict[str, Any]) -> list[str]:
+    entity_type = str(entity.get("entity_type") or "person").strip().lower()
+    tokens: list[str] = []
+
+    if entity_type == "company":
+        company_domain = _normalize_identity_value(
+            entity.get("company_domain") or entity.get("canonical_domain") or entity.get("domain")
+        )
+        company_linkedin_url = _normalize_identity_value(
+            entity.get("company_linkedin_url") or entity.get("linkedin_url")
+        )
+        if company_domain:
+            tokens.append(f"company:domain:{company_domain}")
+        if company_linkedin_url:
+            tokens.append(f"company:linkedin:{company_linkedin_url.rstrip('/')}")
+        return tokens
+
+    linkedin_url = _normalize_identity_value(entity.get("linkedin_url"))
+    work_email = _normalize_identity_value(entity.get("work_email") or entity.get("email"))
+    if linkedin_url:
+        tokens.append(f"person:linkedin:{linkedin_url.rstrip('/')}")
+    if work_email:
+        tokens.append(f"person:email:{work_email}")
+    return tokens
+
+
+def _select_fan_out_duplicate_identifier(tokens: list[str]) -> str:
+    for prefix in ("person:linkedin:", "person:email:", "company:domain:", "company:linkedin:"):
+        for token in tokens:
+            if token.startswith(prefix):
+                return token
+    return tokens[0]
+
+
 def _blueprint_version_from_snapshot(snapshot: dict[str, Any]) -> int:
     digest = hashlib.sha256(
         str(snapshot).encode("utf-8")
@@ -346,9 +389,13 @@ async def create_fan_out_child_pipeline_runs(
     fan_out_entities: list[dict[str, Any]],
     start_from_position: int,
     parent_cumulative_context: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     if not fan_out_entities:
-        return []
+        return {
+            "child_runs": [],
+            "skipped_duplicates_count": 0,
+            "skipped_duplicate_identifiers": [],
+        }
 
     base_context = parent_cumulative_context if isinstance(parent_cumulative_context, dict) else {}
     steps = blueprint_snapshot.get("steps") if isinstance(blueprint_snapshot, dict) else None
@@ -356,11 +403,23 @@ async def create_fan_out_child_pipeline_runs(
         raise ValueError("blueprint_snapshot.steps must be present for fan-out child creation")
 
     child_runs: list[dict[str, Any]] = []
+    skipped_duplicate_identifiers: list[str] = []
+    seen_identifiers: set[str] = set()
     client = get_supabase_client()
 
     for idx, entity in enumerate(fan_out_entities):
         if not isinstance(entity, dict):
             continue
+        identity_tokens = _extract_fan_out_identity_tokens(entity)
+        duplicate_token = next(
+            (token for token in identity_tokens if token in seen_identifiers),
+            None,
+        )
+        if duplicate_token:
+            skipped_duplicate_identifiers.append(_select_fan_out_duplicate_identifier(identity_tokens))
+            continue
+        seen_identifiers.update(identity_tokens)
+
         entity_input = {**base_context, **entity}
         child_snapshot = {
             **blueprint_snapshot,
@@ -429,7 +488,11 @@ async def create_fan_out_child_pipeline_runs(
             }
         )
 
-    return child_runs
+    return {
+        "child_runs": child_runs,
+        "skipped_duplicates_count": len(skipped_duplicate_identifiers),
+        "skipped_duplicate_identifiers": skipped_duplicate_identifiers,
+    }
 
 
 async def retry_pipeline_run_for_submission(

@@ -89,15 +89,19 @@ async def test_internal_fan_out_accepts_child_parent_and_returns_grandchildren(m
         }
     )
     mocked_child_creation = AsyncMock(
-        return_value=[
-            {
-                "pipeline_run_id": "grandchild-run-1",
-                "pipeline_run_status": "queued",
-                "trigger_run_id": "trigger-grandchild-1",
-                "entity_type": "person",
-                "entity_input": {"full_name": "Alex Doe"},
-            }
-        ]
+        return_value={
+            "child_runs": [
+                {
+                    "pipeline_run_id": "grandchild-run-1",
+                    "pipeline_run_status": "queued",
+                    "trigger_run_id": "trigger-grandchild-1",
+                    "entity_type": "person",
+                    "entity_input": {"full_name": "Alex Doe"},
+                }
+            ],
+            "skipped_duplicates_count": 0,
+            "skipped_duplicate_identifiers": [],
+        }
     )
 
     monkeypatch.setattr(internal, "get_supabase_client", lambda: supabase)
