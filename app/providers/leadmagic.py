@@ -432,3 +432,105 @@ async def enrich_company(
         },
         "mapped": body if found else None,
     }
+
+
+def _map_technology_item(raw: Any) -> dict[str, Any]:
+    technology = _as_dict(raw)
+    return {
+        "name": _as_str(technology.get("name")),
+        "category": _as_str(technology.get("category")),
+        "website": _as_str(technology.get("website")),
+        "icon": _as_str(technology.get("icon")),
+    }
+
+
+def _map_categories(raw_categories: Any) -> dict[str, list[str]]:
+    categories = _as_dict(raw_categories)
+    mapped: dict[str, list[str]] = {}
+    for key, value in categories.items():
+        category_name = _as_str(key)
+        if not category_name:
+            continue
+        mapped_items = [item for item in (_as_str(item) for item in _as_list(value)) if item]
+        mapped[category_name] = mapped_items
+    return mapped
+
+
+async def get_technographics(
+    *,
+    api_key: str | None,
+    company_domain: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "company_technographics",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
+        }
+    normalized_domain = _as_str(company_domain)
+    if not normalized_domain:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "company_technographics",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
+        }
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await client.post(
+            "https://api.leadmagic.io/v1/companies/company-technographics",
+            headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+            json={"company_domain": normalized_domain},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "company_technographics",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
+        }
+
+    mapped_technologies = []
+    for item in _as_list(body.get("technologies")):
+        mapped_item = _map_technology_item(item)
+        if mapped_item["name"]:
+            mapped_technologies.append(mapped_item)
+    mapped_categories = _map_categories(body.get("categories"))
+
+    provider_message = _as_str(body.get("message")) or ""
+    is_explicit_not_found = "no technologies found" in provider_message.lower()
+    status = "found" if mapped_technologies else "not_found"
+    if is_explicit_not_found:
+        status = "not_found"
+
+    return {
+        "attempt": {
+            "provider": "leadmagic",
+            "action": "company_technographics",
+            "status": status,
+            "provider_status": body.get("message"),
+            "http_status": res.status_code,
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "technologies": mapped_technologies,
+            "categories": mapped_categories,
+            "technology_count": len(mapped_technologies),
+        },
+    }
