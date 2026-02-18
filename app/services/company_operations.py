@@ -21,6 +21,26 @@ def _as_non_empty_str(value: Any) -> str | None:
     return cleaned or None
 
 
+def _as_positive_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float):
+        converted = int(value)
+        return converted if converted > 0 else None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            converted = int(cleaned)
+        except ValueError:
+            return None
+        return converted if converted > 0 else None
+    return None
+
+
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -570,30 +590,56 @@ async def execute_company_enrich_card_revenue(
         }
 
     settings = get_settings()
-    adapter_result = await enigma.enrich_card_revenue(
+    match_result = await enigma.match_business(
         api_key=settings.enigma_api_key,
         company_name=company_name,
         company_domain=company_domain,
     )
-    attempts.append(adapter_result["attempt"])
+    attempts.append(match_result["attempt"])
 
-    mapped = adapter_result.get("mapped")
-    status = adapter_result["attempt"].get("status", "failed")
-    if mapped is None:
+    matched = _as_dict(match_result.get("mapped"))
+    match_status = match_result["attempt"].get("status", "failed")
+    if not matched:
         return {
             "run_id": run_id,
             "operation_id": "company.enrich.card_revenue",
-            "status": status,
+            "status": match_status,
             "provider_attempts": attempts,
         }
 
+    step_config = _as_dict(input_data.get("step_config"))
+    months_back = _as_positive_int(step_config.get("months_back")) or 12
+
+    brand_id = _as_non_empty_str(matched.get("enigma_brand_id"))
+    analytics_result = await enigma.get_card_analytics(
+        api_key=settings.enigma_api_key,
+        brand_id=brand_id,
+        months_back=months_back,
+    )
+    attempts.append(analytics_result["attempt"])
+
+    analytics_mapped = _as_dict(analytics_result.get("mapped"))
+    merged_output = {
+        "enigma_brand_id": brand_id,
+        "brand_name": _as_non_empty_str(matched.get("brand_name")) or _as_non_empty_str(analytics_mapped.get("brand_name")),
+        "location_count": matched.get("location_count"),
+        "annual_card_revenue": analytics_mapped.get("annual_card_revenue"),
+        "annual_card_revenue_yoy_growth": analytics_mapped.get("annual_card_revenue_yoy_growth"),
+        "annual_avg_daily_customers": analytics_mapped.get("annual_avg_daily_customers"),
+        "annual_transaction_count": analytics_mapped.get("annual_transaction_count"),
+        "annual_avg_transaction_size": analytics_mapped.get("annual_avg_transaction_size"),
+        "annual_refunds": analytics_mapped.get("annual_refunds"),
+        "monthly_revenue": analytics_mapped.get("monthly_revenue"),
+        "monthly_revenue_growth": analytics_mapped.get("monthly_revenue_growth"),
+        "monthly_avg_daily_customers": analytics_mapped.get("monthly_avg_daily_customers"),
+        "monthly_transactions": analytics_mapped.get("monthly_transactions"),
+        "monthly_avg_transaction_size": analytics_mapped.get("monthly_avg_transaction_size"),
+        "monthly_refunds": analytics_mapped.get("monthly_refunds"),
+        "source_provider": "enigma",
+    }
+
     try:
-        validated_output = CardRevenueOutput.model_validate(
-            {
-                **mapped,
-                "source_provider": "enigma",
-            }
-        ).model_dump()
+        validated_output = CardRevenueOutput.model_validate(merged_output).model_dump()
     except Exception as exc:  # noqa: BLE001
         return {
             "run_id": run_id,
@@ -606,10 +652,16 @@ async def execute_company_enrich_card_revenue(
             },
         }
 
+    # Keep key fields explicitly at the top level for context chaining.
+    validated_output["enigma_brand_id"] = validated_output.get("enigma_brand_id")
+    validated_output["annual_card_revenue"] = validated_output.get("annual_card_revenue")
+    validated_output["annual_card_revenue_yoy_growth"] = validated_output.get("annual_card_revenue_yoy_growth")
+    validated_output["location_count"] = validated_output.get("location_count")
+
     return {
         "run_id": run_id,
         "operation_id": "company.enrich.card_revenue",
-        "status": status,
+        "status": "found",
         "output": {
             **validated_output,
         },
