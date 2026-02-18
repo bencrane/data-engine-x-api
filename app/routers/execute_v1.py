@@ -33,6 +33,7 @@ from app.services.adyntel_operations import (
 from app.services.operation_history import persist_operation_execution
 from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
 from app.services.research_operations import (
+    execute_company_research_check_vc_funding,
     execute_company_research_discover_competitors,
     execute_company_research_lookup_alumni,
     execute_company_research_lookup_champion_testimonials,
@@ -70,6 +71,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.lookup_alumni",
     "company.research.lookup_champions",
     "company.research.lookup_champion_testimonials",
+    "company.research.check_vc_funding",
     "company.derive.pricing_intelligence",
 }
 
@@ -343,6 +345,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.lookup_champion_testimonials":
         result = await execute_company_research_lookup_champion_testimonials(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.check_vc_funding":
+        result = await execute_company_research_check_vc_funding(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
