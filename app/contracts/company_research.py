@@ -86,3 +86,17 @@ class LookupAlumniOutput(BaseModel):
     alumni: list[AlumniItem]
     alumni_count: int
     source_provider: str = "revenueinfra"
+
+
+class VCItem(BaseModel):
+    vc_name: str
+    vc_domain: str | None = None
+
+
+class CheckVCFundingOutput(BaseModel):
+    has_raised_vc: bool
+    vc_count: int
+    vc_names: list[str]
+    vcs: list[VCItem]
+    founded_date: str | None = None
+    source_provider: str = "revenueinfra"
