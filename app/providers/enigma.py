@@ -26,7 +26,6 @@ query SearchBrand($searchInput: SearchInput!, $cardTransactionConditions: Connec
         edges {
           node {
             projectedQuantity
-            rawQuantity
             quantityType
             period
             periodStartDate
@@ -58,7 +57,6 @@ query SearchBrand($searchInput: SearchInput!, $cardTransactionConditions: Connec
                 node {
                   position
                   cohortSize
-                  rank
                   quantityType
                   period
                 }

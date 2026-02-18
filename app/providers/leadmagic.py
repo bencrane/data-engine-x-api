@@ -483,16 +483,71 @@ async def get_technographics(
             "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
         }
 
+    endpoint_candidates = [
+        "https://api.leadmagic.io/v1/companies/company-technographics",
+        # Fallback for provider route mismatches seen in production.
+        "https://api.leadmagic.io/v1/company/technographics",
+    ]
+    request_body = {"company_domain": normalized_domain}
+    headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
+
     start_ms = now_ms()
+    tried_endpoints: list[dict[str, Any]] = []
+    res: httpx.Response | None = None
+    body: dict[str, Any] | str = {}
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            "https://api.leadmagic.io/v1/companies/company-technographics",
-            headers={"X-API-Key": api_key, "Content-Type": "application/json"},
-            json={"company_domain": normalized_domain},
-        )
-        body = parse_json_or_raw(res.text, res.json)
+        for url in endpoint_candidates:
+            candidate_res = await client.post(
+                url,
+                headers=headers,
+                json=request_body,
+            )
+            candidate_body = parse_json_or_raw(candidate_res.text, candidate_res.json)
+            tried_endpoints.append(
+                {
+                    "url": url,
+                    "http_status": candidate_res.status_code,
+                }
+            )
+            res = candidate_res
+            body = candidate_body
+            if candidate_res.status_code != 404:
+                break
+
+    if res is None:
+        return {
+            "attempt": {
+                "provider": "leadmagic",
+                "action": "company_technographics",
+                "status": "failed",
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": {
+                    "message": "LeadMagic technographics request did not produce a response.",
+                    "tried_endpoints": tried_endpoints,
+                },
+            },
+            "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
+        }
 
     if res.status_code >= 400:
+        if res.status_code == 404:
+            return {
+                "attempt": {
+                    "provider": "leadmagic",
+                    "action": "company_technographics",
+                    "status": "not_found",
+                    "http_status": 404,
+                    "provider_status": "LeadMagic technographics route not found for all known endpoint variants.",
+                    "duration_ms": now_ms() - start_ms,
+                    "raw_response": {
+                        "message": "LeadMagic returned 404 for technographics endpoint variants.",
+                        "last_response": body,
+                        "tried_endpoints": tried_endpoints,
+                    },
+                },
+                "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
+            }
         return {
             "attempt": {
                 "provider": "leadmagic",
@@ -500,19 +555,23 @@ async def get_technographics(
                 "status": "failed",
                 "http_status": res.status_code,
                 "duration_ms": now_ms() - start_ms,
-                "raw_response": body,
+                "raw_response": {
+                    "response": body,
+                    "tried_endpoints": tried_endpoints,
+                },
             },
             "mapped": {"technologies": [], "categories": {}, "technology_count": 0},
         }
 
+    response_body = _as_dict(body)
     mapped_technologies = []
-    for item in _as_list(body.get("technologies")):
+    for item in _as_list(response_body.get("technologies")):
         mapped_item = _map_technology_item(item)
         if mapped_item["name"]:
             mapped_technologies.append(mapped_item)
-    mapped_categories = _map_categories(body.get("categories"))
+    mapped_categories = _map_categories(response_body.get("categories"))
 
-    provider_message = _as_str(body.get("message")) or ""
+    provider_message = _as_str(response_body.get("message")) or ""
     is_explicit_not_found = "no technologies found" in provider_message.lower()
     status = "found" if mapped_technologies else "not_found"
     if is_explicit_not_found:
@@ -523,10 +582,13 @@ async def get_technographics(
             "provider": "leadmagic",
             "action": "company_technographics",
             "status": status,
-            "provider_status": body.get("message"),
+            "provider_status": response_body.get("message"),
             "http_status": res.status_code,
             "duration_ms": now_ms() - start_ms,
-            "raw_response": body,
+            "raw_response": {
+                "response": response_body,
+                "endpoint_used": tried_endpoints[-1]["url"] if tried_endpoints else None,
+            },
         },
         "mapped": {
             "technologies": mapped_technologies,

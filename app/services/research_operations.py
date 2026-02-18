@@ -355,78 +355,76 @@ def _company_research_context(input_data: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _extract_company_research_discover_competitors_inputs(
-    input_data: dict[str, Any],
-) -> tuple[str | None, str | None, str | None]:
+def _extract_company_domain(input_data: dict[str, Any]) -> str | None:
     context = _company_research_context(input_data)
     company_profile = context.get("company_profile")
     profile = company_profile if isinstance(company_profile, dict) else {}
+    return _normalize_company_domain(
+        input_data.get("company_domain")
+        or context.get("company_domain")
+        or profile.get("company_domain")
+    )
 
-    company_domain = _normalize_company_domain(
-        context.get("company_domain") or profile.get("company_domain")
+
+def _extract_company_name(input_data: dict[str, Any]) -> str | None:
+    context = _company_research_context(input_data)
+    company_profile = context.get("company_profile")
+    profile = company_profile if isinstance(company_profile, dict) else {}
+    return _as_non_empty_str(
+        input_data.get("company_name")
+        or context.get("company_name")
+        or profile.get("company_name")
     )
-    company_name = _as_non_empty_str(
-        context.get("company_name") or profile.get("company_name")
+
+
+def _extract_company_linkedin_url(input_data: dict[str, Any]) -> str | None:
+    context = _company_research_context(input_data)
+    company_profile = context.get("company_profile")
+    profile = company_profile if isinstance(company_profile, dict) else {}
+    return _as_non_empty_str(
+        input_data.get("company_linkedin_url")
+        or context.get("company_linkedin_url")
+        or profile.get("company_linkedin_url")
     )
-    company_linkedin_url = _as_non_empty_str(
-        context.get("company_linkedin_url") or profile.get("company_linkedin_url")
-    )
+
+
+def _extract_company_research_discover_competitors_inputs(
+    input_data: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
+    company_domain = _extract_company_domain(input_data)
+    company_name = _extract_company_name(input_data)
+    company_linkedin_url = _extract_company_linkedin_url(input_data)
     return company_domain, company_name, company_linkedin_url
 
 
 def _extract_company_research_lookup_customers_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
-    context = _company_research_context(input_data)
-    company_profile = context.get("company_profile")
-    profile = company_profile if isinstance(company_profile, dict) else {}
-    return _normalize_company_domain(
-        context.get("company_domain") or profile.get("company_domain")
-    )
+    return _extract_company_domain(input_data)
 
 
 def _extract_company_research_find_similar_companies_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
-    context = _company_research_context(input_data)
-    company_profile = context.get("company_profile")
-    profile = company_profile if isinstance(company_profile, dict) else {}
-    return _normalize_company_domain(
-        context.get("company_domain") or profile.get("company_domain")
-    )
+    return _extract_company_domain(input_data)
 
 
 def _extract_company_research_lookup_champions_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
-    context = _company_research_context(input_data)
-    company_profile = context.get("company_profile")
-    profile = company_profile if isinstance(company_profile, dict) else {}
-    return _normalize_company_domain(
-        context.get("company_domain") or profile.get("company_domain")
-    )
+    return _extract_company_domain(input_data)
 
 
 def _extract_company_research_lookup_alumni_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
-    context = _company_research_context(input_data)
-    company_profile = context.get("company_profile")
-    profile = company_profile if isinstance(company_profile, dict) else {}
-    return _normalize_company_domain(
-        context.get("company_domain") or profile.get("company_domain")
-    )
+    return _extract_company_domain(input_data)
 
 
 def _extract_company_research_check_vc_funding_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
-    context = _company_research_context(input_data)
-    company_profile = context.get("company_profile")
-    profile = company_profile if isinstance(company_profile, dict) else {}
-    return _normalize_company_domain(
-        context.get("company_domain") or profile.get("company_domain")
-    )
+    return _extract_company_domain(input_data)
 
 
 async def execute_company_research_check_vc_funding(
