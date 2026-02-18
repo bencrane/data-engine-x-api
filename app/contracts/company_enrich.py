@@ -102,3 +102,35 @@ class CardRevenueOutput(BaseModel):
     top_location_rank_position: int | None = None
     top_location_rank_cohort_size: int | None = None
     source_provider: str = "enigma"
+
+
+class FMCSABasicScore(BaseModel):
+    category: str
+    percentile: float | None = None
+    violation_count: int | None = None
+    serious_violation_count: int | None = None
+    deficiency: bool | None = None
+
+
+class FMCSACarrierEnrichOutput(BaseModel):
+    dot_number: str
+    legal_name: str | None = None
+    dba_name: str | None = None
+    allow_to_operate: bool | None = None
+    out_of_service: bool | None = None
+    out_of_service_date: str | None = None
+    total_drivers: int | None = None
+    total_power_units: int | None = None
+    bus_vehicles: int | None = None
+    van_vehicles: int | None = None
+    passenger_vehicles: int | None = None
+    address_street: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_zip: str | None = None
+    phone: str | None = None
+    complaint_count: int | None = None
+    basic_scores: list[FMCSABasicScore] | None = None
+    authority_status: str | None = None
+    authority_grant_date: str | None = None
+    source_provider: str = "fmcsa"

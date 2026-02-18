@@ -66,3 +66,20 @@ class EcommerceSearchOutput(BaseModel):
     result_count: int
     page: int
     source_provider: str = "storeleads"
+
+
+class FMCSACarrierSearchItem(BaseModel):
+    dot_number: str | None = None
+    legal_name: str | None = None
+    dba_name: str | None = None
+    allow_to_operate: bool | None = None
+    city: str | None = None
+    state: str | None = None
+    phone: str | None = None
+    source_provider: str = "fmcsa"
+
+
+class FMCSACarrierSearchOutput(BaseModel):
+    results: list[FMCSACarrierSearchItem]
+    result_count: int
+    source_provider: str = "fmcsa"
