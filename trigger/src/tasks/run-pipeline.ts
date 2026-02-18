@@ -72,6 +72,14 @@ interface ExecuteResponseEnvelope {
   error?: string;
 }
 
+interface FreshnessCheckResponse {
+  fresh: boolean;
+  entity_id?: string | null;
+  last_enriched_at?: string | null;
+  age_hours?: number | null;
+  canonical_payload?: Record<string, unknown> | null;
+}
+
 interface InternalEnvelope<TData> {
   data?: TData;
   error?: string;
@@ -86,6 +94,11 @@ interface InternalStepResult {
   id: string;
   step_position: number;
   duration_ms?: number | null;
+}
+
+interface SkipIfFreshConfig {
+  maxAgeHours: number;
+  identityFields: string[];
 }
 
 function getExecutionStartPosition(run: InternalPipelineRun): number {
@@ -161,6 +174,36 @@ async function callExecuteV1(
   return body.data as NonNullable<ExecuteResponseEnvelope["data"]>;
 }
 
+async function callEntityStateFreshnessCheck(
+  internalConfig: InternalConfig,
+  params: {
+    orgId: string;
+    companyId: string;
+    entityType: "person" | "company";
+    identifiers: Record<string, unknown>;
+    maxAgeHours: number;
+  },
+): Promise<FreshnessCheckResponse> {
+  const response = await fetch(`${internalConfig.apiUrl}/api/internal/entity-state/check-freshness`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${internalConfig.internalApiKey}`,
+      "x-internal-org-id": params.orgId,
+      "x-internal-company-id": params.companyId,
+    },
+    body: JSON.stringify({
+      entity_type: params.entityType,
+      identifiers: params.identifiers,
+      max_age_hours: params.maxAgeHours,
+    }),
+  });
+  const body = (await response.json()) as InternalEnvelope<FreshnessCheckResponse>;
+  if (!response.ok) throw new Error(body.error || "Freshness check request failed");
+  if (!body.data) throw new Error("Freshness check response missing data envelope");
+  return body.data;
+}
+
 function entityTypeFromOperationId(operationId: string): "person" | "company" {
   if (operationId.startsWith("person.")) return "person";
   return "company";
@@ -197,6 +240,40 @@ function getStepCondition(
     return stepSnapshot.condition;
   }
   return null;
+}
+
+function getSkipIfFreshConfig(
+  stepSnapshot: InternalPipelineRun["blueprint_snapshot"]["steps"][number],
+): SkipIfFreshConfig | null {
+  const rawConfig = isObject(stepSnapshot.step_config) ? stepSnapshot.step_config.skip_if_fresh : null;
+  if (!isObject(rawConfig)) return null;
+
+  const maxAgeRaw = rawConfig.max_age_hours;
+  const identityFieldsRaw = rawConfig.identity_fields;
+
+  if (typeof maxAgeRaw !== "number" || !Number.isFinite(maxAgeRaw) || maxAgeRaw <= 0) return null;
+  if (!Array.isArray(identityFieldsRaw)) return null;
+
+  const identityFields = identityFieldsRaw
+    .filter((field): field is string => typeof field === "string")
+    .map((field) => field.trim())
+    .filter((field) => field.length > 0);
+
+  if (identityFields.length === 0) return null;
+  return { maxAgeHours: maxAgeRaw, identityFields };
+}
+
+function extractFreshnessIdentifiers(
+  cumulativeContext: Record<string, unknown>,
+  identityFields: string[],
+): Record<string, unknown> {
+  return identityFields.reduce<Record<string, unknown>>((acc, field) => {
+    const value = cumulativeContext[field];
+    if (value !== undefined && value !== null && value !== "") {
+      acc[field] = value;
+    }
+    return acc;
+  }, {});
 }
 
 function inferFieldsUpdatedFromOperationResult(
@@ -493,6 +570,62 @@ export const runPipeline = task({
         continue;
       }
 
+      const stepEntityType = entityTypeFromOperationId(operationId);
+      const skipIfFresh = getSkipIfFreshConfig(stepSnapshot);
+      if (skipIfFresh) {
+        try {
+          const freshness = await callEntityStateFreshnessCheck(internalConfig, {
+            orgId: org_id,
+            companyId: company_id,
+            entityType: stepEntityType,
+            identifiers: extractFreshnessIdentifiers(cumulativeContext, skipIfFresh.identityFields),
+            maxAgeHours: skipIfFresh.maxAgeHours,
+          });
+
+          if (freshness.fresh) {
+            cumulativeContext = mergeContext(cumulativeContext, freshness.canonical_payload);
+            const freshnessMetadata = {
+              entity_id: freshness.entity_id ?? null,
+              age_hours: freshness.age_hours ?? null,
+              last_enriched_at: freshness.last_enriched_at ?? null,
+              max_age_hours: skipIfFresh.maxAgeHours,
+              identity_fields: skipIfFresh.identityFields,
+            };
+            const skippedStep = await skipStepWithReason(
+              internalConfig,
+              stepResult.id,
+              cumulativeContext,
+              "entity_state_fresh",
+              freshnessMetadata,
+            );
+            await emitStepTimelineEvent(internalConfig, {
+              orgId: org_id,
+              companyId: company_id,
+              submissionId: run.submission_id,
+              pipelineRunId: pipeline_run_id,
+              entityType: stepEntityType,
+              cumulativeContext,
+              stepResultId: skippedStep.id,
+              stepPosition: skippedStep.step_position,
+              operationId,
+              stepStatus: "skipped",
+              skipReason: "entity_state_fresh",
+              durationMs: skippedStep.duration_ms,
+              condition,
+              errorDetails: freshnessMetadata,
+            });
+            continue;
+          }
+        } catch (error) {
+          logger.warn("freshness check failed; continuing with live execution", {
+            pipeline_run_id,
+            step_position: stepSnapshot.position,
+            operation_id: operationId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       await internalPost(internalConfig, "/api/internal/step-results/update", {
         step_result_id: stepResult.id,
         status: "running",
@@ -500,7 +633,6 @@ export const runPipeline = task({
       });
 
       try {
-        const stepEntityType = entityTypeFromOperationId(operationId);
         const result = await callExecuteV1(internalConfig, {
           orgId: org_id,
           companyId: company_id,
@@ -809,6 +941,8 @@ export const runPipeline = task({
 });
 
 export const __testables = {
+  extractFreshnessIdentifiers,
+  getSkipIfFreshConfig,
   inferFieldsUpdatedFromOperationResult,
   operationIdForStep,
 };
