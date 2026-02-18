@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.entity_state import (
     EntityStateVersionError,
+    check_entity_freshness,
     resolve_company_entity_id,
     resolve_person_entity_id,
     upsert_company_entity,
@@ -37,6 +38,29 @@ def require_internal_key(
     if credentials.credentials != settings.internal_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal API key")
     return None
+
+
+def require_internal_context(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict[str, str | None]:
+    settings = get_settings()
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization token")
+    if credentials.credentials != settings.internal_api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal API key")
+
+    org_id = request.headers.get("x-internal-org-id")
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing x-internal-org-id for internal authorization",
+        )
+
+    return {
+        "org_id": org_id,
+        "company_id": request.headers.get("x-internal-company-id"),
+    }
 
 
 class InternalPipelineRunGetRequest(BaseModel):
@@ -87,6 +111,12 @@ class InternalEntityStateUpsertRequest(BaseModel):
     last_operation_id: str | None = None
 
 
+class InternalEntityStateFreshnessCheckRequest(BaseModel):
+    entity_type: Literal["company", "person"]
+    identifiers: dict[str, Any]
+    max_age_hours: float
+
+
 class InternalPipelineRunFanOutRequest(BaseModel):
     parent_pipeline_run_id: str
     submission_id: str
@@ -99,12 +129,6 @@ class InternalPipelineRunFanOutRequest(BaseModel):
     fan_out_operation_id: str | None = None
     provider: str | None = None
     provider_attempts: list[dict[str, Any]] | None = None
-
-
-class InternalFanOutCreateResult(BaseModel):
-    child_runs: list[dict[str, Any]]
-    skipped_duplicates_count: int = 0
-    skipped_duplicate_identifiers: list[str] = []
 
 
 class InternalRecordStepTimelineEventRequest(BaseModel):
@@ -301,6 +325,23 @@ async def internal_record_step_timeline_event(
             "metadata": metadata,
         }
     )
+
+
+@router.post("/entity-state/check-freshness", response_model=DataEnvelope)
+async def internal_check_entity_state_freshness(
+    payload: InternalEntityStateFreshnessCheckRequest,
+    internal_context: dict[str, str | None] = Depends(require_internal_context),
+):
+    if payload.max_age_hours <= 0:
+        return DataEnvelope(data={"fresh": False, "entity_id": None})
+
+    freshness = check_entity_freshness(
+        org_id=str(internal_context["org_id"]),
+        entity_type=payload.entity_type,
+        identifiers=payload.identifiers,
+        max_age_hours=payload.max_age_hours,
+    )
+    return DataEnvelope(data=freshness)
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})

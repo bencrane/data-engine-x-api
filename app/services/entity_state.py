@@ -17,6 +17,19 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed_value = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(parsed_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _as_uuid_str(value: str | None) -> str | None:
     if not value:
         return None
@@ -263,6 +276,21 @@ def _lookup_company_by_natural_key(org_id: str, canonical_domain: str | None) ->
     return result.data[0] if result.data else None
 
 
+def _lookup_company_by_linkedin_url(org_id: str, linkedin_url: str | None) -> dict[str, Any] | None:
+    if not linkedin_url:
+        return None
+    client = get_supabase_client()
+    result = (
+        client.table("company_entities")
+        .select("*")
+        .eq("org_id", org_id)
+        .eq("linkedin_url", linkedin_url)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
 def _lookup_person_by_natural_key(
     org_id: str,
     linkedin_url: str | None,
@@ -292,6 +320,65 @@ def _lookup_person_by_natural_key(
         if email_result.data:
             return email_result.data[0]
     return None
+
+
+def _compute_age_hours(last_enriched_at: Any, *, now: datetime) -> float | None:
+    enriched_at = _parse_iso_datetime(last_enriched_at)
+    if enriched_at is None:
+        return None
+    return (now - enriched_at).total_seconds() / 3600
+
+
+def check_entity_freshness(
+    *,
+    org_id: str,
+    entity_type: str,
+    identifiers: dict[str, Any] | None,
+    max_age_hours: float,
+) -> dict[str, Any]:
+    normalized_identifiers = identifiers if isinstance(identifiers, dict) else {}
+    now = datetime.now(timezone.utc)
+
+    if entity_type == "person":
+        linkedin_url = _normalize_linkedin_url(normalized_identifiers.get("linkedin_url"))
+        work_email = _normalize_email(
+            normalized_identifiers.get("work_email")
+            or normalized_identifiers.get("email")
+        )
+        if not linkedin_url and not work_email:
+            return {"fresh": False, "entity_id": None}
+        entity = _lookup_person_by_natural_key(org_id, linkedin_url, work_email)
+    else:
+        canonical_domain = _normalize_domain(
+            normalized_identifiers.get("company_domain")
+            or normalized_identifiers.get("canonical_domain")
+            or normalized_identifiers.get("domain")
+        )
+        company_linkedin_url = _normalize_linkedin_url(
+            normalized_identifiers.get("company_linkedin_url")
+            or normalized_identifiers.get("linkedin_url")
+        )
+        if not canonical_domain and not company_linkedin_url:
+            return {"fresh": False, "entity_id": None}
+
+        entity = _lookup_company_by_natural_key(org_id, canonical_domain)
+        if entity is None and company_linkedin_url:
+            entity = _lookup_company_by_linkedin_url(org_id, company_linkedin_url)
+
+    if entity is None:
+        return {"fresh": False, "entity_id": None}
+
+    age_hours = _compute_age_hours(entity.get("last_enriched_at"), now=now)
+    if age_hours is None or age_hours > max_age_hours:
+        return {"fresh": False, "entity_id": None}
+
+    return {
+        "fresh": True,
+        "entity_id": entity.get("entity_id"),
+        "last_enriched_at": entity.get("last_enriched_at"),
+        "age_hours": age_hours,
+        "canonical_payload": entity.get("canonical_payload") if isinstance(entity.get("canonical_payload"), dict) else {},
+    }
 
 
 def _load_company_by_id(org_id: str, entity_id: str) -> dict[str, Any] | None:
