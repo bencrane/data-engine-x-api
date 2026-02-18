@@ -46,6 +46,9 @@ class PersonEntitiesListRequest(BaseModel):
     company_id: str | None = None
     work_email: str | None = None
     linkedin_url: str | None = None
+    title: str | None = None
+    seniority: str | None = None
+    department: str | None = None
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=25, ge=1, le=100)
 
@@ -134,6 +137,18 @@ async def list_person_entities(
     linkedin_url = _normalize_text(payload.linkedin_url)
     if linkedin_url:
         query = query.eq("linkedin_url", linkedin_url.rstrip("/").lower())
+
+    title = _normalize_text(payload.title)
+    if title:
+        query = query.ilike("title", f"%{title}%")
+
+    seniority = _normalize_text(payload.seniority)
+    if seniority:
+        query = query.eq("seniority", seniority)
+
+    department = _normalize_text(payload.department)
+    if department:
+        query = query.ilike("department", f"%{department}%")
 
     start = (payload.page - 1) * payload.per_page
     end = start + payload.per_page - 1
