@@ -1,4 +1,8 @@
 from app.providers.revenueinfra.competitors import discover_competitors
+from app.providers.revenueinfra.champions import (
+    lookup_champion_testimonials,
+    lookup_champions,
+)
 from app.providers.revenueinfra.customers import lookup_customers
 from app.providers.revenueinfra.pricing import (
     infer_add_ons_offered,
@@ -19,6 +23,8 @@ from app.providers.revenueinfra.pricing import (
 
 __all__ = [
     "discover_competitors",
+    "lookup_champions",
+    "lookup_champion_testimonials",
     "lookup_customers",
     "infer_add_ons_offered",
     "infer_annual_commitment_required",
