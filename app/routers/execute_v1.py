@@ -46,6 +46,12 @@ from app.services.research_operations import (
     execute_company_research_resolve_g2_url,
     execute_company_research_resolve_pricing_page_url,
 )
+from app.services.sec_filing_operations import (
+    execute_company_analyze_sec_10k,
+    execute_company_analyze_sec_10q,
+    execute_company_analyze_sec_8k_executive,
+    execute_company_research_fetch_sec_filings,
+)
 from app.services.pricing_intelligence_operations import (
     execute_company_derive_pricing_intelligence,
 )
@@ -85,6 +91,10 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.lookup_champions",
     "company.research.lookup_champion_testimonials",
     "company.research.check_vc_funding",
+    "company.research.fetch_sec_filings",
+    "company.analyze.sec_10k",
+    "company.analyze.sec_10q",
+    "company.analyze.sec_8k_executive",
     "company.derive.pricing_intelligence",
     "company.derive.detect_changes",
 }
@@ -425,6 +435,50 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.check_vc_funding":
         result = await execute_company_research_check_vc_funding(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.fetch_sec_filings":
+        result = await execute_company_research_fetch_sec_filings(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.analyze.sec_10k":
+        result = await execute_company_analyze_sec_10k(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.analyze.sec_10q":
+        result = await execute_company_analyze_sec_10q(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.analyze.sec_8k_executive":
+        result = await execute_company_analyze_sec_8k_executive(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
