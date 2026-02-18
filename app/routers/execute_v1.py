@@ -33,6 +33,7 @@ from app.services.operation_history import persist_operation_execution
 from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
 from app.services.research_operations import (
     execute_company_research_discover_competitors,
+    execute_company_research_lookup_alumni,
     execute_company_research_lookup_champion_testimonials,
     execute_company_research_lookup_champions,
     execute_company_research_lookup_customers,
@@ -64,6 +65,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.resolve_pricing_page_url",
     "company.research.discover_competitors",
     "company.research.lookup_customers",
+    "company.research.lookup_alumni",
     "company.research.lookup_champions",
     "company.research.lookup_champion_testimonials",
     "company.derive.pricing_intelligence",
@@ -295,6 +297,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.lookup_customers":
         result = await execute_company_research_lookup_customers(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.lookup_alumni":
+        result = await execute_company_research_lookup_alumni(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
