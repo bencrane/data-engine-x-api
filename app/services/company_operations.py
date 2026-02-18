@@ -4,8 +4,8 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.company_enrich import CompanyEnrichProfileOutput, TechnographicsOutput
-from app.providers import blitzapi, companyenrich, leadmagic, prospeo
+from app.contracts.company_enrich import CompanyEnrichProfileOutput, EcommerceEnrichOutput, TechnographicsOutput
+from app.providers import blitzapi, companyenrich, leadmagic, prospeo, storeleads_enrich
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -373,6 +373,71 @@ async def execute_company_enrich_technographics(
             "technologies": validated_output["technologies"],
             "categories": validated_output.get("categories"),
             "technology_count": validated_output["technology_count"],
+        },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_ecommerce(
+    *,
+    input_data: dict,
+) -> dict:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+
+    company_domain = _as_non_empty_str(input_data.get("company_domain"))
+    if not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.ecommerce",
+            "status": "failed",
+            "missing_inputs": ["company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    adapter_result = await storeleads_enrich.enrich_ecommerce(
+        api_key=settings.storeleads_api_key,
+        domain=company_domain,
+    )
+    attempts.append(adapter_result["attempt"])
+
+    mapped = adapter_result.get("mapped")
+    if mapped is None:
+        status = adapter_result["attempt"].get("status", "failed")
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.ecommerce",
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    try:
+        validated_output = EcommerceEnrichOutput.model_validate(
+            {
+                **mapped,
+                "source_provider": "storeleads",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": "company.enrich.ecommerce",
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    status = adapter_result["attempt"].get("status", "failed")
+    return {
+        "run_id": run_id,
+        "operation_id": "company.enrich.ecommerce",
+        "status": status,
+        "output": {
+            **validated_output,
         },
         "provider_attempts": attempts,
     }
