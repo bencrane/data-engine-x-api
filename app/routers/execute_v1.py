@@ -15,6 +15,7 @@ from app.services.email_operations import (
     execute_person_contact_verify_email,
 )
 from app.services.company_operations import (
+    execute_company_enrich_fmcsa,
     execute_company_enrich_card_revenue,
     execute_company_enrich_ecommerce,
     execute_company_enrich_profile,
@@ -23,6 +24,7 @@ from app.services.company_operations import (
 from app.services.person_enrich_operations import execute_person_enrich_profile
 from app.services.search_operations import (
     execute_company_search,
+    execute_company_search_fmcsa,
     execute_company_search_ecommerce,
     execute_person_search,
 )
@@ -59,10 +61,12 @@ SUPPORTED_OPERATION_IDS = {
     "person.search",
     "person.enrich.profile",
     "company.enrich.profile",
+    "company.enrich.fmcsa",
     "company.enrich.card_revenue",
     "company.enrich.ecommerce",
     "company.enrich.technographics",
     "company.search",
+    "company.search.fmcsa",
     "company.search.ecommerce",
     "company.ads.search.linkedin",
     "company.ads.search.meta",
@@ -204,6 +208,17 @@ async def execute_v1(
         )
         return DataEnvelope(data=result)
 
+    if payload.operation_id == "company.enrich.fmcsa":
+        result = await execute_company_enrich_fmcsa(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
     if payload.operation_id == "company.enrich.card_revenue":
         result = await execute_company_enrich_card_revenue(input_data=payload.input)
         persist_operation_execution(
@@ -239,6 +254,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.search":
         result = await execute_company_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.search.fmcsa":
+        result = await execute_company_search_fmcsa(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
