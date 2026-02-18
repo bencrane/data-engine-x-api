@@ -345,6 +345,43 @@ task_spec_find_company_hq_location_by_name_and_domain = {
     },
 }
 
+task_spec_find_company_employee_range_by_name_domain_and_linkedin_url = {
+    "input_schema": {
+        "json_schema": {
+            "properties": {
+                "company_domain": {
+                    "description": "The domain of the company to find the employee range for.",
+                    "type": "string",
+                },
+                "company_linkedin_url": {
+                    "description": "The LinkedIn URL of the company to find the employee range for.",
+                    "type": "string",
+                },
+                "company_name": {
+                    "description": "The name of the company to find the employee range for.",
+                    "type": "string",
+                },
+            },
+            "type": "object",
+        },
+        "type": "json",
+    },
+    "output_schema": {
+        "json_schema": {
+            "additionalProperties": False,
+            "properties": {
+                "employee_range": {
+                    "description": "The estimated number of employees working at the company, represented as a range (e.g., '1-10', '11-50', '51-200', '201-500', '501-1000', '1001-5000', '5001-10000', '10000+'). If an exact number is found, convert it to the appropriate range. If the employee range cannot be determined, return 'Unknown'.",
+                    "type": "string",
+                }
+            },
+            "required": ["employee_range"],
+            "type": "object",
+        },
+        "type": "json",
+    },
+}
+
 # Person Task Specs
 
 task_spec_find_person_linkedin_url_by_full_name_company_name_and_company_domain = {
@@ -676,6 +713,12 @@ class CompanyLinkedInUrlRequest(BaseModel):
 
 class CompanyNameAndLinkedInUrlRequest(BaseModel):
     company_name: str
+    company_linkedin_url: str
+
+
+class CompanyNameDomainAndLinkedInUrlRequest(BaseModel):
+    company_name: str
+    company_domain: str
     company_linkedin_url: str
 
 
@@ -1083,6 +1126,33 @@ async def find_company_hq_location_by_name_and_domain(payload: CompanyNameAndDom
             },
         }
     return {"success": True, "data": {"hq_city": None, "hq_state": None, "hq_country": None}}
+
+
+@web_app.post("/company/find-employee-range-by-name-domain-and-linkedin-url")
+async def find_company_employee_range_by_name_domain_and_linkedin_url(
+    payload: CompanyNameDomainAndLinkedInUrlRequest,
+) -> dict[str, Any]:
+    company_name = payload.company_name.strip()
+    company_domain = payload.company_domain.strip()
+    company_linkedin_url = payload.company_linkedin_url.strip()
+    if not company_name or not company_domain or not company_linkedin_url:
+        return {"success": False, "error": "company_name, company_domain, and company_linkedin_url are required"}
+
+    try:
+        output = await run_parallel_task(
+            task_spec=task_spec_find_company_employee_range_by_name_domain_and_linkedin_url,
+            input_data={
+                "company_name": company_name,
+                "company_domain": company_domain,
+                "company_linkedin_url": company_linkedin_url,
+            },
+            processor="base",
+        )
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    employee_range = output.get("employee_range") if isinstance(output, dict) else None
+    return {"success": True, "data": {"employee_range": employee_range}}
 
 
 # -----------------------------------------------------------------------------
