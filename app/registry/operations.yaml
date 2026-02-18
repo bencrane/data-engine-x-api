@@ -1,0 +1,562 @@
+operations:
+  - operation_id: "company.enrich.profile"
+    entity_type: "company"
+    category: "enrich"
+    description: "Enrich company with profile data such as industry, size, LinkedIn, description, and revenue range."
+    required_inputs:
+      any_of: ["company_domain", "company_website", "company_linkedin_url", "company_name", "source_company_id"]
+      optional: ["company_domain", "company_website", "company_linkedin_url", "company_name", "source_company_id"]
+    produces:
+      [
+        "company_profile",
+        "source_providers",
+        "company_name",
+        "company_domain",
+        "company_website",
+        "company_linkedin_url",
+        "company_linkedin_id",
+        "company_type",
+        "industry_primary",
+        "industry_derived",
+        "employee_count",
+        "employee_range",
+        "founded_year",
+        "hq_locality",
+        "hq_country_code",
+        "description_raw",
+        "specialties",
+        "annual_revenue_range",
+        "follower_count",
+        "logo_url",
+        "source_company_id"
+      ]
+    supports_fan_out: false
+    providers: ["prospeo", "blitzapi", "companyenrich", "leadmagic"]
+    cost_tier: "medium"
+
+  - operation_id: "company.enrich.card_revenue"
+    entity_type: "company"
+    category: "enrich"
+    description: "Enrich company with card transaction revenue and location ranking insights."
+    required_inputs:
+      any_of: ["company_name", "company_domain", "company_website"]
+      optional: ["company_name", "company_domain", "company_website"]
+    produces:
+      [
+        "enigma_brand_id",
+        "brand_name",
+        "location_count",
+        "annual_card_revenue",
+        "card_revenue_period",
+        "card_revenue_period_start",
+        "card_revenue_period_end",
+        "top_location_name",
+        "top_location_address",
+        "top_location_city",
+        "top_location_state",
+        "top_location_rank_position",
+        "top_location_rank_cohort_size",
+        "source_provider"
+      ]
+    supports_fan_out: false
+    providers: ["enigma"]
+    cost_tier: "medium"
+
+  - operation_id: "company.enrich.ecommerce"
+    entity_type: "company"
+    category: "enrich"
+    description: "Enrich ecommerce storefront details such as platform, plan, sales, and installed apps."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces:
+      [
+        "merchant_name",
+        "ecommerce_platform",
+        "ecommerce_plan",
+        "estimated_monthly_sales_cents",
+        "employee_count",
+        "product_count",
+        "global_rank",
+        "platform_rank",
+        "monthly_app_spend_cents",
+        "installed_apps",
+        "technologies",
+        "contact_info",
+        "country_code",
+        "city",
+        "domain_state",
+        "description",
+        "store_created_at",
+        "shipping_carriers",
+        "sales_carriers",
+        "features",
+        "source_provider"
+      ]
+    supports_fan_out: false
+    providers: ["storeleads"]
+    cost_tier: "medium"
+
+  - operation_id: "company.enrich.technographics"
+    entity_type: "company"
+    category: "enrich"
+    description: "Resolve website technographics and categorized technology stack."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces: ["technologies", "categories", "technology_count", "source_provider"]
+    supports_fan_out: false
+    providers: ["leadmagic"]
+    cost_tier: "low"
+
+  - operation_id: "company.search"
+    entity_type: "company"
+    category: "search"
+    description: "Search for companies using query and provider filters."
+    required_inputs:
+      any_of: ["query", "provider_filters"]
+      optional: ["query", "page", "page_size", "limit", "provider_filters"]
+    produces:
+      [
+        "results",
+        "result_count",
+        "provider_order_used",
+        "pagination",
+        "company_name",
+        "company_domain",
+        "company_website",
+        "company_linkedin_url",
+        "industry_primary",
+        "employee_range",
+        "founded_year",
+        "hq_country_code",
+        "source_company_id",
+        "source_provider"
+      ]
+    supports_fan_out: false
+    providers: ["prospeo", "blitzapi", "companyenrich"]
+    cost_tier: "low"
+
+  - operation_id: "company.search.ecommerce"
+    entity_type: "company"
+    category: "search"
+    description: "Search ecommerce companies by platform, category, apps, and ranking filters."
+    required_inputs:
+      any_of: ["platform", "category", "app_installed"]
+      optional:
+        [
+          "platform",
+          "country_code",
+          "app_installed",
+          "category",
+          "domain_state",
+          "rank_min",
+          "rank_max",
+          "monthly_app_spend_min",
+          "monthly_app_spend_max",
+          "page",
+          "page_size"
+        ]
+    produces:
+      [
+        "results",
+        "result_count",
+        "page",
+        "source_provider",
+        "merchant_name",
+        "domain",
+        "ecommerce_platform",
+        "ecommerce_plan",
+        "estimated_monthly_sales_cents",
+        "global_rank",
+        "country_code",
+        "description"
+      ]
+    supports_fan_out: false
+    providers: ["storeleads"]
+    cost_tier: "medium"
+
+  - operation_id: "company.ads.search.linkedin"
+    entity_type: "company"
+    category: "ads"
+    description: "Retrieve LinkedIn ad creatives for a company domain or LinkedIn page."
+    required_inputs:
+      any_of: ["company_domain", "linkedin_page_id"]
+      optional: ["company_domain", "linkedin_page_id", "continuation_token"]
+    produces: ["ads", "ads_count", "continuation_token", "is_last_page", "page_id", "total_ads"]
+    supports_fan_out: false
+    providers: ["adyntel"]
+    cost_tier: "medium"
+
+  - operation_id: "company.ads.search.meta"
+    entity_type: "company"
+    category: "ads"
+    description: "Retrieve Meta ad creatives by domain, Facebook URL, or keyword."
+    required_inputs:
+      any_of: ["company_domain", "facebook_url", "keyword"]
+      optional: ["company_domain", "facebook_url", "keyword", "country_code", "continuation_token", "media_type", "active_status"]
+    produces: ["results", "results_count", "continuation_token", "number_of_ads", "is_result_complete", "search_type", "endpoint_used"]
+    supports_fan_out: false
+    providers: ["adyntel"]
+    cost_tier: "medium"
+
+  - operation_id: "company.ads.search.google"
+    entity_type: "company"
+    category: "ads"
+    description: "Retrieve Google ad creatives for a company domain."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain", "media_type", "continuation_token"]
+    produces: ["ads", "ads_count", "continuation_token", "country_code"]
+    supports_fan_out: false
+    providers: ["adyntel"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.resolve_g2_url"
+    entity_type: "company"
+    category: "research"
+    description: "Resolve the most likely official G2 listing URL for a company."
+    required_inputs:
+      all_of: ["company_name"]
+      optional: ["company_name", "company_domain"]
+    produces: ["company_name", "company_domain", "g2_url", "confidence", "provider_used"]
+    supports_fan_out: false
+    providers: ["gemini", "openai"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.resolve_pricing_page_url"
+    entity_type: "company"
+    category: "research"
+    description: "Resolve the official pricing page URL for a company."
+    required_inputs:
+      all_of: ["company_name"]
+      optional: ["company_name", "company_domain"]
+    produces: ["company_name", "company_domain", "pricing_page_url", "confidence", "provider_used"]
+    supports_fan_out: false
+    providers: ["gemini", "openai"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.discover_competitors"
+    entity_type: "company"
+    category: "research"
+    description: "Discover direct competitor companies."
+    required_inputs:
+      any_of: ["company_domain", "company_name"]
+      optional: ["company_domain", "company_name", "company_linkedin_url"]
+    produces: ["competitors", "competitor_count", "source_provider", "name", "domain", "linkedin_url"]
+    supports_fan_out: true
+    fan_out_entity_type: "company"
+    providers: ["revenueinfra"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.find_similar_companies"
+    entity_type: "company"
+    category: "research"
+    description: "Find companies similar to the input company."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces:
+      [
+        "similar_companies",
+        "similar_count",
+        "source_provider",
+        "company_name",
+        "company_domain",
+        "company_linkedin_url",
+        "similarity_score"
+      ]
+    supports_fan_out: true
+    fan_out_entity_type: "company"
+    providers: ["revenueinfra"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.lookup_customers"
+    entity_type: "company"
+    category: "research"
+    description: "Lookup known customer companies."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces:
+      [
+        "customers",
+        "customer_count",
+        "source_provider",
+        "customer_name",
+        "customer_domain",
+        "customer_linkedin_url",
+        "origin_company_name",
+        "origin_company_domain"
+      ]
+    supports_fan_out: true
+    fan_out_entity_type: "company"
+    providers: ["revenueinfra"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.lookup_alumni"
+    entity_type: "company"
+    category: "research"
+    description: "Lookup alumni (people who previously worked at the company)."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces:
+      [
+        "alumni",
+        "alumni_count",
+        "source_provider",
+        "full_name",
+        "linkedin_url",
+        "current_company_name",
+        "current_company_domain",
+        "current_company_linkedin_url",
+        "current_job_title",
+        "past_company_name",
+        "past_company_domain",
+        "past_job_title"
+      ]
+    supports_fan_out: true
+    fan_out_entity_type: "person"
+    providers: ["revenueinfra"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.lookup_champions"
+    entity_type: "company"
+    category: "research"
+    description: "Lookup customer champions from public case-study signals."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces:
+      [
+        "champions",
+        "champion_count",
+        "source_provider",
+        "full_name",
+        "job_title",
+        "company_name",
+        "company_domain",
+        "company_linkedin_url",
+        "case_study_url"
+      ]
+    supports_fan_out: true
+    fan_out_entity_type: "person"
+    providers: ["revenueinfra"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.lookup_champion_testimonials"
+    entity_type: "company"
+    category: "research"
+    description: "Lookup champion records enriched with testimonial quotes."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces:
+      [
+        "champions",
+        "champion_count",
+        "source_provider",
+        "full_name",
+        "job_title",
+        "company_name",
+        "company_domain",
+        "company_linkedin_url",
+        "case_study_url",
+        "testimonial"
+      ]
+    supports_fan_out: false
+    providers: ["revenueinfra"]
+    cost_tier: "medium"
+
+  - operation_id: "company.research.check_vc_funding"
+    entity_type: "company"
+    category: "research"
+    description: "Check VC funding status and investor metadata."
+    required_inputs:
+      all_of: ["company_domain"]
+      optional: ["company_domain"]
+    produces: ["has_raised_vc", "vc_count", "vc_names", "vcs", "founded_date", "source_provider"]
+    supports_fan_out: false
+    providers: ["revenueinfra"]
+    cost_tier: "low"
+
+  - operation_id: "company.derive.pricing_intelligence"
+    entity_type: "company"
+    category: "derive"
+    description: "Derive pricing intelligence dimensions from pricing-page content."
+    required_inputs:
+      all_of: ["pricing_page_url"]
+      optional: ["company_domain", "pricing_page_url", "company_name"]
+    produces:
+      [
+        "pricing_page_url",
+        "free_trial",
+        "pricing_visibility",
+        "sales_motion",
+        "pricing_model",
+        "billing_default",
+        "number_of_tiers",
+        "add_ons_offered",
+        "enterprise_tier_exists",
+        "security_compliance_gating",
+        "annual_commitment_required",
+        "plan_naming_style",
+        "custom_pricing_mentioned",
+        "money_back_guarantee",
+        "minimum_seats",
+        "fields_resolved",
+        "source_provider"
+      ]
+    supports_fan_out: false
+    providers: ["revenueinfra"]
+    cost_tier: "high"
+
+  - operation_id: "person.search"
+    entity_type: "person"
+    category: "search"
+    description: "Search for people by company, title/level/function, location, and provider filters."
+    required_inputs:
+      any_of:
+        [
+          "query",
+          "company_domain",
+          "company_name",
+          "company_linkedin_url",
+          "job_title",
+          "job_level",
+          "job_function",
+          "location",
+          "cascade",
+          "provider_filters"
+        ]
+      optional:
+        [
+          "query",
+          "company_domain",
+          "company_name",
+          "company_linkedin_url",
+          "job_title",
+          "job_level",
+          "job_function",
+          "location",
+          "cascade",
+          "provider_filters",
+          "page",
+          "limit",
+          "max_results"
+        ]
+    produces:
+      [
+        "results",
+        "result_count",
+        "provider_order_used",
+        "pagination",
+        "full_name",
+        "first_name",
+        "last_name",
+        "linkedin_url",
+        "headline",
+        "current_title",
+        "current_company_name",
+        "current_company_domain",
+        "location_name",
+        "country_code",
+        "source_person_id",
+        "source_provider"
+      ]
+    supports_fan_out: true
+    fan_out_entity_type: "person"
+    providers: ["prospeo", "blitzapi", "companyenrich", "leadmagic"]
+    cost_tier: "medium"
+
+  - operation_id: "person.enrich.profile"
+    entity_type: "person"
+    category: "enrich"
+    description: "Enrich person profile with identity, role, history, and selected contact fields."
+    required_inputs:
+      any_of: ["first_name|last_name|full_name+company", "linkedin_url", "email", "person_id"]
+      optional:
+        [
+          "linkedin_url",
+          "first_name",
+          "last_name",
+          "full_name",
+          "company_domain",
+          "company_name",
+          "company_linkedin_url",
+          "email",
+          "person_id",
+          "include_work_history"
+        ]
+    produces:
+      [
+        "full_name",
+        "first_name",
+        "last_name",
+        "linkedin_url",
+        "headline",
+        "current_title",
+        "seniority",
+        "department",
+        "bio",
+        "location",
+        "country",
+        "current_company_name",
+        "current_company_domain",
+        "current_company_linkedin_url",
+        "work_history",
+        "education",
+        "skills",
+        "certifications",
+        "honors",
+        "recommendations",
+        "people_also_viewed",
+        "email",
+        "email_status",
+        "mobile_phone",
+        "mobile_status",
+        "total_tenure_years",
+        "connections_count",
+        "follower_count",
+        "source_provider"
+      ]
+    supports_fan_out: false
+    providers: ["prospeo", "ampleleads", "leadmagic"]
+    cost_tier: "medium"
+
+  - operation_id: "person.contact.resolve_email"
+    entity_type: "person"
+    category: "contact"
+    description: "Resolve and verify a person's email using waterfall providers."
+    required_inputs:
+      all_of: ["first_name|last_name|full_name", "company_domain|company_name"]
+      optional: ["first_name", "last_name", "full_name", "company_domain", "company_name"]
+    produces: ["email", "source_provider", "verification"]
+    supports_fan_out: false
+    providers: ["leadmagic", "icypeas", "parallel", "millionverifier", "reoon"]
+    cost_tier: "low"
+
+  - operation_id: "person.contact.verify_email"
+    entity_type: "person"
+    category: "contact"
+    description: "Verify an existing email address."
+    required_inputs:
+      all_of: ["email"]
+      optional: ["email"]
+    produces: ["email", "verification"]
+    supports_fan_out: false
+    providers: ["millionverifier", "reoon"]
+    cost_tier: "low"
+
+  - operation_id: "person.contact.resolve_mobile_phone"
+    entity_type: "person"
+    category: "contact"
+    description: "Resolve a person's mobile phone number."
+    required_inputs:
+      any_of: ["profile_url", "linkedin_url", "work_email", "personal_email"]
+      optional: ["profile_url", "linkedin_url", "work_email", "personal_email"]
+    produces: ["mobile_phone", "source_provider"]
+    supports_fan_out: false
+    providers: ["leadmagic", "blitzapi"]
+    cost_tier: "medium"
