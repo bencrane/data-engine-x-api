@@ -26,3 +26,38 @@ test("operationIdForStep falls back for missing operation", () => {
     "person.search",
   );
 });
+
+test("getSkipIfFreshConfig parses valid step config", () => {
+  const config = __testables.getSkipIfFreshConfig({
+    id: "s2",
+    position: 2,
+    operation_id: "person.enrich.profile",
+    step_config: {
+      skip_if_fresh: {
+        max_age_hours: 72,
+        identity_fields: ["linkedin_url", "work_email"],
+      },
+    },
+  });
+
+  assert.deepEqual(config, {
+    maxAgeHours: 72,
+    identityFields: ["linkedin_url", "work_email"],
+  });
+});
+
+test("extractFreshnessIdentifiers keeps only present identity fields", () => {
+  const identifiers = __testables.extractFreshnessIdentifiers(
+    {
+      linkedin_url: "https://linkedin.com/in/alex",
+      work_email: "",
+      company_domain: "acme.com",
+    },
+    ["linkedin_url", "work_email", "company_domain"],
+  );
+
+  assert.deepEqual(identifiers, {
+    linkedin_url: "https://linkedin.com/in/alex",
+    company_domain: "acme.com",
+  });
+});

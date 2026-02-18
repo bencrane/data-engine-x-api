@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from app.database import get_supabase_client
@@ -30,12 +31,25 @@ def _normalize_identity_value(value: Any) -> str | None:
     return text.lower()
 
 
+def _normalize_domain_identity(value: Any) -> str | None:
+    text = _normalize_identity_value(value)
+    if not text:
+        return None
+    candidate = text
+    if "://" in candidate:
+        candidate = urlparse(candidate).netloc or candidate
+    candidate = candidate.split("/")[0].strip()
+    if candidate.startswith("www."):
+        candidate = candidate[4:]
+    return candidate or None
+
+
 def _extract_fan_out_identity_tokens(entity: dict[str, Any]) -> list[str]:
     entity_type = str(entity.get("entity_type") or "person").strip().lower()
     tokens: list[str] = []
 
     if entity_type == "company":
-        company_domain = _normalize_identity_value(
+        company_domain = _normalize_domain_identity(
             entity.get("company_domain") or entity.get("canonical_domain") or entity.get("domain")
         )
         company_linkedin_url = _normalize_identity_value(
