@@ -91,6 +91,6 @@ app.include_router(
 )
 app.include_router(
     registry_v1.router,
-    prefix="/api/v1/registry",
+    prefix="/api/v1",
     tags=["registry-v1"],
 )
