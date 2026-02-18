@@ -23,6 +23,12 @@ from app.providers.revenueinfra.pricing import (
 )
 from app.providers.revenueinfra.similar_companies import find_similar_companies
 from app.providers.revenueinfra.vc_funding import check_vc_funding
+from app.providers.revenueinfra.sec_filings import (
+    analyze_10k,
+    analyze_10q,
+    analyze_8k_executive,
+    fetch_sec_filings,
+)
 
 __all__ = [
     "discover_competitors",
@@ -46,4 +52,8 @@ __all__ = [
     "infer_security_compliance_gating",
     "find_similar_companies",
     "check_vc_funding",
+    "fetch_sec_filings",
+    "analyze_10k",
+    "analyze_10q",
+    "analyze_8k_executive",
 ]
