@@ -65,6 +65,13 @@ from app.services.theirstack_operations import (
     execute_company_search_by_job_postings,
     execute_company_search_by_tech_stack,
 )
+from app.services.shovels_operations import (
+    execute_address_residents,
+    execute_contractor_employees,
+    execute_contractor_enrich,
+    execute_contractor_search,
+    execute_permit_search,
+)
 
 router = APIRouter()
 
@@ -107,6 +114,11 @@ SUPPORTED_OPERATION_IDS = {
     "company.search.by_job_postings",
     "company.enrich.tech_stack",
     "company.enrich.hiring_signals",
+    "permit.search",
+    "contractor.enrich",
+    "contractor.search",
+    "contractor.search.employees",
+    "address.search.residents",
 }
 
 
@@ -165,6 +177,14 @@ async def execute_v1(
         return error_response("entity_type must be person for person operations", 400)
     if payload.operation_id.startswith("company.") and payload.entity_type != "company":
         return error_response("entity_type must be company for company operations", 400)
+    if payload.operation_id in {
+        "permit.search",
+        "contractor.enrich",
+        "contractor.search",
+        "contractor.search.employees",
+        "address.search.residents",
+    } and payload.entity_type != "company":
+        return error_response("entity_type must be company for shovels operations", 400)
     if auth.role in {"company_admin", "member"} and not auth.company_id:
         return error_response("Company-scoped user missing company_id", 403)
 
@@ -555,6 +575,61 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.hiring_signals":
         result = await execute_company_enrich_hiring_signals(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "permit.search":
+        result = await execute_permit_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "contractor.enrich":
+        result = await execute_contractor_enrich(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "contractor.search":
+        result = await execute_contractor_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "contractor.search.employees":
+        result = await execute_contractor_employees(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "address.search.residents":
+        result = await execute_address_residents(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
