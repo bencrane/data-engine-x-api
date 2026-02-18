@@ -27,6 +27,22 @@ _DEFAULT_INITIAL_FIELDS: dict[str, set[str]] = {
 }
 
 _COMPANY_TO_PERSON_SIGNAL_FIELDS = {"email", "mobile_phone"}
+_ECOMMERCE_SPECIFIC_FIELDS = {
+    "ecommerce_platform",
+    "ecommerce_plan",
+    "estimated_monthly_sales_cents",
+    "installed_apps",
+    "product_count",
+    "platform_rank",
+    "global_rank",
+    "monthly_app_spend_cents",
+    "store_created_at",
+    "shipping_carriers",
+    "sales_carriers",
+    "domain_state",
+    "merchant_name",
+    "contact_info",
+}
 
 
 def _operation_sort_key(operation: dict[str, Any]) -> tuple[int, int, str]:
@@ -35,6 +51,23 @@ def _operation_sort_key(operation: dict[str, Any]) -> tuple[int, int, str]:
         _CATEGORY_RANK.get(str(operation.get("category")), 99),
         str(operation.get("operation_id")),
     )
+
+
+def _operation_cost_rank(operation: dict[str, Any]) -> int:
+    return _COST_RANK.get(str(operation.get("cost_tier")), 99)
+
+
+def _operation_produces_set(operation: dict[str, Any]) -> set[str]:
+    produces = operation.get("produces")
+    if not isinstance(produces, list):
+        return set()
+    return {field for field in produces if isinstance(field, str)}
+
+
+def _operation_desired_coverage(operation: dict[str, Any], desired_fields: set[str]) -> int:
+    if not desired_fields:
+        return 0
+    return len(_operation_produces_set(operation) & desired_fields)
 
 
 def _operations_by_id() -> dict[str, dict[str, Any]]:
@@ -76,15 +109,31 @@ def _first_missing_from_expr(expr: str, available_fields: set[str]) -> str | Non
     return None
 
 
-def _best_operation_for_field(field: str, preferred_entity_type: str | None = None) -> dict[str, Any] | None:
+def _best_operation_for_field(
+    field: str,
+    preferred_entity_type: str | None = None,
+    desired_fields: set[str] | None = None,
+) -> dict[str, Any] | None:
+    desired_set = desired_fields or set()
     candidates = get_operations_that_produce(field)
     if preferred_entity_type:
         preferred = [op for op in candidates if op.get("entity_type") == preferred_entity_type]
         if preferred:
             candidates = preferred
+    if field not in _ECOMMERCE_SPECIFIC_FIELDS:
+        non_ecommerce_candidates = [op for op in candidates if op.get("operation_id") != "company.enrich.ecommerce"]
+        if non_ecommerce_candidates:
+            candidates = non_ecommerce_candidates
     if not candidates:
         return None
-    candidates.sort(key=_operation_sort_key)
+    candidates.sort(
+        key=lambda operation: (
+            _operation_cost_rank(operation),
+            -_operation_desired_coverage(operation, desired_set),
+            _CATEGORY_RANK.get(str(operation.get("category")), 99),
+            str(operation.get("operation_id")),
+        )
+    )
     return candidates[0]
 
 
@@ -109,6 +158,103 @@ def _produced_fields_for_operations(operation_ids: set[str], operation_map: dict
     return produced
 
 
+def _required_inputs_satisfied_for_selection(
+    *,
+    operation_ids: set[str],
+    operation_map: dict[str, dict[str, Any]],
+    initial_fields: set[str],
+) -> bool:
+    for operation_id in operation_ids:
+        operation = operation_map.get(operation_id)
+        if not operation:
+            continue
+        available_fields = initial_fields | _produced_fields_for_operations(operation_ids - {operation_id}, operation_map)
+        all_of, any_of = _required_inputs(operation)
+        if any(not _expr_satisfied(expr, available_fields) for expr in all_of):
+            return False
+        if any_of and not any(_expr_satisfied(expr, available_fields) for expr in any_of):
+            return False
+    return True
+
+
+def _all_desired_fields_covered(
+    *,
+    operation_ids: set[str],
+    operation_map: dict[str, dict[str, Any]],
+    desired_fields: set[str],
+) -> bool:
+    produced_fields = _produced_fields_for_operations(operation_ids, operation_map)
+    return desired_fields.issubset(produced_fields)
+
+
+def _redundancy_candidate_sort_key(
+    operation_id: str,
+    operation_map: dict[str, dict[str, Any]],
+    desired_fields: set[str],
+    entity_type: str,
+) -> tuple[int, int, int, int, str]:
+    operation = operation_map.get(operation_id, {})
+    ecommerce_for_standard_company_fields = (
+        entity_type == "company"
+        and operation_id == "company.enrich.ecommerce"
+        and desired_fields.isdisjoint(_ECOMMERCE_SPECIFIC_FIELDS)
+    )
+    produced = _operation_produces_set(operation)
+    desired_contribution = len(produced & desired_fields)
+    return (
+        0 if ecommerce_for_standard_company_fields else 1,
+        -_operation_cost_rank(operation),
+        desired_contribution,
+        len(produced),
+        operation_id,
+    )
+
+
+def _deduplicate_redundant_operations(
+    *,
+    operation_ids: set[str],
+    operation_map: dict[str, dict[str, Any]],
+    desired_fields: set[str],
+    initial_fields: set[str],
+    pinned_operation_ids: set[str],
+    entity_type: str,
+) -> set[str]:
+    deduped_ids = set(operation_ids)
+    changed = True
+    while changed:
+        changed = False
+        for operation_id in sorted(
+            deduped_ids,
+            key=lambda op_id: _redundancy_candidate_sort_key(
+                op_id,
+                operation_map,
+                desired_fields,
+                entity_type,
+            ),
+        ):
+            if operation_id in pinned_operation_ids:
+                continue
+            remaining_ids = deduped_ids - {operation_id}
+            if not remaining_ids:
+                continue
+            if not _all_desired_fields_covered(
+                operation_ids=remaining_ids,
+                operation_map=operation_map,
+                desired_fields=desired_fields,
+            ):
+                continue
+            if not _required_inputs_satisfied_for_selection(
+                operation_ids=remaining_ids,
+                operation_map=operation_map,
+                initial_fields=initial_fields,
+            ):
+                continue
+            deduped_ids = remaining_ids
+            changed = True
+            break
+    return deduped_ids
+
+
 def _wire_requirement_dependencies(
     *,
     operation_id: str,
@@ -118,6 +264,7 @@ def _wire_requirement_dependencies(
     initial_fields: set[str],
     unresolvable_fields: set[str],
     preferred_entity_type: str,
+    desired_fields: set[str],
 ) -> set[tuple[str, str]]:
     edges: set[tuple[str, str]] = set()
     available_fields = initial_fields | _produced_fields_for_operations(operation_ids - {operation_id}, operation_map)
@@ -129,7 +276,7 @@ def _wire_requirement_dependencies(
         candidate_field = _first_missing_from_expr(expr, available_fields)
         if not candidate_field:
             continue
-        producer = _best_operation_for_field(candidate_field, preferred_entity_type)
+        producer = _best_operation_for_field(candidate_field, preferred_entity_type, desired_fields)
         if not producer:
             unresolvable_fields.add(candidate_field)
             continue
@@ -146,7 +293,7 @@ def _wire_requirement_dependencies(
                 if chosen_field:
                     break
             if chosen_field:
-                producer = _best_operation_for_field(chosen_field, preferred_entity_type)
+                producer = _best_operation_for_field(chosen_field, preferred_entity_type, desired_fields)
                 if not producer:
                     unresolvable_fields.add(chosen_field)
                 else:
@@ -230,6 +377,7 @@ def assemble_blueprint(
     unresolvable_fields: set[str] = set()
 
     normalized_desired_fields = [field.strip() for field in desired_fields if isinstance(field, str) and field.strip()]
+    normalized_desired_field_set = set(normalized_desired_fields)
     initial_fields = set(_DEFAULT_INITIAL_FIELDS.get(entity_type, set()))
 
     cross_entity_person_needed = entity_type == "company" and any(
@@ -238,7 +386,7 @@ def assemble_blueprint(
 
     for field in normalized_desired_fields:
         preferred_entity = "person" if field in _COMPANY_TO_PERSON_SIGNAL_FIELDS else entity_type
-        producer = _best_operation_for_field(field, preferred_entity)
+        producer = _best_operation_for_field(field, preferred_entity, normalized_desired_field_set)
         if not producer:
             unresolvable_fields.add(field)
             continue
@@ -249,6 +397,7 @@ def assemble_blueprint(
 
     if parsed_options.get("include_pricing_intelligence"):
         selected_operation_ids.add("company.derive.pricing_intelligence")
+    pinned_operation_ids = {"company.derive.pricing_intelligence"} if parsed_options.get("include_pricing_intelligence") else set()
 
     changed = True
     while changed:
@@ -266,6 +415,7 @@ def assemble_blueprint(
                 initial_fields=initial_fields,
                 unresolvable_fields=unresolvable_fields,
                 preferred_entity_type=entity_type if operation_id.startswith("company.") else "person",
+                desired_fields=normalized_desired_field_set,
             )
             previous_edge_count = len(edges)
             edges.update(new_edges)
@@ -273,6 +423,16 @@ def assemble_blueprint(
                 changed = True
         if selected_operation_ids != snapshot:
             changed = True
+
+    selected_operation_ids = _deduplicate_redundant_operations(
+        operation_ids=selected_operation_ids,
+        operation_map=operation_map,
+        desired_fields=normalized_desired_field_set,
+        initial_fields=initial_fields,
+        pinned_operation_ids=pinned_operation_ids,
+        entity_type=entity_type,
+    )
+    edges = {(source, target) for source, target in edges if source in selected_operation_ids and target in selected_operation_ids}
 
     if cross_entity_person_needed and "person.search" in selected_operation_ids:
         for operation_id in list(selected_operation_ids):
