@@ -30,3 +30,17 @@ class CompanyProfileOutput(BaseModel):
 class CompanyEnrichProfileOutput(BaseModel):
     company_profile: CompanyProfileOutput | None
     source_providers: list[str]
+
+
+class TechnologyItem(BaseModel):
+    name: str
+    category: str | None = None
+    website: str | None = None
+    icon: str | None = None
+
+
+class TechnographicsOutput(BaseModel):
+    technologies: list[TechnologyItem]
+    categories: dict[str, list[str]] | None = None
+    technology_count: int
+    source_provider: str = "leadmagic"
