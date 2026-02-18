@@ -271,6 +271,8 @@ async def internal_sync_submission_status(
     if not submission_result.data:
         return error_response("Submission not found", 404)
 
+    # Deliberately query by submission_id only (no parent filter) so status sync
+    # always includes root, child, grandchild, and any deeper fan-out runs.
     runs = (
         client.table("pipeline_runs")
         .select("status")
