@@ -54,6 +54,9 @@ class EntityTimelineRequest(BaseModel):
     entity_type: str
     entity_id: str
     org_id: str | None = None
+    pipeline_run_id: str | None = None
+    submission_id: str | None = None
+    event_type: str | None = None
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=25, ge=1, le=100)
 
@@ -177,6 +180,13 @@ async def get_entity_timeline(
         .eq("entity_type", entity_type)
         .eq("entity_id", payload.entity_id)
     )
+    if payload.pipeline_run_id:
+        query = query.eq("pipeline_run_id", payload.pipeline_run_id)
+    if payload.submission_id:
+        query = query.eq("submission_id", payload.submission_id)
+    event_type = _normalize_text(payload.event_type)
+    if event_type:
+        query = query.eq("metadata->>event_type", event_type)
 
     if not is_super_admin and auth.role in {"company_admin", "member"}:
         if not auth.company_id:
