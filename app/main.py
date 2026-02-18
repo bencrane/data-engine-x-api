@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.routers import (
     auth,
+    coverage_v1,
     entities_v1,
     execute_v1,
     health,
@@ -88,6 +89,11 @@ app.include_router(
     entities_v1.router,
     prefix="/api/v1/entities",
     tags=["entities-v1"],
+)
+app.include_router(
+    coverage_v1.router,
+    prefix="/api/v1/coverage",
+    tags=["coverage-v1"],
 )
 app.include_router(
     registry_v1.router,
