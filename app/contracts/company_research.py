@@ -31,6 +31,19 @@ class DiscoverCompetitorsOutput(BaseModel):
     source_provider: str = "revenueinfra"
 
 
+class SimilarCompanyItem(BaseModel):
+    company_name: str | None = None
+    company_domain: str | None = None
+    company_linkedin_url: str | None = None
+    similarity_score: float | None = None
+
+
+class FindSimilarCompaniesOutput(BaseModel):
+    similar_companies: list[SimilarCompanyItem]
+    similar_count: int
+    source_provider: str = "revenueinfra"
+
+
 class CustomerItem(BaseModel):
     customer_name: str | None = None
     customer_domain: str | None = None
