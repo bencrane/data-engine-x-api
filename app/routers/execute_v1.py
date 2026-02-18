@@ -423,6 +423,24 @@ def _extract_final_context_for_run(
     return None
 
 
+def _build_pipeline_run_tree(run_rows: list[dict[str, Any]], run_map: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build a submission run tree with arbitrary parent/child depth."""
+    roots: list[dict[str, Any]] = []
+    for run in run_rows:
+        run_payload = run_map[run["id"]]
+        parent_id = run_payload.get("parent_pipeline_run_id")
+        if not parent_id:
+            roots.append(run_payload)
+            continue
+        parent_payload = run_map.get(parent_id)
+        if parent_payload is None:
+            # Keep orphaned runs visible rather than dropping them from status output.
+            roots.append(run_payload)
+            continue
+        parent_payload.setdefault("children", []).append(run_payload)
+    return roots
+
+
 @router.post(
     "/batch/status",
     response_model=DataEnvelope,
@@ -462,7 +480,6 @@ async def batch_status(
     )
     run_rows = runs_result.data
     run_map: dict[str, dict[str, Any]] = {}
-    child_buckets: dict[str, list[dict[str, Any]]] = {}
     summary = {"total": len(run_rows), "completed": 0, "failed": 0, "pending": 0, "running": 0}
 
     for run in run_rows:
@@ -486,17 +503,7 @@ async def batch_status(
             "children": [],
         }
         run_map[run["id"]] = run_payload
-        parent_id = run.get("parent_pipeline_run_id")
-        if parent_id:
-            child_buckets.setdefault(parent_id, []).append(run_payload)
-
-    per_entity: list[dict[str, Any]] = []
-    for run in run_rows:
-        run_payload = run_map[run["id"]]
-        if run_payload["parent_pipeline_run_id"]:
-            continue
-        run_payload["children"] = child_buckets.get(run["id"], [])
-        per_entity.append(run_payload)
+    per_entity = _build_pipeline_run_tree(run_rows, run_map)
 
     return DataEnvelope(
         data={
