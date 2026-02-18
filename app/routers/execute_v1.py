@@ -49,6 +49,10 @@ from app.services.research_operations import (
 from app.services.pricing_intelligence_operations import (
     execute_company_derive_pricing_intelligence,
 )
+from app.services.change_detection_operations import (
+    execute_company_derive_detect_changes,
+    execute_person_derive_detect_changes,
+)
 
 router = APIRouter()
 
@@ -60,6 +64,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.contact.verify_email",
     "person.search",
     "person.enrich.profile",
+    "person.derive.detect_changes",
     "company.enrich.profile",
     "company.enrich.fmcsa",
     "company.enrich.card_revenue",
@@ -81,6 +86,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.lookup_champion_testimonials",
     "company.research.check_vc_funding",
     "company.derive.pricing_intelligence",
+    "company.derive.detect_changes",
 }
 
 
@@ -188,6 +194,17 @@ async def execute_v1(
 
     if payload.operation_id == "person.enrich.profile":
         result = await execute_person_enrich_profile(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.derive.detect_changes":
+        result = await execute_person_derive_detect_changes(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
@@ -419,6 +436,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.derive.pricing_intelligence":
         result = await execute_company_derive_pricing_intelligence(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.derive.detect_changes":
+        result = await execute_company_derive_detect_changes(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
