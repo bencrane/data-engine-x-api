@@ -87,20 +87,27 @@ class EcommerceEnrichOutput(BaseModel):
     source_provider: str = "storeleads"
 
 
+class CardRevenueTimeSeriesPoint(BaseModel):
+    period_start: str
+    value: float | None = None
+
+
 class CardRevenueOutput(BaseModel):
     enigma_brand_id: str | None = None
     brand_name: str | None = None
     location_count: int | None = None
-    annual_card_revenue: int | None = None
-    card_revenue_period: str | None = None
-    card_revenue_period_start: str | None = None
-    card_revenue_period_end: str | None = None
-    top_location_name: str | None = None
-    top_location_address: str | None = None
-    top_location_city: str | None = None
-    top_location_state: str | None = None
-    top_location_rank_position: int | None = None
-    top_location_rank_cohort_size: int | None = None
+    annual_card_revenue: float | None = None
+    annual_card_revenue_yoy_growth: float | None = None
+    annual_avg_daily_customers: float | None = None
+    annual_transaction_count: float | None = None
+    annual_avg_transaction_size: float | None = None
+    annual_refunds: float | None = None
+    monthly_revenue: list[CardRevenueTimeSeriesPoint] | None = None
+    monthly_revenue_growth: list[CardRevenueTimeSeriesPoint] | None = None
+    monthly_avg_daily_customers: list[CardRevenueTimeSeriesPoint] | None = None
+    monthly_transactions: list[CardRevenueTimeSeriesPoint] | None = None
+    monthly_avg_transaction_size: list[CardRevenueTimeSeriesPoint] | None = None
+    monthly_refunds: list[CardRevenueTimeSeriesPoint] | None = None
     source_provider: str = "enigma"
 
 
