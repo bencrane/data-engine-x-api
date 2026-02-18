@@ -21,6 +21,7 @@ from app.providers.revenueinfra.pricing import (
     infer_sales_motion,
     infer_security_compliance_gating,
 )
+from app.providers.revenueinfra.vc_funding import check_vc_funding
 
 __all__ = [
     "discover_competitors",
@@ -42,4 +43,5 @@ __all__ = [
     "infer_pricing_visibility",
     "infer_sales_motion",
     "infer_security_compliance_gating",
+    "check_vc_funding",
 ]
