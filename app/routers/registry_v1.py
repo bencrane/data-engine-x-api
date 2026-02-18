@@ -76,6 +76,28 @@ def _normalize_extracted_options(raw_options: Any) -> dict[str, Any]:
     return options
 
 
+_PERSON_CONTACT_FIELDS = {
+    "email",
+    "email_status",
+    "mobile_phone",
+    "mobile_status",
+    "verification",
+    "contact_info",
+    "work_email",
+    "personal_email",
+}
+
+
+def _ensure_person_contact_field_for_title_filter(desired_fields: list[str], options: dict[str, Any]) -> list[str]:
+    if "job_title" not in options:
+        return desired_fields
+    if any(field in _PERSON_CONTACT_FIELDS for field in desired_fields):
+        return desired_fields
+    if "email" in desired_fields:
+        return desired_fields
+    return [*desired_fields, "email"]
+
+
 def _extract_available_fields(operations: list[dict[str, Any]], entity_type: str) -> dict[str, list[str]]:
     """Extract and categorize available fields from operations registry."""
     all_fields: set[str] = set()
@@ -156,6 +178,24 @@ OPTIONS (include only if relevant to the request):
 - job_title (string): Filter by job title
 - include_pricing_intelligence (bool): Set true if user wants pricing page analysis
 
+MANDATORY SEMANTIC FIELD MAPPING RULES (YOU MUST APPLY THESE):
+- If user mentions "emails", "work email", "email addresses", or "contact info for people" -> include "email" in desired_fields.
+- If user mentions "phone", "mobile", or "phone number" -> include "mobile_phone" in desired_fields.
+- If user mentions "find people", "decision makers", "search for people", "VPs", "Directors", or similar role-based people search language -> include "email" in desired_fields.
+- If user mentions "enrich people", "person profile", or "work history" -> include "current_title", "seniority", and "work_history" in desired_fields.
+- If user mentions "pricing" or "pricing page" -> include "pricing_page_url" in desired_fields.
+- If user mentions "competitors" -> include "competitors" in desired_fields.
+- If user mentions "customers" -> include "customers" in desired_fields.
+- If user mentions "alumni" or "former employees" -> include "alumni" in desired_fields.
+- If user mentions "technolog" (any form, e.g. "technology", "technologies") or "tech stack" -> include "technologies" in desired_fields.
+- If user mentions "VC", "funding", or "investors" -> include "has_raised_vc" in desired_fields.
+- If user mentions "similar companies" or "lookalikes" -> include "similar_companies" in desired_fields.
+- If user mentions "ads" or "advertising" -> include "ads" in desired_fields.
+- If user mentions "ecommerce", "Shopify", or "store" -> include "ecommerce_platform" in desired_fields.
+
+ADDITIONAL MANDATORY RULE:
+- If options includes "job_title" and desired_fields has no person contact field, add "email" to desired_fields.
+
 EXAMPLES:
 
 Input: "I need company profiles with LinkedIn and employee count"
@@ -208,6 +248,7 @@ async def _extract_fields_and_options_from_prompt(*, prompt: str, entity_type: s
 
     desired_fields = _normalize_extracted_fields(mapped.get("desired_fields"))
     options = _normalize_extracted_options(mapped.get("options"))
+    desired_fields = _ensure_person_contact_field_for_title_filter(desired_fields, options)
     return desired_fields, options
 
 
