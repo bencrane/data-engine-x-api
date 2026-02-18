@@ -35,6 +35,7 @@ from app.services.submission_flow import create_batch_submission_and_trigger_pip
 from app.services.research_operations import (
     execute_company_research_check_vc_funding,
     execute_company_research_discover_competitors,
+    execute_company_research_find_similar_companies,
     execute_company_research_lookup_alumni,
     execute_company_research_lookup_champion_testimonials,
     execute_company_research_lookup_champions,
@@ -67,6 +68,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.resolve_g2_url",
     "company.research.resolve_pricing_page_url",
     "company.research.discover_competitors",
+    "company.research.find_similar_companies",
     "company.research.lookup_customers",
     "company.research.lookup_alumni",
     "company.research.lookup_champions",
@@ -301,6 +303,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.discover_competitors":
         result = await execute_company_research_discover_competitors(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.find_similar_companies":
+        result = await execute_company_research_find_similar_companies(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
