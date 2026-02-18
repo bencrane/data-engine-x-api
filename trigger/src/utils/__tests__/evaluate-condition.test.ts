@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { evaluateCondition } from "../evaluate-condition";
+import { evaluateCondition } from "../evaluate-condition.js";
 
 test("exists op handles present, null, missing, and empty string", () => {
   assert.equal(evaluateCondition({ field: "pricing_page_url", op: "exists" }, { pricing_page_url: "https://acme.com/pricing" }), true);
