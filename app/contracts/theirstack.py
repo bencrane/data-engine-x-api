@@ -35,11 +35,82 @@ class TheirStackJobItem(BaseModel):
     location: str | None = None
     seniority: str | None = None
     source_provider: str = "theirstack"
+    theirstack_job_id: int | None = None
+    normalized_title: str | None = None
+    final_url: str | None = None
+    source_url: str | None = None
+    discovered_at: str | None = None
+    reposted: bool | None = None
+    date_reposted: str | None = None
+    short_location: str | None = None
+    long_location: str | None = None
+    state_code: str | None = None
+    postal_code: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    country: str | None = None
+    country_code: str | None = None
+    cities: list[str] | None = None
+    remote: bool | None = None
+    hybrid: bool | None = None
+    employment_statuses: list[str] | None = None
+    easy_apply: bool | None = None
+    salary_string: str | None = None
+    min_annual_salary_usd: float | None = None
+    max_annual_salary_usd: float | None = None
+    avg_annual_salary_usd: float | None = None
+    salary_currency: str | None = None
+    description: str | None = None
+    technology_slugs: list[str] | None = None
+    manager_roles: list[str] | None = None
+    hiring_team: list["TheirStackHiringTeamMember"] | None = None
+    company_object: "TheirStackEmbeddedCompany" | None = None
+
+
+class TheirStackHiringTeamMember(BaseModel):
+    full_name: str | None = None
+    first_name: str | None = None
+    linkedin_url: str | None = None
+    role: str | None = None
+    image_url: str | None = None
+
+
+class TheirStackEmbeddedCompany(BaseModel):
+    theirstack_company_id: str | None = None
+    name: str | None = None
+    domain: str | None = None
+    industry: str | None = None
+    country: str | None = None
+    employee_count: int | None = None
+    employee_count_range: str | None = None
+    logo: str | None = None
+    linkedin_url: str | None = None
+    num_jobs: int | None = None
+    num_jobs_last_30_days: int | None = None
+    founded_year: int | None = None
+    annual_revenue_usd: float | None = None
+    total_funding_usd: int | None = None
+    last_funding_round_date: str | None = None
+    funding_stage: str | None = None
+    city: str | None = None
+    long_description: str | None = None
+    publicly_traded_symbol: str | None = None
+    publicly_traded_exchange: str | None = None
+    technology_slugs: list[str] | None = None
+    technology_names: list[str] | None = None
 
 
 class TheirStackJobSearchOutput(BaseModel):
     results: list[TheirStackJobItem]
     result_count: int
+    source_provider: str = "theirstack"
+
+
+class TheirStackJobSearchExtendedOutput(BaseModel):
+    results: list[TheirStackJobItem]
+    result_count: int
+    total_results: int | None = None
+    total_companies: int | None = None
     source_provider: str = "theirstack"
 
 
