@@ -196,6 +196,88 @@ def _map_resident_item(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _map_geo_item(raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "geo_id": _as_str(raw.get("geo_id")),
+        "name": _as_str(raw.get("name")),
+        "state": _as_str(raw.get("state")),
+    }
+
+
+def _map_address_search_item(raw: dict[str, Any]) -> dict[str, Any]:
+    address = _as_str(raw.get("name")) or _map_address(raw)
+    return {
+        "geo_id": _as_str(raw.get("geo_id")),
+        "address": address,
+        "city": _as_str(raw.get("city")),
+        "state": _as_str(raw.get("state")),
+        "zip_code": _as_str(raw.get("zip_code")),
+        "property_type": _as_str(raw.get("property_type")),
+    }
+
+
+def _map_monthly_data_points(*, items: list[dict[str, Any]], metric: str | None) -> list[dict[str, Any]]:
+    data_points: list[dict[str, Any]] = []
+    for item in items:
+        value: Any = item.get("permit_count")
+        if metric and metric in item:
+            value = item.get(metric)
+        data_points.append(
+            {
+                "month": _as_str(item.get("date")),
+                "value": value if isinstance(value, (int, float)) and not isinstance(value, bool) else None,
+            }
+        )
+    return data_points
+
+
+def _default_geo_search_result() -> dict[str, Any]:
+    return {"results": [], "result_count": 0}
+
+
+def _default_monthly_metrics_result(geo_id: str | None = None, metric: str | None = None) -> dict[str, Any]:
+    return {"geo_id": geo_id or "", "metric": metric, "data_points": []}
+
+
+def _default_current_metrics_result(geo_id: str | None = None) -> dict[str, Any]:
+    return {"geo_id": geo_id or "", "metrics": {}}
+
+
+def _default_geo_detail_result(geo_id: str | None = None) -> dict[str, Any]:
+    return {"geo_id": geo_id or "", "name": None, "state": None, "details": {}}
+
+
+def _default_address_search_result() -> dict[str, Any]:
+    return {"results": [], "result_count": 0}
+
+
+def _build_geo_search_query(*, state: str | None, name_contains: str | None) -> str | None:
+    state_text = _as_str(state)
+    name_text = _as_str(name_contains)
+    if not state_text and not name_text:
+        return None
+    if state_text and name_text:
+        return f"{name_text} {state_text}"
+    return name_text or state_text
+
+
+def _build_zip_search_query(*, state: str | None, zipcode_contains: str | None) -> str | None:
+    state_text = _as_str(state)
+    zip_text = _as_str(zipcode_contains)
+    if not state_text and not zip_text:
+        return None
+    if state_text and zip_text:
+        return f"{zip_text} {state_text}"
+    return zip_text or state_text
+
+
+def _size_param(value: Any) -> int:
+    parsed = _as_int(value)
+    if parsed is None:
+        return 50
+    return max(1, min(100, parsed))
+
+
 async def _get_json(
     *,
     client: httpx.AsyncClient,
@@ -764,3 +846,496 @@ async def get_address_residents(
             "resident_count": len(residents),
         },
     }
+
+
+async def search_cities(
+    *,
+    api_key: str | None,
+    state: str | None,
+    name_contains: str | None = None,
+    size: int | None = None,
+) -> ProviderAdapterResult:
+    action = "market_search_cities_shovels"
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_search_result()}
+
+    query = _build_geo_search_query(state=state, name_contains=name_contains)
+    if not query or not _as_str(state):
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_search_result()}
+
+    params: list[tuple[str, Any]] = [("q", query), ("size", _size_param(size))]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/cities/search", headers=_http_headers(api_key), params=params)
+
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+
+    body_dict = _as_dict(body)
+    normalized_state = _as_str(state)
+    items = [_map_geo_item(_as_dict(item)) for item in _as_list(body_dict.get("items"))]
+    if normalized_state:
+        items = [item for item in items if _as_str(item.get("state")) == normalized_state]
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"results": items, "result_count": len(items)}}
+
+
+async def search_counties(
+    *,
+    api_key: str | None,
+    state: str | None,
+    name_contains: str | None = None,
+    size: int | None = None,
+) -> ProviderAdapterResult:
+    action = "market_search_counties_shovels"
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_search_result()}
+
+    query = _build_geo_search_query(state=state, name_contains=name_contains)
+    if not query or not _as_str(state):
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_search_result()}
+
+    params: list[tuple[str, Any]] = [("q", query), ("size", _size_param(size))]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/counties/search", headers=_http_headers(api_key), params=params)
+
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+
+    body_dict = _as_dict(body)
+    normalized_state = _as_str(state)
+    items = [_map_geo_item(_as_dict(item)) for item in _as_list(body_dict.get("items"))]
+    if normalized_state:
+        items = [item for item in items if _as_str(item.get("state")) == normalized_state]
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"results": items, "result_count": len(items)}}
+
+
+async def search_zipcodes(
+    *,
+    api_key: str | None,
+    state: str | None,
+    zipcode_contains: str | None = None,
+    size: int | None = None,
+) -> ProviderAdapterResult:
+    action = "market_search_zipcodes_shovels"
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_search_result()}
+
+    query = _build_zip_search_query(state=state, zipcode_contains=zipcode_contains)
+    if not query or not _as_str(state):
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_search_result()}
+
+    params: list[tuple[str, Any]] = [("q", query), ("size", _size_param(size))]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/zipcodes/search", headers=_http_headers(api_key), params=params)
+
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+
+    body_dict = _as_dict(body)
+    normalized_state = _as_str(state)
+    items = [_map_geo_item(_as_dict(item)) for item in _as_list(body_dict.get("items"))]
+    if normalized_state:
+        items = [item for item in items if _as_str(item.get("state")) == normalized_state]
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"results": items, "result_count": len(items)}}
+
+
+async def search_jurisdictions(
+    *,
+    api_key: str | None,
+    state: str | None,
+    name_contains: str | None = None,
+    size: int | None = None,
+) -> ProviderAdapterResult:
+    action = "market_search_jurisdictions_shovels"
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_search_result()}
+
+    query = _build_geo_search_query(state=state, name_contains=name_contains)
+    if not query or not _as_str(state):
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_search_result()}
+
+    params: list[tuple[str, Any]] = [("q", query), ("size", _size_param(size))]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/jurisdictions/search", headers=_http_headers(api_key), params=params)
+
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_search_result()}
+
+    body_dict = _as_dict(body)
+    normalized_state = _as_str(state)
+    items = [_map_geo_item(_as_dict(item)) for item in _as_list(body_dict.get("items"))]
+    if normalized_state:
+        items = [item for item in items if _as_str(item.get("state")) == normalized_state]
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"results": items, "result_count": len(items)}}
+
+
+async def get_city_metrics_monthly(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+    metric: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> ProviderAdapterResult:
+    action = "market_city_metrics_monthly_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    normalized_metric = _as_str(metric) or "all"
+    metric_from = _as_str(start_date)
+    metric_to = _as_str(end_date)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if not normalized_geo_id or not metric_from or not metric_to:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    params: list[tuple[str, Any]] = [("metric_from", metric_from), ("metric_to", metric_to), ("tag", normalized_metric), ("property_type", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/cities/{normalized_geo_id}/metrics/monthly", headers=_http_headers(api_key), params=params)
+
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    data_points = _map_monthly_data_points(items=items, metric=normalized_metric)
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metric": normalized_metric, "data_points": data_points}}
+
+
+async def get_city_metrics_current(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_city_metrics_current_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("tag", "all"), ("property_type", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/cities/{normalized_geo_id}/metrics/current", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    metrics = items[0] if items else {}
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metrics": metrics}}
+
+
+async def get_county_metrics_monthly(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+    metric: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> ProviderAdapterResult:
+    action = "market_county_metrics_monthly_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    normalized_metric = _as_str(metric) or "all"
+    metric_from = _as_str(start_date)
+    metric_to = _as_str(end_date)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if not normalized_geo_id or not metric_from or not metric_to:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    params: list[tuple[str, Any]] = [("metric_from", metric_from), ("metric_to", metric_to), ("tag", normalized_metric), ("property_type", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/counties/{normalized_geo_id}/metrics/monthly", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    data_points = _map_monthly_data_points(items=items, metric=normalized_metric)
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metric": normalized_metric, "data_points": data_points}}
+
+
+async def get_county_metrics_current(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_county_metrics_current_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("tag", "all"), ("property_type", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/counties/{normalized_geo_id}/metrics/current", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    metrics = items[0] if items else {}
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metrics": metrics}}
+
+
+async def get_jurisdiction_metrics_monthly(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+    metric: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> ProviderAdapterResult:
+    action = "market_jurisdiction_metrics_monthly_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    normalized_metric = _as_str(metric) or "all"
+    metric_from = _as_str(start_date)
+    metric_to = _as_str(end_date)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if not normalized_geo_id or not metric_from or not metric_to:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    params: list[tuple[str, Any]] = [("metric_from", metric_from), ("metric_to", metric_to), ("tag", normalized_metric), ("property_type", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/jurisdictions/{normalized_geo_id}/metrics/monthly", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    data_points = _map_monthly_data_points(items=items, metric=normalized_metric)
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metric": normalized_metric, "data_points": data_points}}
+
+
+async def get_jurisdiction_metrics_current(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_jurisdiction_metrics_current_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("tag", "all"), ("property_type", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/jurisdictions/{normalized_geo_id}/metrics/current", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    metrics = items[0] if items else {}
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metrics": metrics}}
+
+
+async def get_address_metrics_monthly(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+    metric: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> ProviderAdapterResult:
+    action = "market_address_metrics_monthly_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    normalized_metric = _as_str(metric) or "all"
+    metric_from = _as_str(start_date)
+    metric_to = _as_str(end_date)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if not normalized_geo_id or not metric_from or not metric_to:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    params: list[tuple[str, Any]] = [("metric_from", metric_from), ("metric_to", metric_to), ("tag", normalized_metric), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/addresses/{normalized_geo_id}/metrics/monthly", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_monthly_metrics_result(normalized_geo_id, normalized_metric)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    data_points = _map_monthly_data_points(items=items, metric=normalized_metric)
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metric": normalized_metric, "data_points": data_points}}
+
+
+async def get_address_metrics_current(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_address_metrics_current_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("tag", "all"), ("size", 100)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/addresses/{normalized_geo_id}/metrics/current", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_current_metrics_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    items = [_as_dict(item) for item in _as_list(body_dict.get("items"))]
+    metrics = items[0] if items else {}
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": normalized_geo_id, "metrics": metrics}}
+
+
+async def get_city_details(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_city_detail_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("geo_id", normalized_geo_id)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/cities", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    details = dict(body_dict)
+    return {"attempt": {"provider": "shovels", "action": action, "status": "found" if details else "not_found", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": _as_str(body_dict.get("geo_id")) or normalized_geo_id, "name": _as_str(body_dict.get("name")), "state": _as_str(body_dict.get("state")), "details": details}}
+
+
+async def get_county_details(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_county_detail_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("geo_id", normalized_geo_id)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/counties", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    details = dict(body_dict)
+    return {"attempt": {"provider": "shovels", "action": action, "status": "found" if details else "not_found", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": _as_str(body_dict.get("geo_id")) or normalized_geo_id, "name": _as_str(body_dict.get("name")), "state": _as_str(body_dict.get("state")), "details": details}}
+
+
+async def get_jurisdiction_details(
+    *,
+    api_key: str | None,
+    geo_id: str | None,
+) -> ProviderAdapterResult:
+    action = "market_jurisdiction_detail_shovels"
+    normalized_geo_id = _as_str(geo_id)
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+    if not normalized_geo_id:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+
+    params: list[tuple[str, Any]] = [("geo_id", normalized_geo_id)]
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/jurisdictions", headers=_http_headers(api_key), params=params)
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_geo_detail_result(normalized_geo_id)}
+
+    body_dict = _as_dict(body)
+    details = dict(body_dict)
+    return {"attempt": {"provider": "shovels", "action": action, "status": "found" if details else "not_found", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"geo_id": _as_str(body_dict.get("geo_id")) or normalized_geo_id, "name": _as_str(body_dict.get("name")), "state": _as_str(body_dict.get("state")), "details": details}}
+
+
+async def search_addresses(
+    *,
+    api_key: str | None,
+    filters: dict[str, Any],
+) -> ProviderAdapterResult:
+    action = "address_search_shovels"
+    if not api_key:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_provider_api_key"}, "mapped": _default_address_search_result()}
+
+    query = _as_str(filters.get("q"))
+    if not query:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "skipped", "skip_reason": "missing_required_inputs"}, "mapped": _default_address_search_result()}
+
+    allowed_keys = {
+        "q",
+        "street_no",
+        "street",
+        "city",
+        "county",
+        "state",
+        "zip_code",
+        "zip_code_ext",
+        "jurisdiction",
+        "property_type",
+        "cursor",
+        "size",
+    }
+    params = _query_from_filters(filters, allowed_keys=allowed_keys)
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        status_code, body, request_error = await _get_json(client=client, url=f"{_BASE_URL}/v2/addresses/search", headers=_http_headers(api_key), params=params)
+
+    if request_error:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "provider_status": "http_error", "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_address_search_result()}
+    if status_code >= 400:
+        return {"attempt": {"provider": "shovels", "action": action, "status": "failed", "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": _default_address_search_result()}
+
+    body_dict = _as_dict(body)
+    items = [_map_address_search_item(_as_dict(item)) for item in _as_list(body_dict.get("items"))]
+    return {"attempt": {"provider": "shovels", "action": action, "status": _not_found_status(items), "http_status": status_code, "duration_ms": now_ms() - start_ms, "raw_response": body}, "mapped": {"results": items, "result_count": len(items)}}
