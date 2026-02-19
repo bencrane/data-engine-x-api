@@ -86,6 +86,25 @@ def _map_company_item(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _map_location_item(raw: dict[str, Any]) -> dict[str, Any] | None:
+    name = _as_str(raw.get("name"))
+    display_name = _as_str(raw.get("display_name"))
+    if not name and not display_name:
+        return None
+
+    return {
+        "name": name,
+        "state": _as_str(raw.get("state")),
+        "state_code": _as_str(raw.get("state_code")),
+        "country_code": _as_str(raw.get("country_code")),
+        "country_name": _as_str(raw.get("country_name")),
+        "display_name": display_name,
+        "latitude": _as_float(raw.get("latitude")),
+        "longitude": _as_float(raw.get("longitude")),
+        "type": _as_str(raw.get("type")),
+    }
+
+
 def _map_job_item(raw: dict[str, Any]) -> dict[str, Any]:
     theirstack_job_id = _as_int(raw.get("id"))
     hiring_team_raw = _as_list(raw.get("hiring_team"))
@@ -94,6 +113,12 @@ def _map_job_item(raw: dict[str, Any]) -> dict[str, Any]:
         mapped_item = _map_hiring_team_item(_as_dict(item))
         if mapped_item:
             hiring_team.append(mapped_item)
+    locations_raw = _as_list(raw.get("locations"))
+    locations: list[dict[str, Any]] = []
+    for item in locations_raw:
+        mapped_item = _map_location_item(_as_dict(item))
+        if mapped_item:
+            locations.append(mapped_item)
 
     return {
         "job_id": theirstack_job_id,
@@ -116,9 +141,12 @@ def _map_job_item(raw: dict[str, Any]) -> dict[str, Any]:
         "postal_code": _as_str(raw.get("postal_code")),
         "latitude": _as_float(raw.get("latitude")),
         "longitude": _as_float(raw.get("longitude")),
+        "cities": _as_str_list(raw.get("cities")),
+        "locations": locations or None,
         "country": _as_str(raw.get("country")),
         "country_code": _as_str(raw.get("country_code")),
-        "cities": _as_str_list(raw.get("cities")),
+        "countries": _as_str_list(raw.get("countries")),
+        "country_codes": _as_str_list(raw.get("country_codes")),
         "remote": raw.get("remote") if isinstance(raw.get("remote"), bool) else None,
         "hybrid": raw.get("hybrid") if isinstance(raw.get("hybrid"), bool) else None,
         "seniority": _as_str(raw.get("seniority")),
