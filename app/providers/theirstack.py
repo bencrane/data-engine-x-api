@@ -87,15 +87,100 @@ def _map_company_item(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _map_job_item(raw: dict[str, Any]) -> dict[str, Any]:
+    theirstack_job_id = _as_int(raw.get("id"))
+    hiring_team_raw = _as_list(raw.get("hiring_team"))
+    hiring_team: list[dict[str, Any]] = []
+    for item in hiring_team_raw:
+        mapped_item = _map_hiring_team_item(_as_dict(item))
+        if mapped_item:
+            hiring_team.append(mapped_item)
+
     return {
-        "job_id": _as_int(raw.get("id")),
+        "job_id": theirstack_job_id,
+        "theirstack_job_id": theirstack_job_id,
         "job_title": _as_str(raw.get("job_title")),
+        "normalized_title": _as_str(raw.get("normalized_title")),
         "company_name": _as_str(raw.get("company")),
         "company_domain": _as_str(raw.get("company_domain")),
         "url": _as_str(raw.get("url")),
+        "final_url": _as_str(raw.get("final_url")),
+        "source_url": _as_str(raw.get("source_url")),
         "date_posted": _as_str(raw.get("date_posted")),
+        "discovered_at": _as_str(raw.get("discovered_at")),
+        "reposted": raw.get("reposted") if isinstance(raw.get("reposted"), bool) else None,
+        "date_reposted": _as_str(raw.get("date_reposted")),
         "location": _as_str(raw.get("location")),
+        "short_location": _as_str(raw.get("short_location")),
+        "long_location": _as_str(raw.get("long_location")),
+        "state_code": _as_str(raw.get("state_code")),
+        "postal_code": _as_str(raw.get("postal_code")),
+        "latitude": _as_float(raw.get("latitude")),
+        "longitude": _as_float(raw.get("longitude")),
+        "country": _as_str(raw.get("country")),
+        "country_code": _as_str(raw.get("country_code")),
+        "cities": _as_str_list(raw.get("cities")),
+        "remote": raw.get("remote") if isinstance(raw.get("remote"), bool) else None,
+        "hybrid": raw.get("hybrid") if isinstance(raw.get("hybrid"), bool) else None,
         "seniority": _as_str(raw.get("seniority")),
+        "employment_statuses": _as_str_list(raw.get("employment_statuses")),
+        "easy_apply": raw.get("easy_apply") if isinstance(raw.get("easy_apply"), bool) else None,
+        "salary_string": _as_str(raw.get("salary_string")),
+        "min_annual_salary_usd": _as_float(raw.get("min_annual_salary_usd")),
+        "max_annual_salary_usd": _as_float(raw.get("max_annual_salary_usd")),
+        "avg_annual_salary_usd": _as_float(raw.get("avg_annual_salary_usd")),
+        "salary_currency": _as_str(raw.get("salary_currency")),
+        "description": _as_str(raw.get("description")),
+        "technology_slugs": _as_str_list(raw.get("technology_slugs")),
+        "hiring_team": hiring_team or None,
+        "company_object": _map_company_object(_as_dict(raw.get("company_object"))),
+        "manager_roles": _as_str_list(raw.get("manager_roles")),
+    }
+
+
+def _map_hiring_team_item(raw: dict[str, Any]) -> dict[str, Any] | None:
+    full_name = _as_str(raw.get("full_name"))
+    linkedin_url = _as_str(raw.get("linkedin_url"))
+    if not full_name and not linkedin_url:
+        return None
+
+    return {
+        "full_name": full_name,
+        "first_name": _as_str(raw.get("first_name")),
+        "linkedin_url": linkedin_url,
+        "role": _as_str(raw.get("role")),
+        "image_url": _as_str(raw.get("image_url")),
+    }
+
+
+def _map_company_object(raw: dict[str, Any]) -> dict[str, Any] | None:
+    name = _as_str(raw.get("name"))
+    domain = _as_str(raw.get("domain"))
+    if not name and not domain:
+        return None
+
+    return {
+        "theirstack_company_id": _as_str(raw.get("id")),
+        "name": name,
+        "domain": domain,
+        "industry": _as_str(raw.get("industry")),
+        "country": _as_str(raw.get("country")),
+        "employee_count": _as_int(raw.get("employee_count")),
+        "employee_count_range": _as_str(raw.get("employee_count_range")),
+        "logo": _as_str(raw.get("logo")),
+        "linkedin_url": _as_str(raw.get("linkedin_url")),
+        "num_jobs": _as_int(raw.get("num_jobs")),
+        "num_jobs_last_30_days": _as_int(raw.get("num_jobs_last_30_days")),
+        "founded_year": _as_int(raw.get("founded_year")),
+        "annual_revenue_usd": _as_float(raw.get("annual_revenue_usd")),
+        "total_funding_usd": _as_int(raw.get("total_funding_usd")),
+        "last_funding_round_date": _as_str(raw.get("last_funding_round_date")),
+        "funding_stage": _as_str(raw.get("funding_stage")),
+        "city": _as_str(raw.get("city")),
+        "long_description": _as_str(raw.get("long_description")),
+        "publicly_traded_symbol": _as_str(raw.get("publicly_traded_symbol")),
+        "publicly_traded_exchange": _as_str(raw.get("publicly_traded_exchange")),
+        "technology_slugs": _as_str_list(raw.get("technology_slugs")),
+        "technology_names": _as_str_list(raw.get("technology_names")),
     }
 
 
@@ -179,6 +264,10 @@ async def search_jobs(
     api_key: str | None,
     filters: dict[str, Any],
     limit: int,
+    offset: int = 0,
+    page: int | None = None,
+    cursor: str | None = None,
+    include_total_results: bool = False,
 ) -> ProviderAdapterResult:
     if not api_key:
         return {
@@ -191,7 +280,15 @@ async def search_jobs(
             "mapped": {"results": [], "result_count": 0},
         }
 
-    payload = {**_as_dict(filters), "limit": max(limit, 1)}
+    payload: dict[str, Any] = {**_as_dict(filters), "limit": max(limit, 1)}
+    if offset != 0:
+        payload["offset"] = offset
+    if page is not None:
+        payload["page"] = page
+    if cursor is not None:
+        payload["cursor"] = cursor
+    if include_total_results:
+        payload["include_total_results"] = True
     start_ms = now_ms()
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
@@ -217,6 +314,7 @@ async def search_jobs(
     response_body = _as_dict(body)
     mapped_results = [_map_job_item(_as_dict(item)) for item in _as_list(response_body.get("data"))]
     result_count = len(mapped_results)
+    metadata = _as_dict(response_body.get("metadata"))
     return {
         "attempt": {
             "provider": "theirstack",
@@ -226,7 +324,12 @@ async def search_jobs(
             "duration_ms": now_ms() - start_ms,
             "raw_response": body,
         },
-        "mapped": {"results": mapped_results, "result_count": result_count},
+        "mapped": {
+            "results": mapped_results,
+            "result_count": result_count,
+            "total_results": _as_int(metadata.get("total_results")),
+            "total_companies": _as_int(metadata.get("total_companies")),
+        },
     }
 
 
