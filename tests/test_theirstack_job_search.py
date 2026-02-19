@@ -39,6 +39,40 @@ def _sample_job_payload() -> dict[str, Any]:
         "country": "United States",
         "country_code": "US",
         "cities": ["New York", "San Francisco"],
+        "locations": [
+            {
+                "name": "New York",
+                "state": "New York",
+                "state_code": "NY",
+                "country_code": "US",
+                "country_name": "United States",
+                "display_name": "New York, New York, United States",
+                "latitude": 40.7128,
+                "longitude": -74.006,
+                "type": "city",
+                "admin1_code": "NY",
+                "admin1_name": "New York",
+                "continent": "NA",
+                "id": 5128581,
+            },
+            {
+                "name": "San Francisco",
+                "state": "California",
+                "state_code": "CA",
+                "country_code": "US",
+                "country_name": "United States",
+                "display_name": "San Francisco, California, United States",
+                "latitude": 37.7749,
+                "longitude": -122.4194,
+                "type": "city",
+                "admin1_code": "CA",
+                "admin1_name": "California",
+                "continent": "NA",
+                "id": 5391959,
+            },
+        ],
+        "countries": ["United States"],
+        "country_codes": ["US"],
         "remote": False,
         "hybrid": True,
         "seniority": "senior",
@@ -146,6 +180,20 @@ def test_map_job_item_full_fields():
     assert mapped["country"] == "United States"
     assert mapped["country_code"] == "US"
     assert mapped["cities"] == ["New York", "San Francisco"]
+    assert mapped["locations"] is not None
+    assert len(mapped["locations"]) == 2
+    first_location = mapped["locations"][0]
+    assert first_location["name"] == "New York"
+    assert first_location["state_code"] == "NY"
+    assert first_location["display_name"] == "New York, New York, United States"
+    assert first_location["latitude"] == 40.7128
+    assert first_location["type"] == "city"
+    assert "admin1_code" not in first_location
+    assert "admin1_name" not in first_location
+    assert "continent" not in first_location
+    assert "id" not in first_location
+    assert mapped["countries"] == ["United States"]
+    assert mapped["country_codes"] == ["US"]
     assert mapped["remote"] is False
     assert mapped["hybrid"] is True
     assert mapped["seniority"] == "senior"
@@ -179,6 +227,9 @@ def test_map_job_item_minimal_fields():
     assert mapped["company_name"] == "Notion"
     assert mapped["job_title"] is None
     assert mapped["remote"] is None
+    assert mapped["locations"] is None
+    assert mapped["countries"] is None
+    assert mapped["country_codes"] is None
     assert mapped["hiring_team"] is None
     assert mapped["company_object"] is None
 
@@ -214,6 +265,44 @@ def test_map_hiring_team_item_skip_empty():
         )
         is None
     )
+
+
+def test_map_location_item_valid():
+    mapped = theirstack_provider._map_location_item(
+        {
+            "name": "New York",
+            "state": "New York",
+            "state_code": "NY",
+            "country_code": "US",
+            "country_name": "United States",
+            "display_name": "New York, New York, United States",
+            "latitude": 40.7128,
+            "longitude": -74.006,
+            "type": "city",
+            "admin1_code": "NY",
+            "admin1_name": "New York",
+            "continent": "NA",
+            "id": 5128581,
+        }
+    )
+    assert mapped is not None
+    assert mapped["name"] == "New York"
+    assert mapped["state"] == "New York"
+    assert mapped["state_code"] == "NY"
+    assert mapped["country_code"] == "US"
+    assert mapped["country_name"] == "United States"
+    assert mapped["display_name"] == "New York, New York, United States"
+    assert mapped["latitude"] == 40.7128
+    assert mapped["longitude"] == -74.006
+    assert mapped["type"] == "city"
+    assert "admin1_code" not in mapped
+    assert "admin1_name" not in mapped
+    assert "continent" not in mapped
+    assert "id" not in mapped
+
+
+def test_map_location_item_skip_empty():
+    assert theirstack_provider._map_location_item({"name": None, "display_name": None, "latitude": 0}) is None
 
 
 def test_map_company_object_valid():
@@ -451,6 +540,8 @@ async def test_job_search_success_response_shape(monkeypatch: pytest.MonkeyPatch
     assert validated.total_results == 987
     assert validated.results[0].hiring_team is not None
     assert validated.results[0].company_object is not None
+    assert validated.results[0].locations is not None
+    assert validated.results[0].countries is not None
     assert validated.results[0].theirstack_job_id == validated.results[0].job_id
 
 
