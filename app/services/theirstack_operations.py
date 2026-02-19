@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.contracts.theirstack import (
     TheirStackCompanySearchOutput,
     TheirStackHiringSignalsOutput,
-    TheirStackJobSearchOutput,
+    TheirStackJobSearchExtendedOutput,
     TheirStackTechStackOutput,
 )
 from app.providers import theirstack
@@ -165,6 +165,22 @@ async def execute_company_search_by_job_postings(
         "posted_at_max_age_days": step_config.get("posted_at_max_age_days"),
         "job_technology_slug_or": step_config.get("job_technology_slug_or"),
         "job_seniority_or": step_config.get("job_seniority_or"),
+        "company_domain_or": step_config.get("company_domain_or"),
+        "company_domain_not": step_config.get("company_domain_not"),
+        "company_name_or": step_config.get("company_name_or"),
+        "company_name_not": step_config.get("company_name_not"),
+        "company_linkedin_url_or": step_config.get("company_linkedin_url_or"),
+        "posted_at_gte": step_config.get("posted_at_gte"),
+        "posted_at_lte": step_config.get("posted_at_lte"),
+        "remote": step_config.get("remote"),
+        "min_salary_usd": step_config.get("min_salary_usd"),
+        "max_salary_usd": step_config.get("max_salary_usd"),
+        "employment_statuses_or": step_config.get("employment_statuses_or"),
+        "company_type": step_config.get("company_type"),
+        "min_employee_count": step_config.get("min_employee_count"),
+        "max_employee_count": step_config.get("max_employee_count"),
+        "min_revenue_usd": step_config.get("min_revenue_usd"),
+        "max_revenue_usd": step_config.get("max_revenue_usd"),
     }
     cleaned_filters = {key: value for key, value in filters.items() if _has_filter_value(value)}
 
@@ -174,7 +190,7 @@ async def execute_company_search_by_job_postings(
             "operation_id": operation_id,
             "status": "failed",
             "missing_inputs": [
-                "job_title_or|job_country_code_or|posted_at_max_age_days|job_technology_slug_or|job_seniority_or"
+                "job_title_or|job_country_code_or|posted_at_max_age_days|posted_at_gte|posted_at_lte|job_technology_slug_or|job_seniority_or|company_domain_or|company_name_or|company_linkedin_url_or|remote|min_salary_usd|max_salary_usd|employment_statuses_or|company_type|min_employee_count|max_employee_count|min_revenue_usd|max_revenue_usd"
             ],
             "provider_attempts": attempts,
         }
@@ -192,10 +208,12 @@ async def execute_company_search_by_job_postings(
     results = mapped.get("results") if isinstance(mapped.get("results"), list) else []
 
     try:
-        output = TheirStackJobSearchOutput.model_validate(
+        output = TheirStackJobSearchExtendedOutput.model_validate(
             {
                 "results": results,
                 "result_count": len(results),
+                "total_results": mapped.get("total_results"),
+                "total_companies": mapped.get("total_companies"),
                 "source_provider": "theirstack",
             }
         ).model_dump()
