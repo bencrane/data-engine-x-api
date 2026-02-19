@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -100,4 +102,59 @@ class ShovelsResidentItem(BaseModel):
 class ShovelsResidentsOutput(BaseModel):
     residents: list[ShovelsResidentItem]
     resident_count: int
+    source_provider: str = "shovels"
+
+
+class ShovelsGeoSearchItem(BaseModel):
+    geo_id: str
+    name: str | None = None
+    state: str | None = None
+    source_provider: str = "shovels"
+
+
+class ShovelsGeoSearchOutput(BaseModel):
+    results: list[ShovelsGeoSearchItem]
+    result_count: int
+    source_provider: str = "shovels"
+
+
+class ShovelsMetricsMonthlyPoint(BaseModel):
+    month: str | None = None
+    value: float | int | None = None
+
+
+class ShovelsMetricsMonthlyOutput(BaseModel):
+    geo_id: str
+    metric: str | None = None
+    data_points: list[ShovelsMetricsMonthlyPoint]
+    source_provider: str = "shovels"
+
+
+class ShovelsMetricsCurrentOutput(BaseModel):
+    geo_id: str
+    metrics: dict[str, Any]
+    source_provider: str = "shovels"
+
+
+class ShovelsGeoDetailOutput(BaseModel):
+    geo_id: str
+    name: str | None = None
+    state: str | None = None
+    details: dict[str, Any]
+    source_provider: str = "shovels"
+
+
+class ShovelsAddressSearchItem(BaseModel):
+    geo_id: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
+    property_type: str | None = None
+    source_provider: str = "shovels"
+
+
+class ShovelsAddressSearchOutput(BaseModel):
+    results: list[ShovelsAddressSearchItem]
+    result_count: int
     source_provider: str = "shovels"
