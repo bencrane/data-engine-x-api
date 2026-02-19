@@ -62,6 +62,7 @@ from app.services.change_detection_operations import (
 from app.services.theirstack_operations import (
     execute_company_enrich_hiring_signals,
     execute_company_enrich_tech_stack,
+    execute_job_search,
     execute_company_search_by_job_postings,
     execute_company_search_by_tech_stack,
 )
@@ -128,6 +129,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.derive.detect_changes",
     "company.search.by_tech_stack",
     "company.search.by_job_postings",
+    "job.search",
     "company.enrich.tech_stack",
     "company.enrich.hiring_signals",
     "permit.search",
@@ -618,6 +620,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.search.by_job_postings":
         result = await execute_company_search_by_job_postings(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "job.search":
+        result = await execute_job_search(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
