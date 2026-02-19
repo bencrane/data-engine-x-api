@@ -66,10 +66,18 @@ from app.services.theirstack_operations import (
     execute_company_search_by_tech_stack,
 )
 from app.services.shovels_operations import (
+    execute_address_search,
     execute_address_residents,
     execute_contractor_employees,
     execute_contractor_enrich,
     execute_contractor_search,
+    execute_market_geo_detail,
+    execute_market_metrics_current,
+    execute_market_metrics_monthly,
+    execute_market_search_cities,
+    execute_market_search_counties,
+    execute_market_search_jurisdictions,
+    execute_market_search_zipcodes,
     execute_permit_search,
 )
 from app.services.courtlistener_operations import (
@@ -126,6 +134,14 @@ SUPPORTED_OPERATION_IDS = {
     "contractor.enrich",
     "contractor.search",
     "contractor.search.employees",
+    "market.search.cities",
+    "market.search.counties",
+    "market.search.zipcodes",
+    "market.search.jurisdictions",
+    "market.enrich.metrics_monthly",
+    "market.enrich.metrics_current",
+    "market.enrich.geo_detail",
+    "address.search",
     "address.search.residents",
 }
 
@@ -190,6 +206,14 @@ async def execute_v1(
         "contractor.enrich",
         "contractor.search",
         "contractor.search.employees",
+        "market.search.cities",
+        "market.search.counties",
+        "market.search.zipcodes",
+        "market.search.jurisdictions",
+        "market.enrich.metrics_monthly",
+        "market.enrich.metrics_current",
+        "market.enrich.geo_detail",
+        "address.search",
         "address.search.residents",
     } and payload.entity_type != "company":
         return error_response("entity_type must be company for shovels operations", 400)
@@ -671,6 +695,94 @@ async def execute_v1(
 
     if payload.operation_id == "address.search.residents":
         result = await execute_address_residents(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.search.cities":
+        result = await execute_market_search_cities(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.search.counties":
+        result = await execute_market_search_counties(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.search.zipcodes":
+        result = await execute_market_search_zipcodes(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.search.jurisdictions":
+        result = await execute_market_search_jurisdictions(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.enrich.metrics_monthly":
+        result = await execute_market_metrics_monthly(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.enrich.metrics_current":
+        result = await execute_market_metrics_current(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "market.enrich.geo_detail":
+        result = await execute_market_geo_detail(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "address.search":
+        result = await execute_address_search(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
