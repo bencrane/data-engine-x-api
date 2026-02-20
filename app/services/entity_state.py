@@ -185,6 +185,30 @@ def resolve_person_entity_id(
     return _stable_identity_fallback("person", org_id, canonical_fields)
 
 
+def resolve_job_posting_entity_id(
+    *,
+    org_id: str,
+    canonical_fields: dict[str, Any],
+    entity_id: str | None = None,
+) -> str:
+    explicit_entity_id = _as_uuid_str(entity_id)
+    if explicit_entity_id:
+        return explicit_entity_id
+
+    normalized_fields = _job_posting_fields_from_context(canonical_fields)
+    theirstack_job_id = normalized_fields.get("theirstack_job_id")
+    job_url = normalized_fields.get("job_url")
+    job_title = normalized_fields.get("job_title")
+    company_domain = normalized_fields.get("company_domain")
+    if theirstack_job_id:
+        return str(uuid5(NAMESPACE_URL, f"job:{org_id}:theirstack:{theirstack_job_id}"))
+    if job_url:
+        return str(uuid5(NAMESPACE_URL, f"job:{org_id}:url:{job_url}"))
+    if job_title and company_domain:
+        return str(uuid5(NAMESPACE_URL, f"job:{org_id}:title_domain:{job_title.lower()}:{company_domain}"))
+    return _stable_identity_fallback("job", org_id, canonical_fields)
+
+
 def _company_fields_from_context(canonical_fields: dict[str, Any]) -> dict[str, Any]:
     return {
         "canonical_domain": _normalize_domain(
@@ -264,6 +288,49 @@ def _person_fields_from_context(canonical_fields: dict[str, Any]) -> dict[str, A
     }
 
 
+def _job_posting_fields_from_context(canonical_fields: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "theirstack_job_id": _normalize_int(
+            canonical_fields.get("theirstack_job_id")
+            or canonical_fields.get("job_id")
+        ),
+        "job_url": _normalize_text(
+            canonical_fields.get("job_url")
+            or canonical_fields.get("url")
+        ),
+        "job_title": _normalize_text(canonical_fields.get("job_title")),
+        "normalized_title": _normalize_text(canonical_fields.get("normalized_title")),
+        "company_name": _normalize_text(canonical_fields.get("company_name")),
+        "company_domain": _normalize_domain(
+            canonical_fields.get("company_domain")
+            or canonical_fields.get("domain")
+        ),
+        "location": _normalize_text(
+            canonical_fields.get("location")
+            or canonical_fields.get("short_location")
+        ),
+        "short_location": _normalize_text(canonical_fields.get("short_location")),
+        "state_code": _normalize_text(canonical_fields.get("state_code")),
+        "country_code": _normalize_text(canonical_fields.get("country_code")),
+        "remote": canonical_fields.get("remote") if isinstance(canonical_fields.get("remote"), bool) else None,
+        "hybrid": canonical_fields.get("hybrid") if isinstance(canonical_fields.get("hybrid"), bool) else None,
+        "seniority": _normalize_text(canonical_fields.get("seniority")),
+        "employment_statuses": _extract_str_list(canonical_fields.get("employment_statuses")),
+        "date_posted": _normalize_text(canonical_fields.get("date_posted")),
+        "discovered_at": _normalize_text(canonical_fields.get("discovered_at")),
+        "salary_string": _normalize_text(canonical_fields.get("salary_string")),
+        "min_annual_salary_usd": _normalize_float(canonical_fields.get("min_annual_salary_usd")),
+        "max_annual_salary_usd": _normalize_float(canonical_fields.get("max_annual_salary_usd")),
+        "description": _normalize_text(canonical_fields.get("description")),
+        "technology_slugs": _extract_str_list(canonical_fields.get("technology_slugs")),
+        "enrichment_confidence": _normalize_float(
+            canonical_fields.get("enrichment_confidence")
+            or canonical_fields.get("confidence")
+        ),
+        "source_providers": _extract_str_list(canonical_fields.get("source_providers")),
+    }
+
+
 def _lookup_company_by_natural_key(org_id: str, canonical_domain: str | None) -> dict[str, Any] | None:
     if not canonical_domain:
         return None
@@ -325,6 +392,21 @@ def _lookup_person_by_natural_key(
     return None
 
 
+def _lookup_job_posting_by_theirstack_id(org_id: str, theirstack_job_id: int | None) -> dict[str, Any] | None:
+    if theirstack_job_id is None:
+        return None
+    client = get_supabase_client()
+    result = (
+        client.table("job_posting_entities")
+        .select("*")
+        .eq("org_id", org_id)
+        .eq("theirstack_job_id", theirstack_job_id)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
 def _compute_age_hours(last_enriched_at: Any, *, now: datetime) -> float | None:
     enriched_at = _parse_iso_datetime(last_enriched_at)
     if enriched_at is None:
@@ -351,6 +433,14 @@ def check_entity_freshness(
         if not linkedin_url and not work_email:
             return {"fresh": False, "entity_id": None}
         entity = _lookup_person_by_natural_key(org_id, linkedin_url, work_email)
+    elif entity_type == "job":
+        theirstack_job_id = _normalize_int(
+            normalized_identifiers.get("theirstack_job_id")
+            or normalized_identifiers.get("job_id")
+        )
+        if not theirstack_job_id:
+            return {"fresh": False, "entity_id": None}
+        entity = _lookup_job_posting_by_theirstack_id(org_id, theirstack_job_id)
     else:
         canonical_domain = _normalize_domain(
             normalized_identifiers.get("company_domain")
@@ -401,6 +491,19 @@ def _load_person_by_id(org_id: str, entity_id: str) -> dict[str, Any] | None:
     client = get_supabase_client()
     result = (
         client.table("person_entities")
+        .select("*")
+        .eq("org_id", org_id)
+        .eq("entity_id", entity_id)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def _load_job_posting_by_id(org_id: str, entity_id: str) -> dict[str, Any] | None:
+    client = get_supabase_client()
+    result = (
+        client.table("job_posting_entities")
         .select("*")
         .eq("org_id", org_id)
         .eq("entity_id", entity_id)
@@ -683,4 +786,171 @@ def upsert_person_entity(
         return result.data[0]
 
     result = client.table("person_entities").insert(row_to_write).execute()
+    return result.data[0]
+
+
+def upsert_job_posting_entity(
+    *,
+    org_id: str,
+    company_id: str | None,
+    canonical_fields: dict[str, Any],
+    entity_id: str | None = None,
+    last_operation_id: str | None = None,
+    last_run_id: str | None = None,
+    incoming_record_version: int | None = None,
+) -> dict[str, Any]:
+    normalized_fields = _job_posting_fields_from_context(canonical_fields)
+    explicit_entity_id = _as_uuid_str(entity_id)
+    company_uuid = _as_uuid_str(company_id)
+    run_uuid = _as_uuid_str(last_run_id)
+
+    existing: dict[str, Any] | None = None
+    resolved_entity_id = explicit_entity_id
+    if resolved_entity_id:
+        existing = _load_job_posting_by_id(org_id, resolved_entity_id)
+    if not existing:
+        existing = _lookup_job_posting_by_theirstack_id(org_id, normalized_fields.get("theirstack_job_id"))
+        if existing:
+            resolved_entity_id = existing["entity_id"]
+
+    if not resolved_entity_id:
+        resolved_entity_id = resolve_job_posting_entity_id(
+            org_id=org_id,
+            canonical_fields=canonical_fields,
+        )
+
+    if existing is None:
+        existing = _load_job_posting_by_id(org_id, resolved_entity_id)
+
+    existing_version = int(existing.get("record_version", 0)) if existing else 0
+    next_version = incoming_record_version if incoming_record_version is not None else existing_version + 1
+    if next_version <= existing_version:
+        raise EntityStateVersionError(
+            f"Incoming record_version ({next_version}) must be greater than existing ({existing_version})"
+        )
+
+    if existing:
+        _capture_entity_snapshot(
+            org_id=str(existing.get("org_id") or org_id),
+            entity_type="job",
+            entity_id=str(existing["entity_id"]),
+            record_version=existing_version,
+            canonical_payload=existing.get("canonical_payload")
+            if isinstance(existing.get("canonical_payload"), dict)
+            else {},
+            source_run_id=run_uuid,
+        )
+
+    merged_payload = _merge_non_null(existing.get("canonical_payload") if existing else {}, canonical_fields)
+    merged_providers = _merge_str_lists(
+        existing.get("source_providers") if existing else None,
+        normalized_fields.get("source_providers"),
+    )
+    incoming_hiring_team = canonical_fields.get("hiring_team")
+    hiring_team = (
+        incoming_hiring_team
+        if incoming_hiring_team is not None
+        else (existing.get("hiring_team") if existing else None)
+    )
+    posting_status_incoming = _normalize_text(canonical_fields.get("posting_status"))
+
+    row_to_write = {
+        "org_id": org_id,
+        "company_id": company_uuid if company_uuid is not None else (existing.get("company_id") if existing else None),
+        "entity_id": resolved_entity_id,
+        "theirstack_job_id": normalized_fields["theirstack_job_id"]
+        if normalized_fields["theirstack_job_id"] is not None
+        else (existing.get("theirstack_job_id") if existing else None),
+        "job_url": normalized_fields["job_url"]
+        if normalized_fields["job_url"] is not None
+        else (existing.get("job_url") if existing else None),
+        "job_title": normalized_fields["job_title"]
+        if normalized_fields["job_title"] is not None
+        else (existing.get("job_title") if existing else None),
+        "normalized_title": normalized_fields["normalized_title"]
+        if normalized_fields["normalized_title"] is not None
+        else (existing.get("normalized_title") if existing else None),
+        "company_name": normalized_fields["company_name"]
+        if normalized_fields["company_name"] is not None
+        else (existing.get("company_name") if existing else None),
+        "company_domain": normalized_fields["company_domain"]
+        if normalized_fields["company_domain"] is not None
+        else (existing.get("company_domain") if existing else None),
+        "location": normalized_fields["location"]
+        if normalized_fields["location"] is not None
+        else (existing.get("location") if existing else None),
+        "short_location": normalized_fields["short_location"]
+        if normalized_fields["short_location"] is not None
+        else (existing.get("short_location") if existing else None),
+        "state_code": normalized_fields["state_code"]
+        if normalized_fields["state_code"] is not None
+        else (existing.get("state_code") if existing else None),
+        "country_code": normalized_fields["country_code"]
+        if normalized_fields["country_code"] is not None
+        else (existing.get("country_code") if existing else None),
+        "remote": normalized_fields["remote"]
+        if normalized_fields["remote"] is not None
+        else (existing.get("remote") if existing else None),
+        "hybrid": normalized_fields["hybrid"]
+        if normalized_fields["hybrid"] is not None
+        else (existing.get("hybrid") if existing else None),
+        "seniority": normalized_fields["seniority"]
+        if normalized_fields["seniority"] is not None
+        else (existing.get("seniority") if existing else None),
+        "employment_statuses": normalized_fields["employment_statuses"]
+        if normalized_fields["employment_statuses"] is not None
+        else (existing.get("employment_statuses") if existing else None),
+        "date_posted": normalized_fields["date_posted"]
+        if normalized_fields["date_posted"] is not None
+        else (existing.get("date_posted") if existing else None),
+        "discovered_at": normalized_fields["discovered_at"]
+        if normalized_fields["discovered_at"] is not None
+        else (existing.get("discovered_at") if existing else None),
+        "salary_string": normalized_fields["salary_string"]
+        if normalized_fields["salary_string"] is not None
+        else (existing.get("salary_string") if existing else None),
+        "min_annual_salary_usd": normalized_fields["min_annual_salary_usd"]
+        if normalized_fields["min_annual_salary_usd"] is not None
+        else (existing.get("min_annual_salary_usd") if existing else None),
+        "max_annual_salary_usd": normalized_fields["max_annual_salary_usd"]
+        if normalized_fields["max_annual_salary_usd"] is not None
+        else (existing.get("max_annual_salary_usd") if existing else None),
+        "description": normalized_fields["description"]
+        if normalized_fields["description"] is not None
+        else (existing.get("description") if existing else None),
+        "technology_slugs": normalized_fields["technology_slugs"]
+        if normalized_fields["technology_slugs"] is not None
+        else (existing.get("technology_slugs") if existing else None),
+        "hiring_team": hiring_team,
+        "posting_status": posting_status_incoming
+        if posting_status_incoming is not None
+        else (existing.get("posting_status") if existing else "active"),
+        "enrichment_confidence": normalized_fields["enrichment_confidence"]
+        if normalized_fields["enrichment_confidence"] is not None
+        else (existing.get("enrichment_confidence") if existing else None),
+        "last_enriched_at": _utc_now_iso(),
+        "last_operation_id": _normalize_text(last_operation_id)
+        if _normalize_text(last_operation_id) is not None
+        else (existing.get("last_operation_id") if existing else None),
+        "last_run_id": run_uuid if run_uuid is not None else (existing.get("last_run_id") if existing else None),
+        "source_providers": merged_providers,
+        "record_version": next_version,
+        "canonical_payload": merged_payload,
+    }
+
+    client = get_supabase_client()
+    if existing:
+        result = (
+            client.table("job_posting_entities")
+            .update(row_to_write)
+            .eq("org_id", org_id)
+            .eq("entity_id", resolved_entity_id)
+            .eq("record_version", existing_version)
+            .execute()
+        )
+        if not result.data:
+            raise EntityStateVersionError("Version conflict during job posting entity update")
+        return result.data[0]
+
+    result = client.table("job_posting_entities").insert(row_to_write).execute()
     return result.data[0]
