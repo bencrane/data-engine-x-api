@@ -1,0 +1,105 @@
+{
+  "name": "Staffing Enrichment v1",
+  "description": "Search job postings, validate active status, enrich hiring companies, find decision-maker contacts with verified email and phone.",
+  "entity_type": "job",
+  "steps": [
+    {
+      "position": 1,
+      "operation_id": "job.search",
+      "step_config": {
+        "posted_at_max_age_days": 45,
+        "company_type": "direct_employer",
+        "job_country_code_or": [
+          "US"
+        ],
+        "include_total_results": true,
+        "limit": 100
+      },
+      "fan_out": true
+    },
+    {
+      "position": 2,
+      "operation_id": "job.validate.is_active",
+      "step_config": {},
+      "condition": {
+        "exists": "company_domain"
+      }
+    },
+    {
+      "position": 3,
+      "operation_id": "company.enrich.profile",
+      "step_config": {},
+      "condition": {
+        "any": [
+          {
+            "eq": {
+              "field": "validation_result",
+              "value": "active"
+            }
+          },
+          {
+            "eq": {
+              "field": "validation_result",
+              "value": "unknown"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "position": 4,
+      "operation_id": "person.search",
+      "step_config": {
+        "job_title_or": [
+          "VP",
+          "Director",
+          "Head of",
+          "Hiring Manager"
+        ],
+        "limit": 5
+      },
+      "fan_out": true,
+      "condition": {
+        "exists": "company_domain"
+      }
+    },
+    {
+      "position": 5,
+      "operation_id": "person.contact.resolve_email",
+      "step_config": {},
+      "condition": {
+        "any": [
+          {
+            "exists": "linkedin_url"
+          },
+          {
+            "exists": "work_email"
+          }
+        ]
+      }
+    },
+    {
+      "position": 6,
+      "operation_id": "person.contact.verify_email",
+      "step_config": {},
+      "condition": {
+        "exists": "work_email"
+      }
+    },
+    {
+      "position": 7,
+      "operation_id": "person.contact.resolve_mobile_phone",
+      "step_config": {},
+      "condition": {
+        "any": [
+          {
+            "exists": "linkedin_url"
+          },
+          {
+            "exists": "full_name"
+          }
+        ]
+      }
+    }
+  ]
+}
