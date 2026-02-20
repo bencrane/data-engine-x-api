@@ -53,6 +53,20 @@ class PersonEntitiesListRequest(BaseModel):
     per_page: int = Field(default=25, ge=1, le=100)
 
 
+class JobPostingEntitiesListRequest(BaseModel):
+    company_id: str | None = None
+    company_domain: str | None = None
+    company_name: str | None = None
+    job_title: str | None = None
+    seniority: str | None = None
+    country_code: str | None = None
+    remote: bool | None = None
+    posting_status: str | None = None
+    org_id: str | None = None
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=25, ge=1, le=100)
+
+
 class EntityTimelineRequest(BaseModel):
     entity_type: str
     entity_id: str
@@ -160,6 +174,75 @@ async def list_person_entities(
     start = (payload.page - 1) * payload.per_page
     end = start + payload.per_page - 1
     result = query.order("updated_at", desc=True).range(start, end).execute()
+
+    return DataEnvelope(
+        data={
+            "items": result.data,
+            "pagination": {
+                "page": payload.page,
+                "per_page": payload.per_page,
+                "returned": len(result.data),
+            },
+        }
+    )
+
+
+@router.post(
+    "/job-postings",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope}},
+)
+async def list_job_posting_entities(
+    payload: JobPostingEntitiesListRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin job posting entity queries", 400)
+
+    client = get_supabase_client()
+    query = client.table("job_posting_entities").select("*").eq("org_id", org_id)
+
+    if not is_super_admin and auth.role in {"company_admin", "member"}:
+        if not auth.company_id:
+            return error_response("Company-scoped user missing company_id", 403)
+        if payload.company_id and payload.company_id != auth.company_id:
+            return error_response("Forbidden company access", 403)
+        query = query.eq("company_id", auth.company_id)
+    elif payload.company_id:
+        query = query.eq("company_id", payload.company_id)
+
+    company_domain = _normalize_text(payload.company_domain)
+    if company_domain:
+        query = query.eq("company_domain", company_domain.lower())
+
+    company_name = _normalize_text(payload.company_name)
+    if company_name:
+        query = query.ilike("company_name", f"%{company_name}%")
+
+    job_title = _normalize_text(payload.job_title)
+    if job_title:
+        query = query.ilike("job_title", f"%{job_title}%")
+
+    seniority = _normalize_text(payload.seniority)
+    if seniority:
+        query = query.eq("seniority", seniority)
+
+    country_code = _normalize_text(payload.country_code)
+    if country_code:
+        query = query.eq("country_code", country_code)
+
+    if payload.remote is not None:
+        query = query.eq("remote", payload.remote)
+
+    posting_status = _normalize_text(payload.posting_status)
+    if posting_status:
+        query = query.eq("posting_status", posting_status)
+
+    start = (payload.page - 1) * payload.per_page
+    end = start + payload.per_page - 1
+    result = query.order("created_at", desc=True).range(start, end).execute()
 
     return DataEnvelope(
         data={
