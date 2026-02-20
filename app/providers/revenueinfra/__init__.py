@@ -29,6 +29,7 @@ from app.providers.revenueinfra.sec_filings import (
     analyze_8k_executive,
     fetch_sec_filings,
 )
+from app.providers.revenueinfra.validate_job import validate_job_active
 
 __all__ = [
     "discover_competitors",
@@ -56,4 +57,5 @@ __all__ = [
     "analyze_10k",
     "analyze_10q",
     "analyze_8k_executive",
+    "validate_job_active",
 ]
