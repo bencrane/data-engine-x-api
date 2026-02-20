@@ -40,8 +40,8 @@ def detect_entity_changes(
     entity_id: str,
     fields_to_watch: list[str] | None,
 ) -> dict[str, Any]:
-    if entity_type not in {"company", "person"}:
-        raise ValueError("entity_type must be 'company' or 'person'")
+    if entity_type not in {"company", "person", "job"}:
+        raise ValueError("entity_type must be 'company', 'person', or 'job'")
 
     client = get_supabase_client()
     result = (

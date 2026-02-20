@@ -40,7 +40,7 @@ async def list_registry_operations(payload: RegistryOperationsRequest) -> DataEn
 
 class BlueprintAssembleRequest(BaseModel):
     mode: Literal["fields", "natural_language"]
-    entity_type: Literal["company", "person"] = "company"
+    entity_type: Literal["company", "person", "job"] = "company"
     desired_fields: list[str] | None = None
     options: dict[str, Any] | None = None
     prompt: str | None = None

@@ -83,10 +83,17 @@ CREATE TRIGGER update_job_posting_entities_updated_at
 
 ALTER TABLE job_posting_entities ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE entity_timeline DROP CONSTRAINT IF EXISTS entity_timeline_entity_type_check;
-ALTER TABLE entity_timeline ADD CONSTRAINT entity_timeline_entity_type_check
-    CHECK (entity_type IN ('company', 'person', 'job'));
+DO $$
+BEGIN
+    IF to_regclass('public.entity_timeline') IS NOT NULL THEN
+        ALTER TABLE entity_timeline DROP CONSTRAINT IF EXISTS entity_timeline_entity_type_check;
+        ALTER TABLE entity_timeline ADD CONSTRAINT entity_timeline_entity_type_check
+            CHECK (entity_type IN ('company', 'person', 'job'));
+    END IF;
 
-ALTER TABLE entity_snapshots DROP CONSTRAINT IF EXISTS entity_snapshots_entity_type_check;
-ALTER TABLE entity_snapshots ADD CONSTRAINT entity_snapshots_entity_type_check
-    CHECK (entity_type IN ('company', 'person', 'job'));
+    IF to_regclass('public.entity_snapshots') IS NOT NULL THEN
+        ALTER TABLE entity_snapshots DROP CONSTRAINT IF EXISTS entity_snapshots_entity_type_check;
+        ALTER TABLE entity_snapshots ADD CONSTRAINT entity_snapshots_entity_type_check
+            CHECK (entity_type IN ('company', 'person', 'job'));
+    END IF;
+END $$;

@@ -266,8 +266,8 @@ async def get_entity_timeline(
     auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
     entity_type = _normalize_text(payload.entity_type)
-    if entity_type not in {"company", "person"}:
-        return error_response("entity_type must be either 'company' or 'person'", 400)
+    if entity_type not in {"company", "person", "job"}:
+        return error_response("entity_type must be 'company', 'person', or 'job'", 400)
 
     is_super_admin = isinstance(auth, SuperAdminContext)
     org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
@@ -323,8 +323,8 @@ async def get_entity_snapshots(
     auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
     entity_type = _normalize_text(payload.entity_type)
-    if entity_type not in {"company", "person"}:
-        return error_response("entity_type must be either 'company' or 'person'", 400)
+    if entity_type not in {"company", "person", "job"}:
+        return error_response("entity_type must be 'company', 'person', or 'job'", 400)
 
     is_super_admin = isinstance(auth, SuperAdminContext)
     org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
