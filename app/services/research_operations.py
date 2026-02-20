@@ -16,6 +16,7 @@ from app.contracts.company_research import (
     ResolveG2UrlOutput,
     ResolvePricingPageUrlOutput,
 )
+from app.contracts.job_validation import JobValidationOutput
 from app.providers import gemini, openai_provider, revenueinfra
 
 
@@ -425,6 +426,126 @@ def _extract_company_research_check_vc_funding_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
     return _extract_company_domain(input_data)
+
+
+def _job_validation_context(input_data: dict[str, Any]) -> dict[str, Any]:
+    cumulative = input_data.get("cumulative_context")
+    if isinstance(cumulative, dict):
+        return cumulative
+    return {}
+
+
+def _extract_job_validation_company_domain(input_data: dict[str, Any]) -> str | None:
+    context = _job_validation_context(input_data)
+    company_object = context.get("company_object")
+    company = company_object if isinstance(company_object, dict) else {}
+    return _normalize_company_domain(
+        input_data.get("company_domain")
+        or context.get("company_domain")
+        or company.get("domain")
+    )
+
+
+def _extract_job_validation_job_title(input_data: dict[str, Any]) -> str | None:
+    context = _job_validation_context(input_data)
+    return _as_non_empty_str(
+        input_data.get("job_title")
+        or context.get("job_title")
+    )
+
+
+def _extract_job_validation_company_name(input_data: dict[str, Any]) -> str | None:
+    context = _job_validation_context(input_data)
+    company_object = context.get("company_object")
+    company = company_object if isinstance(company_object, dict) else {}
+    return _as_non_empty_str(
+        input_data.get("company_name")
+        or context.get("company_name")
+        or company.get("name")
+    )
+
+
+async def execute_job_validate_is_active(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    operation_id = "job.validate.is_active"
+
+    company_domain = _extract_job_validation_company_domain(input_data)
+    job_title = _extract_job_validation_job_title(input_data)
+    company_name = _extract_job_validation_company_name(input_data)
+    if not company_domain or not job_title:
+        missing_inputs: list[str] = []
+        if not company_domain:
+            missing_inputs.append("company_domain")
+        if not job_title:
+            missing_inputs.append("job_title")
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": missing_inputs,
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await revenueinfra.validate_job_active(
+        base_url=settings.revenueinfra_api_url,
+        api_key=settings.revenueinfra_ingest_api_key,
+        company_domain=company_domain,
+        job_title=job_title,
+        company_name=company_name,
+    )
+    attempt = result.get("attempt") if isinstance(result, dict) else {}
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result, dict) else None
+
+    status = attempt.get("status") if isinstance(attempt, dict) else "failed"
+    if status in {"failed", "skipped"}:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+        }
+
+    normalized_mapped = mapped if isinstance(mapped, dict) else {}
+    try:
+        output = JobValidationOutput.model_validate(
+            {
+                "validation_result": normalized_mapped.get("validation_result"),
+                "confidence": normalized_mapped.get("confidence"),
+                "indeed_found": normalized_mapped.get("indeed_found"),
+                "indeed_match_count": normalized_mapped.get("indeed_match_count"),
+                "indeed_any_expired": normalized_mapped.get("indeed_any_expired"),
+                "indeed_matched_by": normalized_mapped.get("indeed_matched_by"),
+                "linkedin_found": normalized_mapped.get("linkedin_found"),
+                "linkedin_match_count": normalized_mapped.get("linkedin_match_count"),
+                "linkedin_matched_by": normalized_mapped.get("linkedin_matched_by"),
+                "source_provider": "revenueinfra",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "not_found" if status == "not_found" else "found",
+        "output": output,
+        "provider_attempts": attempts,
+    }
 
 
 async def execute_company_research_check_vc_funding(
