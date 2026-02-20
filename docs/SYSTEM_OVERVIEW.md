@@ -76,7 +76,7 @@ Client → POST /api/v1/batch/submit
 
 ---
 
-## Operations (48 live)
+## Operations (50 live)
 
 ### Company Enrichment (6)
 | Operation ID | Provider(s) |
@@ -158,6 +158,12 @@ Client → POST /api/v1/batch/submit
 | `contractor.search.employees` | Shovels (fan-out capable) |
 | `address.search.residents` | Shovels (fan-out capable) |
 
+### Job Postings (2)
+| Operation ID | Provider(s) |
+|---|---|
+| `job.search` | TheirStack (41-field mapping, 65+ filters, pagination, hiring team, embedded company) |
+| `job.validate.is_active` | RevenueInfra HQ (cross-references Bright Data Indeed + LinkedIn snapshots) |
+
 ### Market Intelligence (5)
 | Operation ID | Provider(s) |
 |---|---|
@@ -200,7 +206,7 @@ Client → POST /api/v1/batch/submit
 
 ---
 
-## Database Schema (Migrations 001-012)
+## Database Schema (Migrations 001-013)
 
 | Migration | Purpose |
 |---|---|
@@ -216,6 +222,7 @@ Client → POST /api/v1/batch/submit
 | 010 | `pipeline_runs.parent_pipeline_run_id` + `blueprint_steps.fan_out` for fan-out |
 | 011 | Entity timeline submission lookup index |
 | 012 | `entity_snapshots` for canonical history / change detection |
+| 013 | `job_posting_entities` for job posting entity state + `job` entity type constraints on entity_timeline, entity_snapshots, operation_runs |
 
 ---
 
@@ -245,13 +252,16 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Nested fan-out (recursive) | ✅ Live |
 | Conditional step execution | ✅ Live |
 | Entity deduplication (fan-out + freshness) | ✅ Live |
-| Entity state accumulation | ✅ Live |
+| Entity state accumulation (company, person, job) | ✅ Live |
 | Entity snapshots + change detection | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (48 ops) | ✅ Live |
+| Operation registry (50 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
+| Job posting entity type + query endpoint | ✅ Live |
+| Bright Data cross-source job validation (via HQ) | ✅ Live |
+| Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live |
 | Doppler secrets management | ✅ Live |
 | Super-admin API key auth | ✅ Live |
 
@@ -289,6 +299,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | 23 | CourtListener (court filing check, bankruptcy signals, docket detail) |
 | 24 | Shovels market intelligence (city/county/zipcode/jurisdiction metrics + details) |
 | 25 | FMCSA daily signal pipeline (separate repo, 6 feeds, all working) |
+| 26 | Staffing vertical: TheirStack adapter enrichment (41 fields, `job.search` op, 65+ filters), job posting entity type, Bright Data validation, staffing enrichment blueprint |
 
 ---
 
@@ -296,6 +307,8 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 - **Output delivery** — push results to CRM, campaign tool, webhook, CSV
 - **Input ingestion** — CRM pull, CSV upload validation, auto-derived input requirements
+- **Bright Data connector** — automated puller/webhook to ingest Indeed + LinkedIn snapshots from Bright Data API (tables + ingestion endpoints exist in HQ, connector not wired)
+- **Cross-source job matching automation** — scheduled comparison of TheirStack job postings against Bright Data to auto-update `posting_status`
 - **ICP assessment operation** — LLM-based fit scoring
 - **Page content extraction** — scraping G2/pricing pages for structured intelligence
 - **Google Maps scrape + owner identification** — for local/SMB lead gen
@@ -310,4 +323,4 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 - **Deploy flow**: `git push origin main` → Railway auto-deploys. Trigger.dev: `cd trigger && npx trigger.dev@latest deploy`. Modal: `cd modal && modal deploy app.py`.
 - **Migrations**: Run manually via `psql "$DATABASE_URL" -f supabase/migrations/0XX_*.sql`.
 - **Key management**: All secrets in Doppler. Railway reads via `DOPPLER_TOKEN` + Dockerfile `doppler run`. Trigger.dev has its own env vars.
-- **Verticals covered**: B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence
+- **Verticals covered**: B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing

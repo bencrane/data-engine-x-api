@@ -13,7 +13,7 @@ The system must support real business outcomes, not theoretical architecture.
 
 - **No guessing. Ever.**
   - If a provider contract, field mapping, or policy is unclear, stop and request explicit input.
-- **Entity model is fixed to:** `company` and `person`.
+- **Entity model is fixed to:** `company`, `person`, and `job`.
 - **All external provider logic must be wrapped behind canonical operations/actions.**
 - **Provider order must be config-driven, not hardcoded.**
 - **Raw provider payloads + canonical outputs + attempt lineage must be persisted.**

@@ -26,15 +26,18 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **48 operations** across 6 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence)
+- **50 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
+- **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
 - **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
+- **Staffing enrichment pipeline**: 7-step blueprint (job search → validate active → company enrich → person search → email → verify → phone) with 2 fan-outs, tested end-to-end
+- **Bright Data validation** via HQ (Indeed + LinkedIn raw tables, cross-source job validation endpoint)
 - **AI blueprint assembler** with natural language mode (Claude → OpenAI → Gemini)
 - **Coverage check** endpoint for pre-outbound readiness
 - **Operation registry** with formal input/output metadata
 - **20 Modal micro-functions** for Parallel.ai fallbacks
 - **FMCSA daily signal pipeline** in separate repo (`ongoing-data-pulls`)
-- **31 test files**, 12 migrations
+- **34 test files**, 13 migrations
 
 ## Key Files
 

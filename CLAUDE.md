@@ -49,7 +49,7 @@ Scoping rules:
 1. **Operations (`/api/v1/execute`)**: canonical operation IDs call provider adapters and return canonical output + provider attempts.
 2. **Batch orchestration (`/api/v1/batch/submit`, `/api/v1/batch/status`)**: creates submission and root pipeline runs, then aggregates status/results.
 3. **Fan-out**: operation steps can create child pipeline runs (`parent_pipeline_run_id`) and continue execution from a later step position.
-4. **Entity state accumulation**: succeeded runs upsert canonical records into `company_entities` / `person_entities`.
+4. **Entity state accumulation**: succeeded runs upsert canonical records into `company_entities` / `person_entities` / `job_posting_entities`.
 5. **Entity timeline**: upserts and fan-out discoveries emit timeline events into `entity_timeline`.
 6. **Output chaining**: each succeeded step merges `result.output` into cumulative context for the next step.
 
@@ -179,6 +179,8 @@ Migration order:
 9. `009_entity_timeline.sql`
 10. `010_fan_out.sql`
 11. `011_entity_timeline_submission_lookup.sql`
+12. `012_entity_snapshots.sql`
+13. `013_job_posting_entities.sql`
 
 ## Environment Configuration
 
