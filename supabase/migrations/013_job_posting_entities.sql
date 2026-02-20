@@ -96,4 +96,10 @@ BEGIN
         ALTER TABLE entity_snapshots ADD CONSTRAINT entity_snapshots_entity_type_check
             CHECK (entity_type IN ('company', 'person', 'job'));
     END IF;
+
+    IF to_regclass('public.operation_runs') IS NOT NULL THEN
+        ALTER TABLE operation_runs DROP CONSTRAINT IF EXISTS operation_runs_entity_type_check;
+        ALTER TABLE operation_runs ADD CONSTRAINT operation_runs_entity_type_check
+            CHECK (entity_type IN ('company', 'person', 'job'));
+    END IF;
 END $$;
