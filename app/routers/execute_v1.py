@@ -39,6 +39,7 @@ from app.services.research_operations import (
     execute_company_research_check_vc_funding,
     execute_company_research_discover_competitors,
     execute_company_research_find_similar_companies,
+    execute_job_validate_is_active,
     execute_company_research_lookup_alumni,
     execute_company_research_lookup_champion_testimonials,
     execute_company_research_lookup_champions,
@@ -130,6 +131,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.search.by_tech_stack",
     "company.search.by_job_postings",
     "job.search",
+    "job.validate.is_active",
     "company.enrich.tech_stack",
     "company.enrich.hiring_signals",
     "permit.search",
@@ -633,6 +635,17 @@ async def execute_v1(
 
     if payload.operation_id == "job.search":
         result = await execute_job_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "job.validate.is_active":
+        result = await execute_job_validate_is_active(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
