@@ -42,3 +42,4 @@ cd trigger && npm run dev
 - **Supabase**: Database for orgs, companies, submissions, step registry, results
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture decisions.
+
