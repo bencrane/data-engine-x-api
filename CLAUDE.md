@@ -201,3 +201,4 @@ Migration order:
 - `supabase/migrations/`
 - `docs/`
 - `Dockerfile`
+
