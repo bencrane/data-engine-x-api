@@ -169,6 +169,8 @@ class ExecuteV1Request(BaseModel):
     entity_type: Literal["person", "company", "job"]
     input: dict[str, Any]
     options: dict[str, Any] | None = None
+    org_id: str | None = None
+    company_id: str | None = None
 
 
 class BatchEntityInput(BaseModel):
@@ -197,8 +199,21 @@ class BatchStatusRequest(BaseModel):
 )
 async def execute_v1(
     payload: ExecuteV1Request,
-    auth: AuthContext = Depends(get_current_auth),
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
+    if isinstance(auth, SuperAdminContext):
+        if not payload.org_id:
+            return error_response("org_id is required for super-admin execute", 400)
+        if not payload.company_id:
+            return error_response("company_id is required for super-admin execute", 400)
+        auth = AuthContext(
+            user_id=None,
+            org_id=payload.org_id,
+            company_id=payload.company_id,
+            role="org_admin",
+            auth_method="api_token",
+        )
+
     if payload.operation_id not in SUPPORTED_OPERATION_IDS:
         return error_response(f"Unsupported operation_id: {payload.operation_id}", 400)
     if payload.operation_id.startswith("person.") and payload.entity_type != "person":
