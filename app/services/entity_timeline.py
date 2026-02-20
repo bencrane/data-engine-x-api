@@ -62,7 +62,7 @@ def record_entity_event(
         )
         return None
 
-    if entity_type not in {"company", "person"}:
+    if entity_type not in {"company", "person", "job"}:
         logger.warning("Skipping timeline write due to invalid entity_type", extra={"entity_type": entity_type})
         return None
 

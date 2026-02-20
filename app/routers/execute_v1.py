@@ -164,13 +164,13 @@ async def _resolve_flexible_auth(
 
 class ExecuteV1Request(BaseModel):
     operation_id: str
-    entity_type: Literal["person", "company"]
+    entity_type: Literal["person", "company", "job"]
     input: dict[str, Any]
     options: dict[str, Any] | None = None
 
 
 class BatchEntityInput(BaseModel):
-    entity_type: Literal["person", "company"]
+    entity_type: Literal["person", "company", "job"]
     input: dict[str, Any]
 
 
@@ -203,6 +203,8 @@ async def execute_v1(
         return error_response("entity_type must be person for person operations", 400)
     if payload.operation_id.startswith("company.") and payload.entity_type != "company":
         return error_response("entity_type must be company for company operations", 400)
+    if payload.operation_id.startswith("job.") and payload.entity_type != "job":
+        return error_response("entity_type must be job for job operations", 400)
     if payload.operation_id in {
         "permit.search",
         "contractor.enrich",
@@ -844,7 +846,7 @@ async def batch_submit(
 
     invalid_entities = []
     for idx, entity in enumerate(payload.entities):
-        if entity.entity_type not in {"company", "person"}:
+        if entity.entity_type not in {"company", "person", "job"}:
             invalid_entities.append(f"{idx}:invalid_entity_type")
         if not isinstance(entity.input, dict):
             invalid_entities.append(f"{idx}:input_must_be_object")

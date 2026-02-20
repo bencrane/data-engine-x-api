@@ -14,8 +14,10 @@ from app.services.entity_state import (
     EntityStateVersionError,
     check_entity_freshness,
     resolve_company_entity_id,
+    resolve_job_posting_entity_id,
     resolve_person_entity_id,
     upsert_company_entity,
+    upsert_job_posting_entity,
     upsert_person_entity,
 )
 from app.services.entity_timeline import record_entity_event
@@ -106,13 +108,13 @@ class InternalMarkRemainingSkippedRequest(BaseModel):
 
 class InternalEntityStateUpsertRequest(BaseModel):
     pipeline_run_id: str
-    entity_type: Literal["company", "person"]
+    entity_type: Literal["company", "person", "job"]
     cumulative_context: dict[str, Any]
     last_operation_id: str | None = None
 
 
 class InternalEntityStateFreshnessCheckRequest(BaseModel):
-    entity_type: Literal["company", "person"]
+    entity_type: Literal["company", "person", "job"]
     identifiers: dict[str, Any]
     max_age_hours: float
 
@@ -136,7 +138,7 @@ class InternalRecordStepTimelineEventRequest(BaseModel):
     company_id: str | None = None
     submission_id: str
     pipeline_run_id: str
-    entity_type: Literal["company", "person"]
+    entity_type: Literal["company", "person", "job"]
     cumulative_context: dict[str, Any]
     step_result_id: str
     step_position: int
@@ -219,6 +221,12 @@ def _resolve_entity_id_for_step_event(
 ) -> str:
     if entity_type == "company":
         return resolve_company_entity_id(
+            org_id=org_id,
+            canonical_fields=cumulative_context,
+            entity_id=cumulative_context.get("entity_id"),
+        )
+    if entity_type == "job":
+        return resolve_job_posting_entity_id(
             org_id=org_id,
             canonical_fields=cumulative_context,
             entity_id=cumulative_context.get("entity_id"),
@@ -674,6 +682,15 @@ async def internal_upsert_entity_state(
     try:
         if payload.entity_type == "company":
             upserted = upsert_company_entity(
+                org_id=run["org_id"],
+                company_id=run.get("company_id"),
+                entity_id=payload.cumulative_context.get("entity_id"),
+                canonical_fields=payload.cumulative_context,
+                last_operation_id=payload.last_operation_id,
+                last_run_id=run["id"],
+            )
+        elif payload.entity_type == "job":
+            upserted = upsert_job_posting_entity(
                 org_id=run["org_id"],
                 company_id=run.get("company_id"),
                 entity_id=payload.cumulative_context.get("entity_id"),
