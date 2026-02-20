@@ -26,7 +26,7 @@ interface InternalPipelineRun {
       is_enabled?: boolean;
     }>;
     entity?: {
-      entity_type?: "person" | "company";
+      entity_type?: "person" | "company" | "job";
       input?: Record<string, unknown>;
       index?: number;
     };
@@ -147,7 +147,7 @@ async function callExecuteV1(
     orgId: string;
     companyId: string;
     operationId: string;
-    entityType: "person" | "company";
+    entityType: "person" | "company" | "job";
     input: Record<string, unknown>;
     options: Record<string, unknown> | null;
   },
@@ -179,7 +179,7 @@ async function callEntityStateFreshnessCheck(
   params: {
     orgId: string;
     companyId: string;
-    entityType: "person" | "company";
+    entityType: "person" | "company" | "job";
     identifiers: Record<string, unknown>;
     maxAgeHours: number;
   },
@@ -204,8 +204,9 @@ async function callEntityStateFreshnessCheck(
   return body.data;
 }
 
-function entityTypeFromOperationId(operationId: string): "person" | "company" {
+function entityTypeFromOperationId(operationId: string): "person" | "company" | "job" {
   if (operationId.startsWith("person.")) return "person";
+  if (operationId.startsWith("job.")) return "job";
   return "company";
 }
 
@@ -302,7 +303,7 @@ async function emitStepTimelineEvent(
     companyId: string;
     submissionId: string;
     pipelineRunId: string;
-    entityType: "person" | "company";
+    entityType: "person" | "company" | "job";
     cumulativeContext: Record<string, unknown>;
     stepResultId: string;
     stepPosition: number;
@@ -400,7 +401,9 @@ export const runPipeline = task({
 
     const snapshotEntity = run.blueprint_snapshot.entity || {};
     const entityType =
-      snapshotEntity.entity_type === "person" || snapshotEntity.entity_type === "company"
+      snapshotEntity.entity_type === "person" ||
+      snapshotEntity.entity_type === "company" ||
+      snapshotEntity.entity_type === "job"
         ? snapshotEntity.entity_type
         : "company";
     const submissionInput =
