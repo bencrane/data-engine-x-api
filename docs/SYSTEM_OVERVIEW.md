@@ -76,7 +76,7 @@ Client → POST /api/v1/batch/submit
 
 ---
 
-## Operations (51 live)
+## Operations (57 live)
 
 ### Company Enrichment (8)
 | Operation ID | Provider(s) |
@@ -149,6 +149,16 @@ Client → POST /api/v1/batch/submit
 | `person.contact.verify_email` | MillionVerifier → Reoon |
 | `person.contact.resolve_mobile_phone` | LeadMagic → BlitzAPI |
 | `person.derive.detect_changes` | Internal (entity snapshot diff) |
+
+### Resolution / CRM Cleanup (6)
+| Operation ID | Provider(s) |
+|---|---|
+| `company.resolve.domain_from_email` | RevenueInfra HQ (reference.email_to_person + email domain extraction) |
+| `company.resolve.domain_from_linkedin` | RevenueInfra HQ (core.companies) |
+| `company.resolve.domain_from_name` | RevenueInfra HQ (extracted.cleaned_company_names) |
+| `company.resolve.linkedin_from_domain` | RevenueInfra HQ (core.companies) |
+| `person.resolve.linkedin_from_email` | RevenueInfra HQ (reference.email_to_person) |
+| `company.resolve.location_from_domain` | RevenueInfra HQ (core.company_locations) |
 
 ### Construction / Permits (5)
 | Operation ID | Provider(s) |
@@ -256,7 +266,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity state accumulation (company, person, job) | ✅ Live |
 | Entity snapshots + change detection | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (51 ops) | ✅ Live |
+| Operation registry (57 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
