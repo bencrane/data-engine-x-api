@@ -185,6 +185,61 @@ query GetBrandAnalytics(
 }
 """.strip()
 
+GET_BRAND_LOCATIONS_QUERY = """
+query GetBrandLocations($searchInput: SearchInput!, $locationLimit: Int!, $locationConditions: ConnectionConditions) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      namesConnection(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      totalLocationCount: count(field: "operatingLocations")
+      operatingLocationsConnection(first: $locationLimit, conditions: $locationConditions) {
+        totalCount
+        edges {
+          node {
+            id
+            names(first: 1) {
+              edges {
+                node {
+                  name
+                }
+              }
+            }
+            addresses(first: 1) {
+              edges {
+                node {
+                  fullAddress
+                  streetAddress1
+                  city
+                  state
+                  postalCode
+                }
+              }
+            }
+            operatingStatuses(first: 1) {
+              edges {
+                node {
+                  operatingStatus
+                }
+              }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+""".strip()
+
 
 def _as_str(value: Any) -> str | None:
     if not isinstance(value, str):
@@ -293,6 +348,21 @@ def _series(connection: Any) -> list[dict[str, Any]] | None:
 def _annual_metric(connection: Any) -> float | None:
     node = _first_edge_node(connection)
     return _as_float(node.get("projectedQuantity"))
+
+
+def _map_operating_location(node: dict[str, Any]) -> dict[str, Any]:
+    address_node = _first_edge_node(node.get("addresses"))
+    operating_status_node = _first_edge_node(node.get("operatingStatuses"))
+    return {
+        "enigma_location_id": _as_str(node.get("id")),
+        "location_name": _as_str(_first_edge_node(node.get("names")).get("name")),
+        "full_address": _as_str(address_node.get("fullAddress")),
+        "street": _as_str(address_node.get("streetAddress1")),
+        "city": _as_str(address_node.get("city")),
+        "state": _as_str(address_node.get("state")),
+        "postal_code": _as_str(address_node.get("postalCode")),
+        "operating_status": _as_str(operating_status_node.get("operatingStatus")),
+    }
 
 
 def _match_search_input(*, company_name: str | None, company_domain: str | None) -> dict[str, Any]:
@@ -481,5 +551,90 @@ async def get_card_analytics(
         "monthly_transactions": _series(brand.get("oneMonthCardTransactionsCountsConnection")),
         "monthly_avg_transaction_size": _series(brand.get("oneMonthAvgTransactionSizesConnection")),
         "monthly_refunds": _series(brand.get("oneMonthRefundsAmountsConnection")),
+    }
+    return {"attempt": attempt, "mapped": mapped}
+
+
+async def get_brand_locations(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+    limit: int = 25,
+    operating_status_filter: str | None = None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_locations",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_locations",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    try:
+        parsed_limit = int(limit)
+    except (TypeError, ValueError):
+        parsed_limit = 25
+    safe_limit = max(1, min(parsed_limit, 100))
+
+    normalized_status_filter = _as_str(operating_status_filter)
+    location_conditions = None
+    if normalized_status_filter:
+        location_conditions = {
+            "filter": {"EQ": ["operatingStatuses.operatingStatus", normalized_status_filter]},
+        }
+
+    variables = {
+        "searchInput": _analytics_search_input(brand_id=normalized_brand_id),
+        "locationLimit": safe_limit,
+        "locationConditions": location_conditions,
+    }
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_locations",
+        query=GET_BRAND_LOCATIONS_QUERY,
+        variables=variables,
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    locations_connection = _as_dict(brand.get("operatingLocationsConnection"))
+    edges = _as_list(locations_connection.get("edges"))
+    locations = [
+        _map_operating_location(_as_dict(edge).get("node"))
+        for edge in edges
+        if _as_dict(_as_dict(edge).get("node"))
+    ]
+    page_info = _as_dict(locations_connection.get("pageInfo"))
+    has_next_page_raw = page_info.get("hasNextPage")
+    has_next_page = has_next_page_raw if isinstance(has_next_page_raw, bool) else None
+    end_cursor = _as_str(page_info.get("endCursor"))
+
+    mapped = {
+        "brand_name": _extract_brand_name(brand),
+        "enigma_brand_id": _as_str(brand.get("id")),
+        "total_location_count": _as_int(brand.get("totalLocationCount")),
+        "locations": locations,
+        "location_count": len(locations),
+        "open_count": sum(1 for loc in locations if loc.get("operating_status") == "Open"),
+        "closed_count": sum(
+            1 for loc in locations if loc.get("operating_status") in ("Closed", "Temporarily Closed")
+        ),
+        "has_next_page": has_next_page,
+        "end_cursor": end_cursor,
     }
     return {"attempt": attempt, "mapped": mapped}
