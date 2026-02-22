@@ -18,6 +18,7 @@ from app.services.company_operations import (
     execute_company_enrich_fmcsa,
     execute_company_enrich_card_revenue,
     execute_company_enrich_ecommerce,
+    execute_company_enrich_locations,
     execute_company_enrich_profile,
     execute_company_enrich_technographics,
 )
@@ -102,6 +103,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.enrich.profile",
     "company.enrich.fmcsa",
     "company.enrich.card_revenue",
+    "company.enrich.locations",
     "company.enrich.ecommerce",
     "company.enrich.technographics",
     "company.search",
@@ -331,6 +333,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.card_revenue":
         result = await execute_company_enrich_card_revenue(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.locations":
+        result = await execute_company_enrich_locations(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
