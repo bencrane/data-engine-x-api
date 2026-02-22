@@ -88,6 +88,14 @@ from app.services.courtlistener_operations import (
     execute_company_research_get_docket_detail,
     execute_company_signal_bankruptcy_filings,
 )
+from app.services.resolve_operations import (
+    execute_company_resolve_domain_from_email,
+    execute_company_resolve_domain_from_linkedin,
+    execute_company_resolve_domain_from_name,
+    execute_company_resolve_linkedin_from_domain,
+    execute_company_resolve_location_from_domain,
+    execute_person_resolve_linkedin_from_email,
+)
 
 router = APIRouter()
 
@@ -97,6 +105,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.contact.resolve_email",
     "person.contact.resolve_mobile_phone",
     "person.contact.verify_email",
+    "person.resolve.linkedin_from_email",
     "person.search",
     "person.enrich.profile",
     "person.derive.detect_changes",
@@ -106,6 +115,11 @@ SUPPORTED_OPERATION_IDS = {
     "company.enrich.locations",
     "company.enrich.ecommerce",
     "company.enrich.technographics",
+    "company.resolve.domain_from_email",
+    "company.resolve.domain_from_linkedin",
+    "company.resolve.domain_from_name",
+    "company.resolve.linkedin_from_domain",
+    "company.resolve.location_from_domain",
     "company.search",
     "company.search.fmcsa",
     "company.search.ecommerce",
@@ -267,6 +281,72 @@ async def execute_v1(
 
     if payload.operation_id == "person.contact.verify_email":
         result = await execute_person_contact_verify_email(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.domain_from_email":
+        result = await execute_company_resolve_domain_from_email(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.domain_from_linkedin":
+        result = await execute_company_resolve_domain_from_linkedin(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.domain_from_name":
+        result = await execute_company_resolve_domain_from_name(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.linkedin_from_domain":
+        result = await execute_company_resolve_linkedin_from_domain(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.resolve.linkedin_from_email":
+        result = await execute_person_resolve_linkedin_from_email(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.location_from_domain":
+        result = await execute_company_resolve_location_from_domain(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
