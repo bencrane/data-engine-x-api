@@ -76,9 +76,9 @@ Client → POST /api/v1/batch/submit
 
 ---
 
-## Operations (50 live)
+## Operations (51 live)
 
-### Company Enrichment (6)
+### Company Enrichment (8)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.enrich.profile` | Prospeo, BlitzAPI, CompanyEnrich, LeadMagic |
@@ -86,6 +86,7 @@ Client → POST /api/v1/batch/submit
 | `company.enrich.tech_stack` | TheirStack (job-posting-derived) |
 | `company.enrich.hiring_signals` | TheirStack |
 | `company.enrich.ecommerce` | StoreLeads |
+| `company.enrich.locations` | Enigma (operating locations with addresses and open/closed status) |
 | `company.enrich.card_revenue` | Enigma (GraphQL match → analytics) |
 | `company.enrich.fmcsa` | FMCSA QCMobile API (3-call merge: base + BASIC scores + authority) |
 
@@ -255,7 +256,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity state accumulation (company, person, job) | ✅ Live |
 | Entity snapshots + change detection | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (50 ops) | ✅ Live |
+| Operation registry (51 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
