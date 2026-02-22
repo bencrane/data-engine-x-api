@@ -30,6 +30,14 @@ from app.providers.revenueinfra.sec_filings import (
     fetch_sec_filings,
 )
 from app.providers.revenueinfra.validate_job import validate_job_active
+from app.providers.revenueinfra.resolve import (
+    resolve_domain_from_email,
+    resolve_domain_from_linkedin,
+    resolve_domain_from_company_name,
+    resolve_linkedin_from_domain,
+    resolve_person_linkedin_from_email,
+    resolve_company_location_from_domain,
+)
 
 __all__ = [
     "discover_competitors",
@@ -58,4 +66,10 @@ __all__ = [
     "analyze_10q",
     "analyze_8k_executive",
     "validate_job_active",
+    "resolve_domain_from_email",
+    "resolve_domain_from_linkedin",
+    "resolve_domain_from_company_name",
+    "resolve_linkedin_from_domain",
+    "resolve_person_linkedin_from_email",
+    "resolve_company_location_from_domain",
 ]
