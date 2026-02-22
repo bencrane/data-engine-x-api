@@ -111,6 +111,30 @@ class CardRevenueOutput(BaseModel):
     source_provider: str = "enigma"
 
 
+class EnigmaLocationItem(BaseModel):
+    enigma_location_id: str | None = None
+    location_name: str | None = None
+    full_address: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    operating_status: str | None = None
+
+
+class EnigmaLocationsOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    total_location_count: int | None = None
+    locations: list[EnigmaLocationItem] | None = None
+    location_count: int | None = None
+    open_count: int | None = None
+    closed_count: int | None = None
+    has_next_page: bool | None = None
+    end_cursor: str | None = None
+    source_provider: str = "enigma"
+
+
 class FMCSABasicScore(BaseModel):
     category: str
     percentile: float | None = None
