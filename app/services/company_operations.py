@@ -8,6 +8,7 @@ from app.contracts.company_enrich import (
     CardRevenueOutput,
     CompanyEnrichProfileOutput,
     EcommerceEnrichOutput,
+    EnigmaLocationsOutput,
     FMCSACarrierEnrichOutput,
     TechnographicsOutput,
 )
@@ -662,6 +663,131 @@ async def execute_company_enrich_card_revenue(
         "run_id": run_id,
         "operation_id": "company.enrich.card_revenue",
         "status": "found",
+        "output": {
+            **validated_output,
+        },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_locations(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.locations"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    enigma_brand_id = _as_non_empty_str(input_data.get("enigma_brand_id")) or _as_non_empty_str(
+        context.get("enigma_brand_id")
+    )
+    company_name = _as_non_empty_str(input_data.get("company_name")) or _as_non_empty_str(context.get("company_name"))
+    company_domain = (
+        _as_non_empty_str(input_data.get("company_domain"))
+        or _domain_from_website(input_data.get("company_website"))
+        or _as_non_empty_str(context.get("company_domain"))
+        or _domain_from_website(context.get("company_website"))
+    )
+
+    if not enigma_brand_id and not company_name and not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["enigma_brand_id|company_name|company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    step_config = _as_dict(input_data.get("step_config")) or _as_dict(context.get("step_config"))
+    limit = max(1, min(_as_positive_int(step_config.get("limit")) or 25, 100))
+    operating_status_filter = _as_non_empty_str(step_config.get("operating_status_filter"))
+
+    settings = get_settings()
+    brand_name: str | None = None
+    if not enigma_brand_id:
+        match_result = await enigma.match_business(
+            api_key=settings.enigma_api_key,
+            company_name=company_name,
+            company_domain=company_domain,
+        )
+        attempts.append(match_result["attempt"])
+
+        matched = _as_dict(match_result.get("mapped"))
+        match_status = match_result["attempt"].get("status", "failed")
+        if not matched:
+            return {
+                "run_id": run_id,
+                "operation_id": operation_id,
+                "status": match_status,
+                "provider_attempts": attempts,
+            }
+        enigma_brand_id = _as_non_empty_str(matched.get("enigma_brand_id"))
+        brand_name = _as_non_empty_str(matched.get("brand_name"))
+
+    locations_result = await enigma.get_brand_locations(
+        api_key=settings.enigma_api_key,
+        brand_id=enigma_brand_id,
+        limit=limit,
+        operating_status_filter=operating_status_filter,
+    )
+    attempts.append(locations_result["attempt"])
+
+    locations_mapped = _as_dict(locations_result.get("mapped"))
+    raw_locations = locations_mapped.get("locations")
+    locations = raw_locations if isinstance(raw_locations, list) else []
+    location_count = locations_mapped.get("location_count")
+    if not isinstance(location_count, int):
+        location_count = len(locations)
+    open_count = locations_mapped.get("open_count")
+    if not isinstance(open_count, int):
+        open_count = sum(1 for loc in locations if _as_dict(loc).get("operating_status") == "Open")
+    closed_count = locations_mapped.get("closed_count")
+    if not isinstance(closed_count, int):
+        closed_count = sum(
+            1
+            for loc in locations
+            if _as_dict(loc).get("operating_status") in {"Closed", "Temporarily Closed"}
+        )
+
+    merged_output = {
+        "enigma_brand_id": enigma_brand_id,
+        "brand_name": brand_name or _as_non_empty_str(locations_mapped.get("brand_name")),
+        "total_location_count": locations_mapped.get("total_location_count"),
+        "locations": locations,
+        "location_count": location_count,
+        "open_count": open_count,
+        "closed_count": closed_count,
+        "has_next_page": locations_mapped.get("has_next_page"),
+        "end_cursor": locations_mapped.get("end_cursor"),
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaLocationsOutput.model_validate(merged_output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    # Keep key metrics at the top level for cumulative context chaining.
+    validated_output["enigma_brand_id"] = validated_output.get("enigma_brand_id")
+    validated_output["total_location_count"] = validated_output.get("total_location_count")
+    validated_output["location_count"] = validated_output.get("location_count")
+    validated_output["open_count"] = validated_output.get("open_count")
+    validated_output["closed_count"] = validated_output.get("closed_count")
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "found" if locations else "not_found",
         "output": {
             **validated_output,
         },
