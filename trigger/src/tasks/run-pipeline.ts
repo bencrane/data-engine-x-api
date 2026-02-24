@@ -144,6 +144,103 @@ inferredProduct: One sentence describing what the company sells and to whom, bas
 buyerPersonaSummary: 2-3 sentences describing the buying committee - who champions it, who evaluates it, who signs off.
 titles: For each title include the title, buyerRole (champion | evaluator | decision_maker), and reasoning (one sentence grounding this title in research evidence).`;
 
+const COMPANY_INTEL_BRIEFING_PROMPT_TEMPLATE = `#CONTEXT#
+You are a B2B sales intelligence researcher. You will receive inputs about a client company (the seller) and a target company (the prospect). Your job is to produce structured, verified intelligence about the target company that the client company's sales team can use to prepare for outreach.
+
+#INPUTS#
+client_company_name: {client_company_name}
+client_company_description: {client_company_description}
+target_company_name: {target_company_name}
+target_company_domain: {target_company_domain}
+target_company_description: {target_company_description}
+target_company_industry: {target_company_industry}
+target_company_size: {target_company_size}
+target_company_funding: {target_company_funding}
+target_company_competitors:
+{target_company_competitors}
+
+#OBJECTIVE#
+Produce structured intelligence about the target company that covers their business context, financial position, strategic initiatives, posture and gaps in the domain relevant to what the client company sells, operational bottlenecks the client company's product addresses, and detailed competitor profiles. All claims must be cited with source URLs. Do not fabricate specific metrics, deal details, or quotes.
+
+#INSTRUCTIONS#
+Research and populate every field in the output schema. For each field:
+- Use only verifiable, publicly available information
+- Cite sources with URLs
+- Assign a confidence score (high/medium/low)
+- If information cannot be verified, state that explicitly rather than inferring
+
+Focus research effort on:
+1. Current business status, funding, and financial metrics
+2. Strategic initiatives that expand the target company's need for what the client company sells
+3. Key customer relationships and concentration risk
+4. Where the target company's operations create bottlenecks that the client company's product category directly addresses
+5. Current certifications, capabilities, and gaps in the domain relevant to the client company's product
+6. Competitor positioning — pricing, procurement advantages, and posture in the client company's domain — with specifics
+
+## OUTPUT SCHEMA
+
+\`\`\`json
+{
+  "type": "object",
+  "properties": {
+    "target_business_summary": {
+      "type": "string",
+      "description": "Overview of the target company's current business status, market position, strategic focus, key partnerships, and recent developments."
+    },
+    "target_financial_highlights": {
+      "type": "object",
+      "description": "Key financial metrics including revenue, funding, valuation, growth trajectory, and any publicly available financial data."
+    },
+    "target_strategic_initiatives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "initiative": { "type": "string" },
+          "description": { "type": "string" },
+          "expanded_risk_surface": { "type": "string", "description": "New risks or needs this initiative creates that are relevant to what the client company sells." }
+        }
+      }
+    },
+    "target_key_customers_and_concentration_risk": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "customer_name": { "type": "string" },
+          "contract_details": { "type": "string" },
+          "concentration_risk_analysis": { "type": "string" }
+        }
+      }
+    },
+    "target_operational_bottlenecks": {
+      "type": "string",
+      "description": "Analysis of where the target company's operations create pain points or bottlenecks that the client company's product category directly addresses."
+    },
+    "target_relevant_posture_and_gaps": {
+      "type": "string",
+      "description": "Assessment of the target company's current capabilities, certifications, and gaps in the domain relevant to what the client company sells."
+    },
+    "competitor_profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "competitor_name": { "type": "string" },
+          "key_differentiators": { "type": "string" },
+          "procurement_and_pricing_advantages": { "type": "string" },
+          "relevant_posture": { "type": "string", "description": "How this competitor positions in the domain relevant to the client company's product." }
+        }
+      }
+    },
+    "client_strategic_relevance": {
+      "type": "string",
+      "description": "2-4 sentences explaining how the client company's product directly ties to the target company's chief strategic objectives, revenue goals, or critical operational needs identified in this research. Frame as what adopting the client's product unlocks for the target — in terms of revenue acceleration, risk reduction, or strategic execution."
+    }
+  }
+}
+\`\`\``;
+
 async function executeParallelDeepResearch(
   cumulativeContext: Record<string, unknown>,
   stepConfig: Record<string, unknown>,
@@ -376,6 +473,294 @@ async function executeParallelDeepResearch(
         {
           provider: "parallel",
           action: "deep_research_icp_job_titles",
+          status: "failed",
+          error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
+          parallel_run_id: runId,
+        },
+      ],
+    };
+  }
+}
+
+async function executeCompanyIntelBriefing(
+  cumulativeContext: Record<string, unknown>,
+  stepConfig: Record<string, unknown>,
+): Promise<NonNullable<ExecuteResponseEnvelope["data"]>> {
+  const apiKey = process.env.PARALLEL_API_KEY;
+  if (!apiKey) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_company_intel_briefing",
+          status: "skipped",
+          skip_reason: "missing_parallel_api_key",
+        },
+      ],
+    };
+  }
+
+  const clientCompanyName = String(cumulativeContext.client_company_name || "");
+  const clientCompanyDescription = String(cumulativeContext.client_company_description || "");
+  const targetCompanyName = String(
+    cumulativeContext.target_company_name || cumulativeContext.company_name || "",
+  );
+  const targetCompanyDomain = String(cumulativeContext.target_company_domain || cumulativeContext.domain || "");
+  const targetCompanyDescription = String(
+    cumulativeContext.target_company_description ||
+      cumulativeContext.company_description ||
+      cumulativeContext.description ||
+      "",
+  );
+  const targetCompanyIndustry = String(cumulativeContext.target_company_industry || cumulativeContext.industry || "");
+  const targetCompanySize = String(
+    cumulativeContext.target_company_size ||
+      cumulativeContext.employee_count ||
+      cumulativeContext.employee_range ||
+      "",
+  );
+  const targetCompanyFunding = String(cumulativeContext.target_company_funding || cumulativeContext.funding || "");
+  const targetCompanyCompetitors = String(cumulativeContext.target_company_competitors || "");
+
+  if (!clientCompanyName || !clientCompanyDescription || !targetCompanyName || !targetCompanyDomain) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      missing_inputs: [
+        ...(!clientCompanyName ? ["client_company_name"] : []),
+        ...(!clientCompanyDescription ? ["client_company_description"] : []),
+        ...(!targetCompanyName ? ["target_company_name"] : []),
+        ...(!targetCompanyDomain ? ["target_company_domain"] : []),
+      ],
+      provider_attempts: [],
+    };
+  }
+
+  const prompt = COMPANY_INTEL_BRIEFING_PROMPT_TEMPLATE.replaceAll(
+    "{client_company_name}",
+    clientCompanyName,
+  )
+    .replaceAll("{client_company_description}", clientCompanyDescription)
+    .replaceAll("{target_company_name}", targetCompanyName)
+    .replaceAll("{target_company_domain}", targetCompanyDomain)
+    .replaceAll("{target_company_description}", targetCompanyDescription || "No description provided.")
+    .replaceAll("{target_company_industry}", targetCompanyIndustry || "Not specified")
+    .replaceAll("{target_company_size}", targetCompanySize || "Not specified")
+    .replaceAll("{target_company_funding}", targetCompanyFunding || "Not specified")
+    .replaceAll(
+      "{target_company_competitors}",
+      targetCompanyCompetitors || "No competitor information provided.",
+    );
+
+  const processor = String(stepConfig.processor || "ultra");
+  const maxPollAttempts = Number(stepConfig.max_poll_attempts || 135);
+  const pollIntervalSeconds = Number(stepConfig.poll_interval_seconds || 20);
+
+  const headers: Record<string, string> = {
+    "x-api-key": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  let runId: string;
+  try {
+    const createResponse = await fetch("https://api.parallel.ai/v1/tasks/runs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input: prompt, processor }),
+    });
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "company.derive.intel_briefing",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "deep_research_company_intel_briefing",
+            status: "failed",
+            error: `task_creation_failed: ${createResponse.status}`,
+            raw_response: errorText,
+          },
+        ],
+      };
+    }
+    const createData = (await createResponse.json()) as { run_id: string; status: string };
+    runId = createData.run_id;
+    logger.info("Parallel company intel briefing task created", {
+      runId,
+      processor,
+      clientCompanyName,
+      targetCompanyName,
+      targetCompanyDomain,
+    });
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_company_intel_briefing",
+          status: "failed",
+          error: `task_creation_exception: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
+  }
+
+  let taskStatus = "queued";
+  let pollCount = 0;
+
+  while (taskStatus !== "completed" && taskStatus !== "failed" && pollCount < maxPollAttempts) {
+    await wait.for({ seconds: pollIntervalSeconds });
+    pollCount++;
+
+    try {
+      const statusResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}`, {
+        method: "GET",
+        headers: { "x-api-key": apiKey },
+      });
+      if (!statusResponse.ok) {
+        logger.warn("Parallel company intel briefing status check returned non-OK", {
+          runId,
+          status: statusResponse.status,
+          pollCount,
+        });
+        continue;
+      }
+      const statusData = (await statusResponse.json()) as { status: string };
+      taskStatus = statusData.status;
+      logger.info("Parallel company intel briefing poll", { runId, taskStatus, pollCount });
+    } catch (error) {
+      logger.warn("Parallel company intel briefing status check exception", {
+        runId,
+        pollCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+  }
+
+  if (taskStatus === "failed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_company_intel_briefing",
+          status: "failed",
+          error: "parallel_task_failed",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  }
+
+  if (taskStatus !== "completed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_company_intel_briefing",
+          status: "failed",
+          error: "poll_timeout",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+          max_poll_attempts: maxPollAttempts,
+        },
+      ],
+    };
+  }
+
+  try {
+    const resultResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}/result`, {
+      method: "GET",
+      headers: { "x-api-key": apiKey },
+    });
+    if (!resultResponse.ok) {
+      const errorText = await resultResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "company.derive.intel_briefing",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "deep_research_company_intel_briefing",
+            status: "failed",
+            error: `result_fetch_failed: ${resultResponse.status}`,
+            raw_response: errorText,
+            parallel_run_id: runId,
+          },
+        ],
+      };
+    }
+    const resultData = (await resultResponse.json()) as Record<string, unknown>;
+    logger.info("Parallel company intel briefing completed", {
+      runId,
+      pollCount,
+      clientCompanyName,
+      targetCompanyName,
+      targetCompanyDomain,
+    });
+
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "found",
+      output: {
+        parallel_run_id: runId,
+        processor,
+        client_company_name: clientCompanyName,
+        client_company_description: clientCompanyDescription,
+        target_company_name: targetCompanyName,
+        target_company_domain: targetCompanyDomain,
+        target_company_description: targetCompanyDescription,
+        target_company_industry: targetCompanyIndustry,
+        target_company_size: targetCompanySize,
+        target_company_funding: targetCompanyFunding,
+        parallel_raw_response: resultData,
+      },
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_company_intel_briefing",
+          status: "found",
+          parallel_run_id: runId,
+          processor,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_company_intel_briefing",
           status: "failed",
           error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
           parallel_run_id: runId,
@@ -923,6 +1308,8 @@ export const runPipeline = task({
         let result: NonNullable<ExecuteResponseEnvelope["data"]>;
         if (operationId === "company.derive.icp_job_titles") {
           result = await executeParallelDeepResearch(cumulativeContext, stepSnapshot.step_config || {});
+        } else if (operationId === "company.derive.intel_briefing") {
+          result = await executeCompanyIntelBriefing(cumulativeContext, stepSnapshot.step_config || {});
         } else {
           result = await callExecuteV1(internalConfig, {
             orgId: org_id,
