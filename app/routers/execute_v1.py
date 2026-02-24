@@ -579,7 +579,8 @@ async def execute_v1(
         return DataEnvelope(data=result)
 
     if payload.operation_id == "company.fetch.icp_candidates":
-        result = await execute_company_fetch_icp_candidates(input_data=payload.input)
+        merged_input = {**payload.input, **(payload.options or {})}
+        result = await execute_company_fetch_icp_candidates(input_data=merged_input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
