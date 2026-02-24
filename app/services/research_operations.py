@@ -16,6 +16,7 @@ from app.contracts.company_research import (
     ResolveG2UrlOutput,
     ResolvePricingPageUrlOutput,
 )
+from app.contracts.icp_companies import FetchIcpCompaniesOutput
 from app.contracts.job_validation import JobValidationOutput
 from app.providers import gemini, openai_provider, revenueinfra
 
@@ -422,6 +423,23 @@ def _extract_company_research_lookup_alumni_inputs(
     return _extract_company_domain(input_data)
 
 
+def _extract_icp_candidate_limit(input_data: dict[str, Any]) -> int | None:
+    raw_limit = (
+        input_data.get("limit")
+        or (input_data.get("cumulative_context", {}) if isinstance(input_data.get("cumulative_context"), dict) else {}).get("limit")
+        or (input_data.get("options", {}) if isinstance(input_data.get("options"), dict) else {}).get("limit")
+    )
+    if isinstance(raw_limit, int) and raw_limit > 0:
+        return raw_limit
+    if isinstance(raw_limit, str):
+        cleaned = raw_limit.strip()
+        if cleaned.isdigit():
+            parsed = int(cleaned)
+            if parsed > 0:
+                return parsed
+    return None
+
+
 def _extract_company_research_check_vc_funding_inputs(
     input_data: dict[str, Any],
 ) -> str | None:
@@ -796,6 +814,76 @@ async def execute_company_research_lookup_alumni(
             "alumni_count": output["alumni_count"],
             "source_provider": output["source_provider"],
         },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_fetch_icp_candidates(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    attempts: list[dict[str, Any]] = []
+    operation_id = "company.fetch.icp_candidates"
+
+    limit = _extract_icp_candidate_limit(input_data)
+
+    settings = get_settings()
+    result = await revenueinfra.fetch_icp_companies(
+        base_url=settings.revenueinfra_api_url,
+        limit=limit,
+    )
+    attempt = result.get("attempt") if isinstance(result, dict) else {}
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result, dict) else None
+
+    status = attempt.get("status") if isinstance(attempt, dict) else "failed"
+    if status in {"failed", "skipped"}:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+        }
+
+    normalized_mapped = mapped if isinstance(mapped, dict) else {}
+    results: list[dict[str, Any]] = []
+    if isinstance(normalized_mapped.get("results"), list):
+        results = [
+            item
+            for item in (normalized_mapped.get("results") or [])
+            if isinstance(item, dict)
+        ]
+
+    company_count = normalized_mapped.get("company_count")
+    if not isinstance(company_count, int):
+        company_count = len(results)
+
+    try:
+        output = FetchIcpCompaniesOutput.model_validate(
+            {
+                "company_count": company_count,
+                "results": results,
+                "source_provider": "revenueinfra",
+            }
+        ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "not_found" if status == "not_found" else "found",
+        "output": output,
         "provider_attempts": attempts,
     }
 
