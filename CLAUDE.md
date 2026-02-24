@@ -65,7 +65,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
    - Produces tenant `AuthContext`.
 3. **Super-admin API key**
    - Compared to `SUPER_ADMIN_API_KEY`.
-   - Grants `SuperAdminContext` on super-admin endpoints and flexible super-admin routes.
+   - Grants `SuperAdminContext` on super-admin endpoints, flexible super-admin routes, and `/api/v1/execute` (requires `org_id` + `company_id` in request body).
 4. **Internal service auth (Trigger.dev -> FastAPI)**
    - `Authorization: Bearer <INTERNAL_API_KEY>`
    - `x-internal-org-id: <org_uuid>` (required)
@@ -128,6 +128,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/v1/batch/status`
 - `POST /api/v1/entities/companies`
 - `POST /api/v1/entities/persons`
+- `POST /api/v1/entities/job-postings`
 - `POST /api/v1/entities/timeline`
 - `POST /api/internal/pipeline-runs/get`
 - `POST /api/internal/pipeline-runs/update-status`
@@ -185,22 +186,47 @@ Migration order:
 ## Environment Configuration
 
 - App settings use non-prefixed env names (for example `DATABASE_URL`, `INTERNAL_API_KEY`, `LEADMAGIC_API_KEY`).
+- `REVENUEINFRA_INGEST_API_KEY` — API key data-engine-x uses to authenticate against HQ ingest/validation endpoints (same value as `INGEST_API_KEY` in HQ).
+- `RAPIDAPI_SALESNAV_SCRAPE_API_KEY` — API key for RapidAPI Sales Navigator scraper (alumni search).
 - Trigger task runtime supports `DATA_ENGINE_API_URL` / `DATA_ENGINE_INTERNAL_API_KEY` fallback in `run-pipeline.ts`.
 - Docker runtime injects secrets via Doppler (`CMD ["doppler", "run", "--", ...]` in `Dockerfile`).
 - Railway only needs `DOPPLER_TOKEN`; Doppler provides the rest at runtime.
 
+## HQ Integration (api.revenueinfra.com)
+
+data-engine-x calls HQ endpoints for:
+- **Research lookups**: competitors, customers, alumni, champions, VC funding, similar companies, SEC filings
+- **CRM resolution**: domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain (6 `/single` endpoints)
+- **Job validation**: Bright Data cross-source check (`/api/ingest/brightdata/validate-job`)
+- **Sales Nav templates**: client-specific Sales Nav URL templates (`/api/hq/clients/salesnav-template`)
+
+HQ is read-only from data-engine-x's perspective. data-engine-x never writes to HQ's DB.
+
+## Live Orgs
+
+| Org | ID | Companies |
+|---|---|---|
+| Staffing Activation | `58203c4a-1654-42f8-8486-bd37016223a5` | Sales Talent (`6749b0b9-3e9a-4382-8e4d-353771ef78d4`, domain: salestalent.inc) |
+| Revenue Activation | `d319a533-356a-4592-bd7a-b79dd4d27802` | — |
+
 ## Directory Structure
 
 - `app/`
-  - `app/providers/`
-  - `app/contracts/`
-  - `app/routers/entities_v1.py`
-  - `app/services/entity_state.py`
-  - `app/services/entity_timeline.py`
+  - `app/providers/` — provider adapters (prospeo, blitzapi, enigma, theirstack, revenueinfra/, etc.)
+  - `app/contracts/` — Pydantic output models
+  - `app/services/` — operation service functions
+  - `app/routers/execute_v1.py` — operation dispatch + SUPPORTED_OPERATION_IDS
+  - `app/routers/entities_v1.py` — entity query endpoints (companies, persons, job-postings, timeline)
+  - `app/services/entity_state.py` — entity upsert + identity resolution (company, person, job)
+  - `app/services/entity_timeline.py` — timeline event recording
+  - `app/services/resolve_operations.py` — 6 CRM resolve operations
 - `trigger/`
+  - `trigger/src/tasks/run-pipeline.ts` — pipeline runner (supports company, person, job entity types)
 - `tests/`
 - `scripts/`
 - `supabase/migrations/`
 - `docs/`
+  - `docs/blueprints/` — blueprint definition JSON files
+  - `docs/EXECUTOR_DIRECTIVE_*.md` — executor agent directives (documentation)
 - `Dockerfile`
 

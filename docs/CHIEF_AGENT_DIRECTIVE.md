@@ -26,18 +26,21 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **50 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
+- **57 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
 - **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
 - **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
-- **Staffing enrichment pipeline**: 7-step blueprint (job search → validate active → company enrich → person search → email → verify → phone) with 2 fan-outs, tested end-to-end
+- **6 live blueprints** across 2 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1
+- **6 CRM resolution operations** — domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain (all via HQ single-record lookup endpoints)
 - **Bright Data validation** via HQ (Indeed + LinkedIn raw tables, cross-source job validation endpoint)
+- **Enigma operating locations** — brand → physical locations with open/closed status
 - **AI blueprint assembler** with natural language mode (Claude → OpenAI → Gemini)
 - **Coverage check** endpoint for pre-outbound readiness
 - **Operation registry** with formal input/output metadata
+- **Super-admin auth on `/api/v1/execute`** — requires `org_id` + `company_id` in body
 - **20 Modal micro-functions** for Parallel.ai fallbacks
 - **FMCSA daily signal pipeline** in separate repo (`ongoing-data-pulls`)
-- **34 test files**, 13 migrations
+- **36+ test files**, 13 migrations
 
 ## Key Files
 

@@ -1,6 +1,6 @@
 # System Overview: data-engine-x-api
 
-Comprehensive documentation of the system as of 2026-02-19. Written for AI agents or human engineers who need full context to continue development.
+Comprehensive documentation of the system as of 2026-02-22. Written for AI agents or human engineers who need full context to continue development.
 
 ---
 
@@ -280,7 +280,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 ## Testing
 
-31 test files in `tests/`. Run with `uv run --with pytest --with pytest-asyncio --with pyyaml pytest`.
+36+ test files in `tests/`. Run with `uv run --with pytest --with pytest-asyncio --with pyyaml pytest`.
 
 ---
 
@@ -311,11 +311,24 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | 24 | Shovels market intelligence (city/county/zipcode/jurisdiction metrics + details) |
 | 25 | FMCSA daily signal pipeline (separate repo, 6 feeds, all working) |
 | 26 | Staffing vertical: TheirStack adapter enrichment (41 fields, `job.search` op, 65+ filters), job posting entity type, Bright Data validation, staffing enrichment blueprint |
+| 27 | Enigma operating locations (`company.enrich.locations`), 6 CRM resolve operations (domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain), CRM Cleanup + CRM Enrichment blueprints, super-admin auth on `/api/v1/execute` |
+
+---
+
+## Live Blueprints
+
+| Blueprint | Org | Steps | Purpose |
+|---|---|---|---|
+| CRM Cleanup v1 | Staffing Activation, Revenue Activation | 7 | Domain resolution cascade (email → LinkedIn → name), fill LinkedIn/location, verify email |
+| CRM Enrichment v1 | Staffing Activation, Revenue Activation | 3 | Company profile enrichment, resolve email where missing, verify email |
+| Staffing Enrichment v1 | Staffing Activation, Revenue Activation | 7 | Job search → validate active → company enrich → person search → email → verify → phone (2 fan-outs) |
 
 ---
 
 ## What's Not Built Yet
 
+- **Sales Nav alumni search operation** — `person.search.sales_nav_alumni` via RapidAPI Sales Navigator scraper (HQ template table + endpoint exist, provider adapter not built)
+- **Alumni Discovery blueprint** — chain CRM cleanup → alumni search → enrich → email (pending Sales Nav operation)
 - **Output delivery** — push results to CRM, campaign tool, webhook, CSV
 - **Input ingestion** — CRM pull, CSV upload validation, auto-derived input requirements
 - **Bright Data connector** — automated puller/webhook to ingest Indeed + LinkedIn snapshots from Bright Data API (tables + ingestion endpoints exist in HQ, connector not wired)
