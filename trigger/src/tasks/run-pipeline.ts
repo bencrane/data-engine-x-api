@@ -739,6 +739,8 @@ async function executeCompanyIntelBriefing(
         target_company_size: targetCompanySize,
         target_company_funding: targetCompanyFunding,
         parallel_raw_response: resultData,
+        domain: targetCompanyDomain,
+        company_name: targetCompanyName,
       },
       provider_attempts: [
         {
