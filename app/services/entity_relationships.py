@@ -31,7 +31,14 @@ def _normalize_domain(identifier: str) -> str:
 
 
 def _normalize_linkedin_url(identifier: str) -> str:
-    return _normalize_text(identifier).rstrip("/")
+    normalized = _normalize_text(identifier).rstrip("/")
+    if normalized.startswith("https://"):
+        normalized = normalized[len("https://") :]
+    elif normalized.startswith("http://"):
+        normalized = normalized[len("http://") :]
+    if normalized.startswith("www."):
+        normalized = normalized[4:]
+    return normalized
 
 
 def _normalize_identifier(identifier: str) -> str:
