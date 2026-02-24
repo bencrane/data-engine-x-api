@@ -130,6 +130,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/v1/entities/persons`
 - `POST /api/v1/entities/job-postings`
 - `POST /api/v1/entities/timeline`
+- `POST /api/v1/entity-relationships/query`
 - `POST /api/internal/pipeline-runs/get`
 - `POST /api/internal/pipeline-runs/update-status`
 - `POST /api/internal/pipeline-runs/fan-out`
@@ -139,6 +140,9 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/internal/submissions/sync-status`
 - `POST /api/internal/entity-state/upsert`
 - `POST /api/internal/entity-timeline/record-step-event`
+- `POST /api/internal/entity-relationships/record`
+- `POST /api/internal/entity-relationships/record-batch`
+- `POST /api/internal/entity-relationships/invalidate`
 
 ## Trigger.dev Conventions
 

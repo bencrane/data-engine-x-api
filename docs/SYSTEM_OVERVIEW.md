@@ -68,6 +68,13 @@ Client → POST /api/v1/batch/submit
 
 **Entity Snapshots:** Before each entity upsert, the previous state is captured as an append-only snapshot. Enables change detection ("employee_count went from 50 to 65").
 
+### Entity Relationships
+
+The `entity_relationships` table records typed, directional relationships between entities. Each relationship has a source entity (identified by domain or LinkedIn URL), a relationship type (e.g., `has_customer`, `has_competitor`, `works_at`, `alumni_of`), and a target entity. Relationships are org-scoped, deduplicated on (source, relationship, target), and support invalidation for time-bounded facts like employment.
+
+Internal endpoints: `/api/internal/entity-relationships/record`, `/record-batch`, `/invalidate`.
+Query endpoint: `/api/v1/entity-relationships/query`.
+
 **Entity Timeline:** Append-only log per entity capturing every step execution — which operation ran, which provider succeeded, which fields were updated, skip reasons. Queryable per entity, per run, or per submission.
 
 **Operation Registry + AI Blueprint Assembler:** Formal metadata for all operations (inputs, outputs, cost tier, fan-out support). AI endpoint assembles blueprints from natural language or field checklists using Claude → OpenAI → Gemini fallback chain.
@@ -257,6 +264,15 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 ---
 
+## API Endpoints (Entity Relationships)
+
+- `POST /api/internal/entity-relationships/record`
+- `POST /api/internal/entity-relationships/record-batch`
+- `POST /api/internal/entity-relationships/invalidate`
+- `POST /api/v1/entity-relationships/query`
+
+---
+
 ## Infrastructure Features
 
 | Feature | Status |
@@ -267,6 +283,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity deduplication (fan-out + freshness) | ✅ Live |
 | Entity state accumulation (company, person, job) | ✅ Live |
 | Entity snapshots + change detection | ✅ Live |
+| Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
 | Operation registry (59 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
