@@ -188,6 +188,7 @@ Migration order:
 - App settings use non-prefixed env names (for example `DATABASE_URL`, `INTERNAL_API_KEY`, `LEADMAGIC_API_KEY`).
 - `REVENUEINFRA_INGEST_API_KEY` — API key data-engine-x uses to authenticate against HQ ingest/validation endpoints (same value as `INGEST_API_KEY` in HQ).
 - `RAPIDAPI_SALESNAV_SCRAPE_API_KEY` — API key for RapidAPI Sales Navigator scraper (alumni search).
+- `PARALLEL_API_KEY` — API key for Parallel.ai Deep Research (set in Trigger.dev env vars, NOT in Doppler/Railway — this operation runs directly from Trigger.dev).
 - Trigger task runtime supports `DATA_ENGINE_API_URL` / `DATA_ENGINE_INTERNAL_API_KEY` fallback in `run-pipeline.ts`.
 - Docker runtime injects secrets via Doppler (`CMD ["doppler", "run", "--", ...]` in `Dockerfile`).
 - Railway only needs `DOPPLER_TOKEN`; Doppler provides the rest at runtime.
