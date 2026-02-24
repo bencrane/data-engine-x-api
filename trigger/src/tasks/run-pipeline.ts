@@ -241,6 +241,145 @@ Focus research effort on:
 }
 \`\`\``;
 
+const PERSON_INTEL_BRIEFING_PROMPT_TEMPLATE = `#CONTEXT#
+You are a B2B sales intelligence researcher. You will receive inputs about a person at a target company, along with information about the client company whose product is being sold. Your job is to produce structured, verified intelligence about this person that a sales team can use to prepare for personalized outreach.
+
+#INPUTS#
+client_company_name: {client_company_name}
+client_company_description: {client_company_description}
+customer_company_name: {customer_company_name}
+person_full_name: {person_full_name}
+person_linkedin_url: {person_linkedin_url}
+person_current_job_title: {person_current_job_title}
+person_current_company_name: {person_current_company_name}
+person_current_company_description: {person_current_company_description}
+
+#OBJECTIVE#
+Produce structured intelligence about this person — their identity, career history, public professional philosophy, advisory roles, and the context of their current company relevant to what the client company sells. All claims must be cited with source URLs. Do not fabricate specific quotes, dates, or biographical details.
+
+#INSTRUCTIONS#
+Research and populate every field in the output schema. For each field:
+- Use only verifiable, publicly available information
+- Cite sources with URLs
+- Assign a confidence score (high/medium/low)
+- If information cannot be verified, state that explicitly rather than inferring
+
+Focus research effort on:
+1. Verify the person's identity using the provided name, LinkedIn URL, title, and company
+2. Full career history with dates, titles, companies, and durations
+3. Public statements, blog posts, conference talks about their professional priorities
+4. Advisory board roles, industry affiliations, published thought leadership
+5. Current company's infrastructure, partnerships, and certifications relevant to this person's role and to what the client company sells
+6. Current company's operational model or documentation structure relevant to the client company's domain
+
+## OUTPUT SCHEMA
+
+\`\`\`json
+{
+  "type": "object",
+  "properties": {
+    "executive_summary": {
+      "type": "string",
+      "description": "Brief strategic overview of who this person is, their role, and why they matter for outreach. 2-3 sentences max."
+    },
+    "person_full_name": {
+      "type": "string",
+      "description": "The person's verified full name."
+    },
+    "person_current_title": {
+      "type": "string",
+      "description": "Current job title."
+    },
+    "person_current_company": {
+      "type": "string",
+      "description": "Current employer."
+    },
+    "person_current_role_start_date": {
+      "type": "string",
+      "description": "When they started their current role (month/year)."
+    },
+    "person_linkedin_url": {
+      "type": "string",
+      "description": "LinkedIn profile URL."
+    },
+    "person_total_experience": {
+      "type": "string",
+      "description": "Approximate total years in their professional domain."
+    },
+    "career_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "company": { "type": "string" },
+          "title": { "type": "string" },
+          "start_date": { "type": "string" },
+          "end_date": { "type": "string" },
+          "notable_details": { "type": "string", "description": "Key achievements, scope, or context relevant to their professional domain." }
+        }
+      },
+      "description": "Full career history in reverse chronological order with dates, titles, and relevant details."
+    },
+    "professional_philosophy_public_statements": {
+      "type": "string",
+      "description": "Direct quotes or paraphrased positions from blog posts, conference talks, interviews, or podcasts. Cite each with source URL and date."
+    },
+    "professional_key_priorities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Their stated professional priorities and areas of focus based on public statements and content."
+    },
+    "professional_frameworks_and_standards": {
+      "type": "string",
+      "description": "Any frameworks, standards, or methodologies they've publicly advocated for in their domain."
+    },
+    "advisory_and_affiliations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "organization": { "type": "string" },
+          "role": { "type": "string" }
+        }
+      },
+      "description": "Advisory board seats, industry group memberships, academic affiliations."
+    },
+    "current_company_domain_leadership_strategy": {
+      "type": "string",
+      "description": "How this person is shaping strategy in their domain at their current company, based on public statements, blog posts, or company pages."
+    },
+    "current_company_certifications_and_standards": {
+      "type": "string",
+      "description": "Current certifications and standards held by the company relevant to the client company's product domain, with scope details."
+    },
+    "current_company_relevant_infrastructure": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key infrastructure, architecture, or operational details at the current company relevant to the client company's product domain."
+    },
+    "current_company_domain_partnerships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "partner_name": { "type": "string" },
+          "partnership_scope": { "type": "string" }
+        }
+      },
+      "description": "Vendor partnerships at the current company relevant to the client company's product domain."
+    },
+    "current_company_operational_model": {
+      "type": "string",
+      "description": "How the company structures operational responsibilities in the domain relevant to the client company's product, if publicly documented."
+    },
+    "client_outreach_relevance": {
+      "type": "string",
+      "description": "Identify the specific responsibilities, mandates, and workflows this person is accountable for in their current role at this company. Then explain what concrete pain points the client company's product solves for them — tied directly to the workflows, decisions, or outcomes they must deliver successfully. Ground in evidence from the research above."
+    }
+  }
+}
+\`\`\``;
+
 async function executeParallelDeepResearch(
   cumulativeContext: Record<string, unknown>,
   stepConfig: Record<string, unknown>,
@@ -763,6 +902,294 @@ async function executeCompanyIntelBriefing(
         {
           provider: "parallel",
           action: "deep_research_company_intel_briefing",
+          status: "failed",
+          error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
+          parallel_run_id: runId,
+        },
+      ],
+    };
+  }
+}
+
+async function executePersonIntelBriefing(
+  cumulativeContext: Record<string, unknown>,
+  stepConfig: Record<string, unknown>,
+): Promise<NonNullable<ExecuteResponseEnvelope["data"]>> {
+  const apiKey = process.env.PARALLEL_API_KEY;
+  if (!apiKey) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_person_intel_briefing",
+          status: "skipped",
+          skip_reason: "missing_parallel_api_key",
+        },
+      ],
+    };
+  }
+
+  const clientCompanyName = String(cumulativeContext.client_company_name || "");
+  const clientCompanyDescription = String(cumulativeContext.client_company_description || "");
+  const customerCompanyName = String(cumulativeContext.customer_company_name || "");
+  const personFullName = String(cumulativeContext.person_full_name || cumulativeContext.full_name || "");
+  const personLinkedinUrl = String(cumulativeContext.person_linkedin_url || cumulativeContext.linkedin_url || "");
+  const personCurrentJobTitle = String(
+    cumulativeContext.person_current_job_title ||
+      cumulativeContext.title ||
+      cumulativeContext.current_title ||
+      "",
+  );
+  const personCurrentCompanyName = String(
+    cumulativeContext.person_current_company_name || cumulativeContext.current_company_name || "",
+  );
+  const personCurrentCompanyDescription = String(
+    cumulativeContext.person_current_company_description ||
+      cumulativeContext.current_company_description ||
+      "",
+  );
+
+  if (!clientCompanyName || !clientCompanyDescription || !personFullName || !personCurrentCompanyName) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      missing_inputs: [
+        ...(!clientCompanyName ? ["client_company_name"] : []),
+        ...(!clientCompanyDescription ? ["client_company_description"] : []),
+        ...(!personFullName ? ["person_full_name"] : []),
+        ...(!personCurrentCompanyName ? ["person_current_company_name"] : []),
+      ],
+      provider_attempts: [],
+    };
+  }
+
+  const prompt = PERSON_INTEL_BRIEFING_PROMPT_TEMPLATE.replaceAll(
+    "{client_company_name}",
+    clientCompanyName,
+  )
+    .replaceAll("{client_company_description}", clientCompanyDescription)
+    .replaceAll("{customer_company_name}", customerCompanyName || "Not specified")
+    .replaceAll("{person_full_name}", personFullName)
+    .replaceAll("{person_linkedin_url}", personLinkedinUrl || "Not provided")
+    .replaceAll("{person_current_job_title}", personCurrentJobTitle || "Not specified")
+    .replaceAll("{person_current_company_name}", personCurrentCompanyName)
+    .replaceAll(
+      "{person_current_company_description}",
+      personCurrentCompanyDescription || "No description provided.",
+    );
+
+  const processor = String(stepConfig.processor || "pro");
+  const maxPollAttempts = Number(stepConfig.max_poll_attempts || 90);
+  const pollIntervalSeconds = Number(stepConfig.poll_interval_seconds || 20);
+
+  const headers: Record<string, string> = {
+    "x-api-key": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  let runId: string;
+  try {
+    const createResponse = await fetch("https://api.parallel.ai/v1/tasks/runs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input: prompt, processor }),
+    });
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "person.derive.intel_briefing",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "deep_research_person_intel_briefing",
+            status: "failed",
+            error: `task_creation_failed: ${createResponse.status}`,
+            raw_response: errorText,
+          },
+        ],
+      };
+    }
+    const createData = (await createResponse.json()) as { run_id: string; status: string };
+    runId = createData.run_id;
+    logger.info("Parallel person intel briefing task created", {
+      runId,
+      processor,
+      clientCompanyName,
+      personFullName,
+      personCurrentCompanyName,
+    });
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_person_intel_briefing",
+          status: "failed",
+          error: `task_creation_exception: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
+  }
+
+  let taskStatus = "queued";
+  let pollCount = 0;
+
+  while (taskStatus !== "completed" && taskStatus !== "failed" && pollCount < maxPollAttempts) {
+    await wait.for({ seconds: pollIntervalSeconds });
+    pollCount++;
+
+    try {
+      const statusResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}`, {
+        method: "GET",
+        headers: { "x-api-key": apiKey },
+      });
+      if (!statusResponse.ok) {
+        logger.warn("Parallel person intel briefing status check returned non-OK", {
+          runId,
+          status: statusResponse.status,
+          pollCount,
+        });
+        continue;
+      }
+      const statusData = (await statusResponse.json()) as { status: string };
+      taskStatus = statusData.status;
+      logger.info("Parallel person intel briefing poll", { runId, taskStatus, pollCount });
+    } catch (error) {
+      logger.warn("Parallel person intel briefing status check exception", {
+        runId,
+        pollCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+  }
+
+  if (taskStatus === "failed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_person_intel_briefing",
+          status: "failed",
+          error: "parallel_task_failed",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  }
+
+  if (taskStatus !== "completed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_person_intel_briefing",
+          status: "failed",
+          error: "poll_timeout",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+          max_poll_attempts: maxPollAttempts,
+        },
+      ],
+    };
+  }
+
+  try {
+    const resultResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}/result`, {
+      method: "GET",
+      headers: { "x-api-key": apiKey },
+    });
+    if (!resultResponse.ok) {
+      const errorText = await resultResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "person.derive.intel_briefing",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "deep_research_person_intel_briefing",
+            status: "failed",
+            error: `result_fetch_failed: ${resultResponse.status}`,
+            raw_response: errorText,
+            parallel_run_id: runId,
+          },
+        ],
+      };
+    }
+    const resultData = (await resultResponse.json()) as Record<string, unknown>;
+    logger.info("Parallel person intel briefing completed", {
+      runId,
+      pollCount,
+      clientCompanyName,
+      personFullName,
+      personCurrentCompanyName,
+    });
+
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "found",
+      output: {
+        parallel_run_id: runId,
+        processor,
+        client_company_name: clientCompanyName,
+        client_company_description: clientCompanyDescription,
+        customer_company_name: customerCompanyName,
+        person_full_name: personFullName,
+        person_linkedin_url: personLinkedinUrl,
+        person_current_job_title: personCurrentJobTitle,
+        person_current_company_name: personCurrentCompanyName,
+        person_current_company_description: personCurrentCompanyDescription,
+        parallel_raw_response: resultData,
+        full_name: personFullName,
+        linkedin_url: personLinkedinUrl,
+        title: personCurrentJobTitle,
+      },
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_person_intel_briefing",
+          status: "found",
+          parallel_run_id: runId,
+          processor,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "person.derive.intel_briefing",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_person_intel_briefing",
           status: "failed",
           error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
           parallel_run_id: runId,
@@ -1312,6 +1739,8 @@ export const runPipeline = task({
           result = await executeParallelDeepResearch(cumulativeContext, stepSnapshot.step_config || {});
         } else if (operationId === "company.derive.intel_briefing") {
           result = await executeCompanyIntelBriefing(cumulativeContext, stepSnapshot.step_config || {});
+        } else if (operationId === "person.derive.intel_briefing") {
+          result = await executePersonIntelBriefing(cumulativeContext, stepSnapshot.step_config || {});
         } else {
           result = await callExecuteV1(internalConfig, {
             orgId: org_id,
