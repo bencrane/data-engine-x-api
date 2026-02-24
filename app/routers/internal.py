@@ -10,6 +10,11 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.entity_relationships import (
+    invalidate_entity_relationship,
+    record_entity_relationship,
+    record_entity_relationships_batch,
+)
 from app.services.entity_state import (
     EntityStateVersionError,
     check_entity_freshness,
@@ -153,6 +158,30 @@ class InternalRecordStepTimelineEventRequest(BaseModel):
     operation_result: dict[str, Any] | None = None
 
 
+class InternalRecordEntityRelationshipRequest(BaseModel):
+    source_entity_type: str
+    source_identifier: str
+    relationship: str
+    target_entity_type: str
+    target_identifier: str
+    source_entity_id: str | None = None
+    target_entity_id: str | None = None
+    metadata: dict[str, Any] | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+    source_operation_id: str | None = None
+
+
+class InternalRecordEntityRelationshipsBatchRequest(BaseModel):
+    relationships: list[dict[str, Any]]
+
+
+class InternalInvalidateEntityRelationshipRequest(BaseModel):
+    source_identifier: str
+    relationship: str
+    target_identifier: str
+
+
 def _normalize_timeline_status(status_value: str | None) -> str:
     if status_value in {"found", "not_found", "failed", "skipped"}:
         return status_value
@@ -254,6 +283,16 @@ def _extract_company_context_for_timeline(
     return {}
 
 
+def _require_internal_org_id(request: Request) -> str:
+    org_id = request.headers.get("x-internal-org-id")
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing x-internal-org-id for internal authorization",
+        )
+    return org_id
+
+
 @router.post("/entity-timeline/record-step-event", response_model=DataEnvelope)
 async def internal_record_step_timeline_event(
     payload: InternalRecordStepTimelineEventRequest,
@@ -350,6 +389,66 @@ async def internal_check_entity_state_freshness(
         max_age_hours=payload.max_age_hours,
     )
     return DataEnvelope(data=freshness)
+
+
+@router.post("/entity-relationships/record", response_model=DataEnvelope)
+async def internal_record_entity_relationship(
+    payload: InternalRecordEntityRelationshipRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = record_entity_relationship(
+        org_id=org_id,
+        source_entity_type=payload.source_entity_type,
+        source_identifier=payload.source_identifier,
+        relationship=payload.relationship,
+        target_entity_type=payload.target_entity_type,
+        target_identifier=payload.target_identifier,
+        source_entity_id=payload.source_entity_id,
+        target_entity_id=payload.target_entity_id,
+        metadata=payload.metadata,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+        source_operation_id=payload.source_operation_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/entity-relationships/record-batch", response_model=DataEnvelope)
+async def internal_record_entity_relationships_batch(
+    payload: InternalRecordEntityRelationshipsBatchRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    results = record_entity_relationships_batch(
+        org_id=org_id,
+        relationships=payload.relationships,
+    )
+    return DataEnvelope(data=results)
+
+
+@router.post(
+    "/entity-relationships/invalidate",
+    response_model=DataEnvelope,
+    responses={404: {"model": ErrorEnvelope}},
+)
+async def internal_invalidate_entity_relationship(
+    payload: InternalInvalidateEntityRelationshipRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = invalidate_entity_relationship(
+        org_id=org_id,
+        source_identifier=payload.source_identifier,
+        relationship=payload.relationship,
+        target_identifier=payload.target_identifier,
+    )
+    if result is None:
+        return error_response("Entity relationship not found", 404)
+    return DataEnvelope(data=result)
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
