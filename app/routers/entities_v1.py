@@ -9,8 +9,10 @@ from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.entity_relationships import query_entity_relationships
 
 router = APIRouter()
+entity_relationships_router = APIRouter()
 _security = HTTPBearer(auto_error=False)
 
 
@@ -82,6 +84,18 @@ class EntitySnapshotsRequest(BaseModel):
     entity_type: str
     entity_id: str
     limit: int = Field(default=10, ge=1, le=100)
+    org_id: str | None = None
+
+
+class EntityRelationshipQueryRequest(BaseModel):
+    source_identifier: str | None = None
+    target_identifier: str | None = None
+    relationship: str | None = None
+    source_entity_type: str | None = None
+    target_entity_type: str | None = None
+    include_invalidated: bool = False
+    limit: int = 100
+    offset: int = 0
     org_id: str | None = None
 
 
@@ -351,3 +365,31 @@ async def get_entity_snapshots(
             "returned": len(result.data),
         }
     )
+
+
+@entity_relationships_router.post(
+    "/entity-relationships/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_entity_relationship_rows(
+    payload: EntityRelationshipQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin entity relationship queries", 400)
+
+    results = query_entity_relationships(
+        org_id=org_id,
+        source_identifier=payload.source_identifier,
+        target_identifier=payload.target_identifier,
+        relationship=payload.relationship,
+        source_entity_type=payload.source_entity_type,
+        target_entity_type=payload.target_entity_type,
+        include_invalidated=payload.include_invalidated,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)

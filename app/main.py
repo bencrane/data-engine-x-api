@@ -91,6 +91,11 @@ app.include_router(
     tags=["entities-v1"],
 )
 app.include_router(
+    entities_v1.entity_relationships_router,
+    prefix="/api/v1",
+    tags=["entities-v1"],
+)
+app.include_router(
     coverage_v1.router,
     prefix="/api/v1/coverage",
     tags=["coverage-v1"],
