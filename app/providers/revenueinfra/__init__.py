@@ -1,5 +1,6 @@
 from app.providers.revenueinfra.competitors import discover_competitors
 from app.providers.revenueinfra.alumni import lookup_alumni
+from app.providers.revenueinfra.fetch_icp_companies import fetch_icp_companies
 from app.providers.revenueinfra.champions import (
     lookup_champion_testimonials,
     lookup_champions,
@@ -42,6 +43,7 @@ from app.providers.revenueinfra.resolve import (
 __all__ = [
     "discover_competitors",
     "lookup_alumni",
+    "fetch_icp_companies",
     "lookup_champions",
     "lookup_champion_testimonials",
     "lookup_customers",
