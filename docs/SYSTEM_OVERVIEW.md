@@ -76,7 +76,7 @@ Client → POST /api/v1/batch/submit
 
 ---
 
-## Operations (58 live)
+## Operations (59 live)
 
 ### Company Enrichment (8)
 | Operation ID | Provider(s) |
@@ -115,11 +115,12 @@ Client → POST /api/v1/batch/submit
 | `company.research.check_court_filings` | CourtListener Search API |
 | `company.research.get_docket_detail` | CourtListener Dockets API |
 
-### Company Derive (3)
+### Company Derive (4)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.derive.pricing_intelligence` | RevenueInfra (14 Gemini endpoints) |
 | `company.derive.icp_job_titles` | Parallel.ai Deep Research (direct from Trigger.dev — long-running async) |
+| `company.derive.intel_briefing` | Parallel.ai Deep Research (direct from Trigger.dev — company intelligence briefing framed through client lens) |
 | `company.derive.detect_changes` | Internal (entity snapshot diff) |
 
 ### Company Analyze (3)
@@ -267,7 +268,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity state accumulation (company, person, job) | ✅ Live |
 | Entity snapshots + change detection | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (58 ops) | ✅ Live |
+| Operation registry (59 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
