@@ -1,4 +1,4 @@
-import { logger, task } from "@trigger.dev/sdk/v3";
+import { logger, task, wait } from "@trigger.dev/sdk/v3";
 import { evaluateCondition } from "../utils/evaluate-condition.js";
 
 interface RunPipelinePayload {
@@ -99,6 +99,290 @@ interface InternalStepResult {
 interface SkipIfFreshConfig {
   maxAgeHours: number;
   identityFields: string[];
+}
+
+const ICP_JOB_TITLES_PROMPT_TEMPLATE = `CONTEXT
+You are a B2B buyer persona researcher. You will be given a company name, domain, and optionally a company description. Your job is to research this company thoroughly and produce an exhaustive list of job titles that represent realistic buyers, champions, evaluators, and decision-makers for this company's product(s).
+
+INPUTS
+companyName: {company_name}
+domain: {domain}
+companyDescription: {company_description}
+
+RESEARCH INSTRUCTIONS
+
+1. Research the company
+   - Visit the company website to understand what they sell, who they sell to, and how they position their product.
+   - Review case studies, testimonials, and customer logos to identify real buyers and users.
+   - Check G2, TrustRadius, Capterra, and similar review platforms. Look specifically at reviewer job titles.
+   - Review the company's LinkedIn presence and any published ICP or buyer persona content.
+   - Search: "[{company_name}] case study" "[{company_name}] customer story"
+   - Capture any named roles or titles.
+
+2. Identify the buying committee
+   Determine realistic roles for:
+   - **Champions** - Day-to-day users or people experiencing the problem directly. They discover, evaluate, and advocate internally.
+   - **Evaluators** - Technical or operational stakeholders who run POCs or compare alternatives.
+   - **Decision makers** - Budget owners and signers. Only include if appropriate for this product category and price point.
+
+3. Generate title variations
+   For each persona:
+   - Include realistic seniority variants (Manager, Senior Manager, Director, Head, VP, Lead) only where appropriate.
+   - Include function-specific variants where relevant (e.g., Security, Compliance, GRC, IT, Engineering, Legal, Risk).
+
+CRITICAL GUARDRAILS
+- Every title must be grounded in evidence from the company website, reviews, case studies, or known buyer patterns for this category.
+- Do not guess or hallucinate titles.
+- Exclude roles that would reasonably not care about or buy this product.
+- Do not include generic functional labels (e.g., "Information Security").
+- Quantity target: 30-60 titles. More is fine if grounded. Fewer is fine if narrow. Never pad.
+
+OUTPUT FORMAT
+companyName: {company_name}
+domain: {domain}
+inferredProduct: One sentence describing what the company sells and to whom, based on your research.
+buyerPersonaSummary: 2-3 sentences describing the buying committee - who champions it, who evaluates it, who signs off.
+titles: For each title include the title, buyerRole (champion | evaluator | decision_maker), and reasoning (one sentence grounding this title in research evidence).`;
+
+async function executeParallelDeepResearch(
+  cumulativeContext: Record<string, unknown>,
+  stepConfig: Record<string, unknown>,
+): Promise<NonNullable<ExecuteResponseEnvelope["data"]>> {
+  const apiKey = process.env.PARALLEL_API_KEY;
+  if (!apiKey) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_icp_job_titles",
+          status: "skipped",
+          skip_reason: "missing_parallel_api_key",
+        },
+      ],
+    };
+  }
+
+  const companyName = String(cumulativeContext.company_name || cumulativeContext.companyName || "");
+  const domain = String(cumulativeContext.domain || cumulativeContext.company_domain || "");
+  const companyDescription = String(
+    cumulativeContext.company_description || cumulativeContext.description || "",
+  );
+
+  if (!companyName || !domain) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "failed",
+      output: null,
+      missing_inputs: [
+        ...(!companyName ? ["company_name"] : []),
+        ...(!domain ? ["domain"] : []),
+      ],
+      provider_attempts: [],
+    };
+  }
+
+  const prompt = ICP_JOB_TITLES_PROMPT_TEMPLATE.replaceAll("{company_name}", companyName)
+    .replaceAll("{domain}", domain)
+    .replaceAll("{company_description}", companyDescription || "No description provided.");
+
+  const processor = String(stepConfig.processor || "pro");
+  const maxPollAttempts = Number(stepConfig.max_poll_attempts || 90);
+  const pollIntervalSeconds = Number(stepConfig.poll_interval_seconds || 20);
+
+  const headers: Record<string, string> = {
+    "x-api-key": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  let runId: string;
+  try {
+    const createResponse = await fetch("https://api.parallel.ai/v1/tasks/runs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input: prompt, processor }),
+    });
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "company.derive.icp_job_titles",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "deep_research_icp_job_titles",
+            status: "failed",
+            error: `task_creation_failed: ${createResponse.status}`,
+            raw_response: errorText,
+          },
+        ],
+      };
+    }
+    const createData = (await createResponse.json()) as { run_id: string; status: string };
+    runId = createData.run_id;
+    logger.info("Parallel deep research task created", { runId, processor, companyName, domain });
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_icp_job_titles",
+          status: "failed",
+          error: `task_creation_exception: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
+  }
+
+  let taskStatus = "queued";
+  let pollCount = 0;
+
+  while (taskStatus !== "completed" && taskStatus !== "failed" && pollCount < maxPollAttempts) {
+    await wait.for({ seconds: pollIntervalSeconds });
+    pollCount++;
+
+    try {
+      const statusResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}`, {
+        method: "GET",
+        headers: { "x-api-key": apiKey },
+      });
+      if (!statusResponse.ok) {
+        logger.warn("Parallel status check returned non-OK", {
+          runId,
+          status: statusResponse.status,
+          pollCount,
+        });
+        continue;
+      }
+      const statusData = (await statusResponse.json()) as { status: string };
+      taskStatus = statusData.status;
+      logger.info("Parallel deep research poll", { runId, taskStatus, pollCount });
+    } catch (error) {
+      logger.warn("Parallel status check exception", {
+        runId,
+        pollCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+  }
+
+  if (taskStatus === "failed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_icp_job_titles",
+          status: "failed",
+          error: "parallel_task_failed",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  }
+
+  if (taskStatus !== "completed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_icp_job_titles",
+          status: "failed",
+          error: "poll_timeout",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+          max_poll_attempts: maxPollAttempts,
+        },
+      ],
+    };
+  }
+
+  try {
+    const resultResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}/result`, {
+      method: "GET",
+      headers: { "x-api-key": apiKey },
+    });
+    if (!resultResponse.ok) {
+      const errorText = await resultResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "company.derive.icp_job_titles",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "deep_research_icp_job_titles",
+            status: "failed",
+            error: `result_fetch_failed: ${resultResponse.status}`,
+            raw_response: errorText,
+            parallel_run_id: runId,
+          },
+        ],
+      };
+    }
+    const resultData = (await resultResponse.json()) as Record<string, unknown>;
+    logger.info("Parallel deep research completed", { runId, pollCount, companyName, domain });
+
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "found",
+      output: {
+        parallel_run_id: runId,
+        processor,
+        company_name: companyName,
+        domain,
+        company_description: companyDescription,
+        parallel_raw_response: resultData,
+      },
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_icp_job_titles",
+          status: "found",
+          parallel_run_id: runId,
+          processor,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.derive.icp_job_titles",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "deep_research_icp_job_titles",
+          status: "failed",
+          error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
+          parallel_run_id: runId,
+        },
+      ],
+    };
+  }
 }
 
 function getExecutionStartPosition(run: InternalPipelineRun): number {
@@ -636,14 +920,19 @@ export const runPipeline = task({
       });
 
       try {
-        const result = await callExecuteV1(internalConfig, {
-          orgId: org_id,
-          companyId: company_id,
-          operationId,
-          entityType: stepEntityType,
-          input: cumulativeContext,
-          options: stepSnapshot.step_config || null,
-        });
+        let result: NonNullable<ExecuteResponseEnvelope["data"]>;
+        if (operationId === "company.derive.icp_job_titles") {
+          result = await executeParallelDeepResearch(cumulativeContext, stepSnapshot.step_config || {});
+        } else {
+          result = await callExecuteV1(internalConfig, {
+            orgId: org_id,
+            companyId: company_id,
+            operationId,
+            entityType: stepEntityType,
+            input: cumulativeContext,
+            options: stepSnapshot.step_config || null,
+          });
+        }
 
         cumulativeContext = mergeContext(cumulativeContext, result.output);
         const stepFailed = result.status === "failed";
