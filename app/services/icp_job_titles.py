@@ -84,3 +84,71 @@ def query_icp_job_titles(
         .execute()
     )
     return result.data or []
+
+
+def update_icp_extracted_titles(
+    *,
+    org_id: str,
+    company_domain: str,
+    extracted_titles: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    normalized_domain = _normalize_company_domain(company_domain)
+    result = (
+        get_supabase_client()
+        .table("icp_job_titles")
+        .update(
+            {
+                "extracted_titles": extracted_titles,
+                "updated_at": _utc_now_iso(),
+            }
+        )
+        .eq("org_id", org_id)
+        .eq("company_domain", normalized_domain)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return result.data[0]
+
+
+def upsert_icp_title_details_batch(
+    *,
+    org_id: str,
+    company_domain: str,
+    company_name: str | None,
+    titles: list[dict[str, Any]],
+    source_icp_job_titles_id: str | None = None,
+) -> list[dict[str, Any]]:
+    normalized_domain = _normalize_company_domain(company_domain)
+    rows: list[dict[str, Any]] = []
+    for item in titles:
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title")
+        if not isinstance(title, str) or not title.strip():
+            continue
+        rows.append(
+            {
+                "org_id": org_id,
+                "company_domain": normalized_domain,
+                "company_name": company_name,
+                "title": title.strip(),
+                "buyer_role": item.get("buyer_role"),
+                "reasoning": item.get("reasoning"),
+                "source_icp_job_titles_id": source_icp_job_titles_id,
+                "updated_at": _utc_now_iso(),
+            }
+        )
+
+    if not rows:
+        return []
+
+    result = (
+        get_supabase_client()
+        .table("extracted_icp_job_title_details")
+        .upsert(rows, on_conflict="org_id,company_domain,title_normalized")
+        .execute()
+    )
+    return result.data or []
+
+
