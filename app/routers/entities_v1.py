@@ -9,8 +9,10 @@ from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.company_intel_briefings import query_company_intel_briefings
 from app.services.entity_relationships import query_entity_relationships
 from app.services.icp_job_titles import query_icp_job_titles
+from app.services.person_intel_briefings import query_person_intel_briefings
 
 router = APIRouter()
 entity_relationships_router = APIRouter()
@@ -102,6 +104,23 @@ class EntityRelationshipQueryRequest(BaseModel):
 
 class IcpJobTitlesQueryRequest(BaseModel):
     company_domain: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class CompanyIntelBriefingsQueryRequest(BaseModel):
+    company_domain: str | None = None
+    client_company_name: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class PersonIntelBriefingsQueryRequest(BaseModel):
+    person_linkedin_url: str | None = None
+    person_current_company_name: str | None = None
+    client_company_name: str | None = None
     limit: int = 100
     offset: int = 0
     org_id: str | None = None
@@ -420,6 +439,55 @@ async def query_icp_job_titles_rows(
     results = query_icp_job_titles(
         org_id=org_id,
         company_domain=payload.company_domain,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/company-intel-briefings/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_company_intel_briefings_rows(
+    payload: CompanyIntelBriefingsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin company intel briefing queries", 400)
+
+    results = query_company_intel_briefings(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        client_company_name=payload.client_company_name,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/person-intel-briefings/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_person_intel_briefings_rows(
+    payload: PersonIntelBriefingsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin person intel briefing queries", 400)
+
+    results = query_person_intel_briefings(
+        org_id=org_id,
+        person_linkedin_url=payload.person_linkedin_url,
+        person_current_company_name=payload.person_current_company_name,
+        client_company_name=payload.client_company_name,
         limit=payload.limit,
         offset=payload.offset,
     )
