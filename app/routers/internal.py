@@ -15,6 +15,7 @@ from app.services.entity_relationships import (
     record_entity_relationship,
     record_entity_relationships_batch,
 )
+from app.services.icp_job_titles import upsert_icp_job_titles
 from app.services.entity_state import (
     EntityStateVersionError,
     check_entity_freshness,
@@ -180,6 +181,17 @@ class InternalInvalidateEntityRelationshipRequest(BaseModel):
     source_identifier: str
     relationship: str
     target_identifier: str
+
+
+class InternalUpsertIcpJobTitlesRequest(BaseModel):
+    company_domain: str
+    company_name: str | None = None
+    company_description: str | None = None
+    raw_parallel_output: dict[str, Any]
+    parallel_run_id: str | None = None
+    processor: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
 
 
 def _normalize_timeline_status(status_value: str | None) -> str:
@@ -448,6 +460,27 @@ async def internal_invalidate_entity_relationship(
     )
     if result is None:
         return error_response("Entity relationship not found", 404)
+    return DataEnvelope(data=result)
+
+
+@router.post("/icp-job-titles/upsert", response_model=DataEnvelope)
+async def internal_upsert_icp_job_titles(
+    payload: InternalUpsertIcpJobTitlesRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_icp_job_titles(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        company_name=payload.company_name,
+        company_description=payload.company_description,
+        raw_parallel_output=payload.raw_parallel_output,
+        parallel_run_id=payload.parallel_run_id,
+        processor=payload.processor,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
     return DataEnvelope(data=result)
 
 
