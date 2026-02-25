@@ -1768,11 +1768,68 @@ export const runPipeline = task({
             });
             logger.info("ICP job titles persisted to dedicated table", {
               domain: result.output.domain || result.output.company_domain,
-              company_name: result.output.company_name,
               pipeline_run_id,
             });
           } catch (error) {
             logger.warn("Failed to persist ICP job titles to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        if (operationId === "company.derive.intel_briefing" && result.status === "found" && result.output) {
+          try {
+            await internalPost(internalConfig, "/api/internal/company-intel-briefings/upsert", {
+              company_domain: result.output.domain || result.output.target_company_domain,
+              company_name: result.output.company_name || result.output.target_company_name,
+              client_company_name: result.output.client_company_name,
+              client_company_description: result.output.client_company_description,
+              raw_parallel_output:
+                (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
+                result.output.parallel_raw_response,
+              parallel_run_id: result.output.parallel_run_id,
+              processor: result.output.processor,
+              source_submission_id: run.submission_id,
+              source_pipeline_run_id: pipeline_run_id,
+            });
+            logger.info("Company intel briefing persisted to dedicated table", {
+              domain: result.output.domain || result.output.target_company_domain,
+              client: result.output.client_company_name,
+              pipeline_run_id,
+            });
+          } catch (error) {
+            logger.warn("Failed to persist company intel briefing to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        if (operationId === "person.derive.intel_briefing" && result.status === "found" && result.output) {
+          try {
+            await internalPost(internalConfig, "/api/internal/person-intel-briefings/upsert", {
+              person_full_name: result.output.full_name || result.output.person_full_name,
+              person_linkedin_url: result.output.linkedin_url || result.output.person_linkedin_url,
+              person_current_company_name: result.output.person_current_company_name,
+              person_current_job_title: result.output.title || result.output.person_current_job_title,
+              client_company_name: result.output.client_company_name,
+              client_company_description: result.output.client_company_description,
+              customer_company_name: result.output.customer_company_name,
+              raw_parallel_output:
+                (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
+                result.output.parallel_raw_response,
+              parallel_run_id: result.output.parallel_run_id,
+              processor: result.output.processor,
+              source_submission_id: run.submission_id,
+              source_pipeline_run_id: pipeline_run_id,
+            });
+            logger.info("Person intel briefing persisted to dedicated table", {
+              person: result.output.full_name || result.output.person_full_name,
+              pipeline_run_id,
+            });
+          } catch (error) {
+            logger.warn("Failed to persist person intel briefing to dedicated table", {
               pipeline_run_id,
               error: error instanceof Error ? error.message : String(error),
             });
