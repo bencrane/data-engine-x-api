@@ -40,7 +40,7 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **60 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
+- **61 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
 - **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
 - **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
@@ -56,7 +56,7 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 - **Super-admin auth on `/api/v1/execute`** — requires `org_id` + `company_id` in body
 - **20 Modal micro-functions** for Parallel.ai fallbacks
 - **FMCSA daily signal pipeline** in separate repo (`ongoing-data-pulls`)
-- **36+ test files**, 16 migrations
+- **36+ test files**, 17 migrations
 
 ## Key Files
 
