@@ -192,8 +192,9 @@ Migration order:
 11. `011_entity_timeline_submission_lookup.sql`
 12. `012_entity_snapshots.sql`
 13. `013_job_posting_entities.sql`
-14. `015_icp_job_titles.sql`
-15. `016_intel_briefing_tables.sql`
+14. `014_entity_relationships.sql`
+15. `015_icp_job_titles.sql`
+16. `016_intel_briefing_tables.sql`
 
 ## Environment Configuration
 
@@ -221,6 +222,7 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
 |---|---|---|
 | Staffing Activation | `58203c4a-1654-42f8-8486-bd37016223a5` | Sales Talent (`6749b0b9-3e9a-4382-8e4d-353771ef78d4`, domain: salestalent.inc) |
 | Revenue Activation | `d319a533-356a-4592-bd7a-b79dd4d27802` | — |
+| AlumniGTM | `b0293785-aa7a-4234-8201-cc47305295f8` | global (`8cc8b8f3-fc26-49eb-992b-abe8cb46ec53`, domain: global.alumnigtm.com) |
 
 ## Directory Structure
 

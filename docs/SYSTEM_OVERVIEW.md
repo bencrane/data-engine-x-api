@@ -227,7 +227,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Database Schema (Migrations 001-013)
+## Database Schema (Migrations 001-016)
 
 | Migration | Purpose |
 |---|---|
@@ -244,6 +244,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | 011 | Entity timeline submission lookup index |
 | 012 | `entity_snapshots` for canonical history / change detection |
 | 013 | `job_posting_entities` for job posting entity state + `job` entity type constraints on entity_timeline, entity_snapshots, operation_runs |
+| 014 | `entity_relationships` — typed, directional relationships between entities (companies and persons) with dedup and invalidation |
 | 015 | `icp_job_titles` — raw Parallel.ai ICP research output per company (JSONB), one row per company per org |
 | 016 | `company_intel_briefings` + `person_intel_briefings` — raw Parallel.ai intel briefing output, one row per entity per client lens |
 

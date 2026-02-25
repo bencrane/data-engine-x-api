@@ -26,11 +26,13 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **57 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
+- **60 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
 - **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
 - **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
-- **6 live blueprints** across 2 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1
+- **9 live blueprints** across 3 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1, ICP Job Titles Discovery v1, Company Intel Briefing v1, Person Intel Briefing v1
+- **3 Parallel.ai Deep Research operations** running directly from Trigger.dev: ICP job titles, company intel briefing, person intel briefing — with dedicated storage tables and auto-persist
+- **Entity relationships table** — typed, directional relationships between entities (has_customer, has_target, has_competitor, works_at, alumni_of) with dedup and invalidation
 - **6 CRM resolution operations** — domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain (all via HQ single-record lookup endpoints)
 - **Bright Data validation** via HQ (Indeed + LinkedIn raw tables, cross-source job validation endpoint)
 - **Enigma operating locations** — brand → physical locations with open/closed status
@@ -40,7 +42,7 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 - **Super-admin auth on `/api/v1/execute`** — requires `org_id` + `company_id` in body
 - **20 Modal micro-functions** for Parallel.ai fallbacks
 - **FMCSA daily signal pipeline** in separate repo (`ongoing-data-pulls`)
-- **36+ test files**, 13 migrations
+- **36+ test files**, 16 migrations
 
 ## Key Files
 
