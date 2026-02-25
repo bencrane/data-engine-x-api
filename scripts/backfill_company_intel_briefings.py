@@ -92,11 +92,10 @@ def main() -> int:
             .select("id, submission_id, parent_pipeline_run_id, status")
             .eq("submission_id", submission_id)
             .eq("status", "succeeded")
-            .not_.is_("parent_pipeline_run_id", "null")
             .execute()
         )
         pipeline_runs = pipeline_runs_result.data or []
-        print(f"Found {len(pipeline_runs)} succeeded child pipeline runs for submission={submission_id}")
+        print(f"Found {len(pipeline_runs)} succeeded pipeline runs for submission={submission_id}")
 
         for pipeline_run in pipeline_runs:
             run_id = str(pipeline_run.get("id"))

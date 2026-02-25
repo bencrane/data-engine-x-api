@@ -96,7 +96,6 @@ def main() -> int:
         .select("id, submission_id, parent_pipeline_run_id, status")
         .eq("submission_id", TARGET_SUBMISSION_ID)
         .eq("status", "succeeded")
-        .not_.is_("parent_pipeline_run_id", "null")
         .execute()
     )
     pipeline_runs = pipeline_runs_result.data or []
