@@ -245,6 +245,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | 012 | `entity_snapshots` for canonical history / change detection |
 | 013 | `job_posting_entities` for job posting entity state + `job` entity type constraints on entity_timeline, entity_snapshots, operation_runs |
 | 015 | `icp_job_titles` — raw Parallel.ai ICP research output per company (JSONB), one row per company per org |
+| 016 | `company_intel_briefings` + `person_intel_briefings` — raw Parallel.ai intel briefing output, one row per entity per client lens |
 
 ---
 
