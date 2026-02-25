@@ -77,15 +77,19 @@ DROP INDEX IF EXISTS idx_pwh_experience_key;
 The current index is based on stale keys and blocks the re-key.
 
 ### Step 2: Recompute ALL experience_keys
-Batched UPDATE across all rows (not just NULLs):
+Batched UPDATE across all rows (not just NULLs). Records without `company_domain` get NULL (excluded from dedup until domain is populated):
 ```sql
 UPDATE core.person_work_history
-SET experience_key = MD5(
-  COALESCE(linkedin_url, '') || '::' ||
-  COALESCE(company_domain, company_name, '') || '::' ||
-  COALESCE(LOWER(TRIM(title)), '') || '::' ||
-  COALESCE(start_date::TEXT, '')
-)
+SET experience_key = CASE
+  WHEN company_domain IS NOT NULL THEN
+    MD5(
+      COALESCE(linkedin_url, '') || '::' ||
+      company_domain || '::' ||
+      COALESCE(LOWER(TRIM(title)), '') || '::' ||
+      COALESCE(start_date::TEXT, '')
+    )
+  ELSE NULL
+END
 WHERE id IN (SELECT id FROM core.person_work_history LIMIT 50000 OFFSET {N});
 ```
 Run in batches of 50K. Report after each batch.
