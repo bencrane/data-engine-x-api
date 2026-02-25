@@ -1752,6 +1752,33 @@ export const runPipeline = task({
           });
         }
 
+        if (operationId === "company.derive.icp_job_titles" && result.status === "found" && result.output) {
+          try {
+            await internalPost(internalConfig, "/api/internal/icp-job-titles/upsert", {
+              company_domain: result.output.domain || result.output.company_domain,
+              company_name: result.output.company_name,
+              company_description: result.output.company_description,
+              raw_parallel_output:
+                (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
+                result.output.parallel_raw_response,
+              parallel_run_id: result.output.parallel_run_id,
+              processor: result.output.processor,
+              source_submission_id: run.submission_id,
+              source_pipeline_run_id: pipeline_run_id,
+            });
+            logger.info("ICP job titles persisted to dedicated table", {
+              domain: result.output.domain || result.output.company_domain,
+              company_name: result.output.company_name,
+              pipeline_run_id,
+            });
+          } catch (error) {
+            logger.warn("Failed to persist ICP job titles to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         cumulativeContext = mergeContext(cumulativeContext, result.output);
         const stepFailed = result.status === "failed";
         if (stepFailed) {
