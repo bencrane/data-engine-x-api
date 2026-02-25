@@ -131,6 +131,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/v1/entities/job-postings`
 - `POST /api/v1/entities/timeline`
 - `POST /api/v1/entity-relationships/query`
+- `POST /api/v1/icp-job-titles/query`
 - `POST /api/internal/pipeline-runs/get`
 - `POST /api/internal/pipeline-runs/update-status`
 - `POST /api/internal/pipeline-runs/fan-out`
@@ -143,6 +144,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/internal/entity-relationships/record`
 - `POST /api/internal/entity-relationships/record-batch`
 - `POST /api/internal/entity-relationships/invalidate`
+- `POST /api/internal/icp-job-titles/upsert`
 
 ## Trigger.dev Conventions
 
@@ -186,6 +188,7 @@ Migration order:
 11. `011_entity_timeline_submission_lookup.sql`
 12. `012_entity_snapshots.sql`
 13. `013_job_posting_entities.sql`
+14. `015_icp_job_titles.sql`
 
 ## Environment Configuration
 
