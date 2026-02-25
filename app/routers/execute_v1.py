@@ -58,6 +58,9 @@ from app.services.sec_filing_operations import (
 from app.services.pricing_intelligence_operations import (
     execute_company_derive_pricing_intelligence,
 )
+from app.services.icp_extraction_operations import (
+    execute_company_derive_extract_icp_titles,
+)
 from app.services.change_detection_operations import (
     execute_company_derive_detect_changes,
     execute_person_derive_detect_changes,
@@ -145,6 +148,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.analyze.sec_10q",
     "company.analyze.sec_8k_executive",
     "company.derive.pricing_intelligence",
+    "company.derive.extract_icp_titles",
     "company.derive.detect_changes",
     "company.search.by_tech_stack",
     "company.search.by_job_postings",
@@ -713,6 +717,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.derive.pricing_intelligence":
         result = await execute_company_derive_pricing_intelligence(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.derive.extract_icp_titles":
+        result = await execute_company_derive_extract_icp_titles(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
