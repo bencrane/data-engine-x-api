@@ -152,3 +152,33 @@ def upsert_icp_title_details_batch(
     return result.data or []
 
 
+def query_icp_title_details(
+    *,
+    org_id: str,
+    company_domain: str | None = None,
+    buyer_role: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, 1000))
+    safe_offset = max(0, offset)
+
+    query = (
+        get_supabase_client()
+        .table("extracted_icp_job_title_details")
+        .select("*")
+        .eq("org_id", org_id)
+    )
+    if company_domain:
+        query = query.eq("company_domain", _normalize_company_domain(company_domain))
+    if isinstance(buyer_role, str) and buyer_role.strip():
+        query = query.eq("buyer_role", buyer_role.strip())
+
+    result = (
+        query.order("created_at", desc=True)
+        .range(safe_offset, safe_offset + safe_limit - 1)
+        .execute()
+    )
+    return result.data or []
+
+

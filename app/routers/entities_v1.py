@@ -11,7 +11,7 @@ from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.company_intel_briefings import query_company_intel_briefings
 from app.services.entity_relationships import query_entity_relationships
-from app.services.icp_job_titles import query_icp_job_titles
+from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
 
 router = APIRouter()
@@ -104,6 +104,14 @@ class EntityRelationshipQueryRequest(BaseModel):
 
 class IcpJobTitlesQueryRequest(BaseModel):
     company_domain: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class IcpTitleDetailsQueryRequest(BaseModel):
+    company_domain: str | None = None
+    buyer_role: str | None = None
     limit: int = 100
     offset: int = 0
     org_id: str | None = None
@@ -439,6 +447,30 @@ async def query_icp_job_titles_rows(
     results = query_icp_job_titles(
         org_id=org_id,
         company_domain=payload.company_domain,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/icp-title-details/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_icp_title_details_rows(
+    payload: IcpTitleDetailsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin ICP title detail queries", 400)
+
+    results = query_icp_title_details(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        buyer_role=payload.buyer_role,
         limit=payload.limit,
         offset=payload.offset,
     )
