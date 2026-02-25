@@ -212,10 +212,12 @@ class InternalUpsertPersonIntelBriefingsRequest(BaseModel):
     person_full_name: str
     person_linkedin_url: str | None = None
     person_current_company_name: str | None = None
+    person_current_company_domain: str | None = None
     person_current_job_title: str | None = None
     client_company_name: str | None = None
     client_company_description: str | None = None
     customer_company_name: str | None = None
+    customer_company_domain: str | None = None
     raw_parallel_output: dict[str, Any]
     parallel_run_id: str | None = None
     processor: str | None = None
@@ -547,10 +549,12 @@ async def internal_upsert_person_intel_briefings(
         person_full_name=payload.person_full_name,
         person_linkedin_url=payload.person_linkedin_url,
         person_current_company_name=payload.person_current_company_name,
+        person_current_company_domain=payload.person_current_company_domain,
         person_current_job_title=payload.person_current_job_title,
         client_company_name=payload.client_company_name,
         client_company_description=payload.client_company_description,
         customer_company_name=payload.customer_company_name,
+        customer_company_domain=payload.customer_company_domain,
         raw_parallel_output=payload.raw_parallel_output,
         parallel_run_id=payload.parallel_run_id,
         processor=payload.processor,

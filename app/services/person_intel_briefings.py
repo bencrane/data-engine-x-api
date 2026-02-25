@@ -20,10 +20,12 @@ def upsert_person_intel_briefing(
     person_full_name: str,
     person_linkedin_url: str | None = None,
     person_current_company_name: str | None = None,
+    person_current_company_domain: str | None = None,
     person_current_job_title: str | None = None,
     client_company_name: str | None = None,
     client_company_description: str | None = None,
     customer_company_name: str | None = None,
+    customer_company_domain: str | None = None,
     raw_parallel_output: dict[str, Any],
     parallel_run_id: str | None = None,
     processor: str | None = None,
@@ -45,6 +47,8 @@ def upsert_person_intel_briefing(
         row["person_linkedin_url"] = _normalize_linkedin_url(person_linkedin_url)
     if person_current_company_name is not None:
         row["person_current_company_name"] = person_current_company_name
+    if person_current_company_domain is not None:
+        row["person_current_company_domain"] = person_current_company_domain
     if person_current_job_title is not None:
         row["person_current_job_title"] = person_current_job_title
     if client_company_name is not None:
@@ -53,6 +57,8 @@ def upsert_person_intel_briefing(
         row["client_company_description"] = client_company_description
     if customer_company_name is not None:
         row["customer_company_name"] = customer_company_name
+    if customer_company_domain is not None:
+        row["customer_company_domain"] = customer_company_domain
 
     result = (
         get_supabase_client()

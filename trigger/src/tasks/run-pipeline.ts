@@ -252,6 +252,7 @@ person_full_name: {person_full_name}
 person_linkedin_url: {person_linkedin_url}
 person_current_job_title: {person_current_job_title}
 person_current_company_name: {person_current_company_name}
+person_current_company_domain: {person_current_company_domain}
 person_current_company_description: {person_current_company_description}
 
 #OBJECTIVE#
@@ -936,6 +937,7 @@ async function executePersonIntelBriefing(
   const clientCompanyName = String(cumulativeContext.client_company_name || "");
   const clientCompanyDescription = String(cumulativeContext.client_company_description || "");
   const customerCompanyName = String(cumulativeContext.customer_company_name || "");
+  const customerCompanyDomain = String(cumulativeContext.customer_company_domain || "");
   const personFullName = String(cumulativeContext.person_full_name || cumulativeContext.full_name || "");
   const personLinkedinUrl = String(cumulativeContext.person_linkedin_url || cumulativeContext.linkedin_url || "");
   const personCurrentJobTitle = String(
@@ -946,6 +948,9 @@ async function executePersonIntelBriefing(
   );
   const personCurrentCompanyName = String(
     cumulativeContext.person_current_company_name || cumulativeContext.current_company_name || "",
+  );
+  const personCurrentCompanyDomain = String(
+    cumulativeContext.person_current_company_domain || cumulativeContext.current_company_domain || "",
   );
   const personCurrentCompanyDescription = String(
     cumulativeContext.person_current_company_description ||
@@ -979,6 +984,7 @@ async function executePersonIntelBriefing(
     .replaceAll("{person_linkedin_url}", personLinkedinUrl || "Not provided")
     .replaceAll("{person_current_job_title}", personCurrentJobTitle || "Not specified")
     .replaceAll("{person_current_company_name}", personCurrentCompanyName)
+    .replaceAll("{person_current_company_domain}", personCurrentCompanyDomain || "Not provided")
     .replaceAll(
       "{person_current_company_description}",
       personCurrentCompanyDescription || "No description provided.",
@@ -1159,10 +1165,12 @@ async function executePersonIntelBriefing(
         client_company_name: clientCompanyName,
         client_company_description: clientCompanyDescription,
         customer_company_name: customerCompanyName,
+        customer_company_domain: customerCompanyDomain,
         person_full_name: personFullName,
         person_linkedin_url: personLinkedinUrl,
         person_current_job_title: personCurrentJobTitle,
         person_current_company_name: personCurrentCompanyName,
+        person_current_company_domain: personCurrentCompanyDomain,
         person_current_company_description: personCurrentCompanyDescription,
         parallel_raw_response: resultData,
         full_name: personFullName,
@@ -1812,10 +1820,12 @@ export const runPipeline = task({
               person_full_name: result.output.full_name || result.output.person_full_name,
               person_linkedin_url: result.output.linkedin_url || result.output.person_linkedin_url,
               person_current_company_name: result.output.person_current_company_name,
+              person_current_company_domain: result.output.person_current_company_domain,
               person_current_job_title: result.output.title || result.output.person_current_job_title,
               client_company_name: result.output.client_company_name,
               client_company_description: result.output.client_company_description,
               customer_company_name: result.output.customer_company_name,
+              customer_company_domain: result.output.customer_company_domain,
               raw_parallel_output:
                 (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
                 result.output.parallel_raw_response,
