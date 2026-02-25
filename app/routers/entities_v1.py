@@ -10,6 +10,7 @@ from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.entity_relationships import query_entity_relationships
+from app.services.icp_job_titles import query_icp_job_titles
 
 router = APIRouter()
 entity_relationships_router = APIRouter()
@@ -94,6 +95,13 @@ class EntityRelationshipQueryRequest(BaseModel):
     source_entity_type: str | None = None
     target_entity_type: str | None = None
     include_invalidated: bool = False
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class IcpJobTitlesQueryRequest(BaseModel):
+    company_domain: str | None = None
     limit: int = 100
     offset: int = 0
     org_id: str | None = None
@@ -389,6 +397,29 @@ async def query_entity_relationship_rows(
         source_entity_type=payload.source_entity_type,
         target_entity_type=payload.target_entity_type,
         include_invalidated=payload.include_invalidated,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/icp-job-titles/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_icp_job_titles_rows(
+    payload: IcpJobTitlesQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin ICP job title queries", 400)
+
+    results = query_icp_job_titles(
+        org_id=org_id,
+        company_domain=payload.company_domain,
         limit=payload.limit,
         offset=payload.offset,
     )
