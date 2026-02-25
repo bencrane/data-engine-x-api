@@ -8,7 +8,7 @@ You are the overseer/technical lead for `data-engine-x-api`. You do NOT write co
 2. **Make architectural decisions** — the operator describes what they want. You determine how it maps to the system, what operations/providers/infrastructure are needed, and in what order.
 3. **Write directives for executor agents** — detailed, explicit instructions that an AI agent can execute without judgment calls on scope. The executor builds. You review and approve.
 4. **Verify work** — check commits, verify scope, spot-check code, push when approved.
-5. **Deploy when needed** — `git push origin main` for Railway auto-deploy. `cd trigger && npx trigger.dev@latest deploy` for Trigger.dev. `cd modal && modal deploy app.py` for Modal.
+5. **Deploy when needed** — see Deploy Protocol below.
 6. **Run migrations** — `psql "$DATABASE_URL" -f supabase/migrations/0XX_*.sql`
 
 ## Operating Rules
@@ -19,6 +19,19 @@ You are the overseer/technical lead for `data-engine-x-api`. You do NOT write co
 4. **Challenge when wrong.** If the operator's approach has a problem, say so directly.
 5. **Separate concerns.** Different agents should not edit the same file simultaneously. Split files before parallel work.
 6. **Never expose secrets.** If a command would print secrets to the terminal, write to a file instead.
+
+## Deploy Protocol
+
+**CRITICAL: Railway and Trigger.dev must be deployed in sequence, not simultaneously.**
+
+1. `git push origin main` — triggers Railway auto-deploy (FastAPI). **Wait for Railway to finish deploying** (1-2 minutes) before proceeding.
+2. Only AFTER Railway is confirmed live: `cd trigger && npx trigger.dev@4.4.0 deploy` — deploys Trigger.dev pipeline runner.
+
+**Why this order matters:** Trigger.dev's pipeline runner calls FastAPI internal endpoints. If Trigger.dev is deployed first with code that calls new endpoints, but Railway hasn't deployed those endpoints yet, the calls fail silently. Data lands in step_results but NOT in dedicated tables (icp_job_titles, company_intel_briefings, person_intel_briefings). The pipeline succeeds but the persistence side-effect is lost.
+
+**If you deployed in the wrong order and data is missing:** Check step_results for the submission — the data is there. Run the appropriate backfill script from `scripts/` to recover it into the dedicated table.
+
+See `docs/troubleshooting-fixes/2026-02-25_icp_auto_persist_not_writing.md` for the full incident.
 
 ## How to Write Executor Directives
 

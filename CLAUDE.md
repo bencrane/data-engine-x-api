@@ -165,15 +165,27 @@ pytest
 # Trigger.dev local runtime
 cd trigger && npx trigger.dev@latest dev
 
-# Trigger.dev deploy
-cd trigger && npx trigger.dev@latest deploy
-
 # Run API locally with Doppler-injected env
 doppler run -- uvicorn app.main:app --reload
 
 # Run tests with Doppler-injected env
 doppler run -- pytest
 ```
+
+## Deploy Protocol
+
+**Deploy Railway FIRST, Trigger.dev SECOND. Never simultaneously.**
+
+```bash
+# Step 1: Push to main (Railway auto-deploys)
+git push origin main
+# WAIT 1-2 minutes for Railway deploy to complete
+
+# Step 2: Deploy Trigger.dev (only after Railway is live)
+cd trigger && npx trigger.dev@4.4.0 deploy
+```
+
+Trigger.dev calls FastAPI internal endpoints. If Trigger.dev deploys before Railway, new endpoint calls fail silently — pipeline succeeds but data doesn't persist to dedicated tables. See `docs/troubleshooting-fixes/` for incidents.
 
 ## Database / Migrations
 
