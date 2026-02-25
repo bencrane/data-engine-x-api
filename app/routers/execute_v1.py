@@ -727,7 +727,8 @@ async def execute_v1(
         return DataEnvelope(data=result)
 
     if payload.operation_id == "company.derive.extract_icp_titles":
-        result = await execute_company_derive_extract_icp_titles(input_data=payload.input)
+        merged_input = {**payload.input, "org_id": auth.org_id}
+        result = await execute_company_derive_extract_icp_titles(input_data=merged_input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
