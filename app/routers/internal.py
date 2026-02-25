@@ -15,7 +15,9 @@ from app.services.entity_relationships import (
     record_entity_relationship,
     record_entity_relationships_batch,
 )
+from app.services.company_intel_briefings import upsert_company_intel_briefing
 from app.services.icp_job_titles import upsert_icp_job_titles
+from app.services.person_intel_briefings import upsert_person_intel_briefing
 from app.services.entity_state import (
     EntityStateVersionError,
     check_entity_freshness,
@@ -187,6 +189,33 @@ class InternalUpsertIcpJobTitlesRequest(BaseModel):
     company_domain: str
     company_name: str | None = None
     company_description: str | None = None
+    raw_parallel_output: dict[str, Any]
+    parallel_run_id: str | None = None
+    processor: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertCompanyIntelBriefingsRequest(BaseModel):
+    company_domain: str
+    company_name: str | None = None
+    client_company_name: str | None = None
+    client_company_description: str | None = None
+    raw_parallel_output: dict[str, Any]
+    parallel_run_id: str | None = None
+    processor: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertPersonIntelBriefingsRequest(BaseModel):
+    person_full_name: str
+    person_linkedin_url: str | None = None
+    person_current_company_name: str | None = None
+    person_current_job_title: str | None = None
+    client_company_name: str | None = None
+    client_company_description: str | None = None
+    customer_company_name: str | None = None
     raw_parallel_output: dict[str, Any]
     parallel_run_id: str | None = None
     processor: str | None = None
@@ -475,6 +504,53 @@ async def internal_upsert_icp_job_titles(
         company_domain=payload.company_domain,
         company_name=payload.company_name,
         company_description=payload.company_description,
+        raw_parallel_output=payload.raw_parallel_output,
+        parallel_run_id=payload.parallel_run_id,
+        processor=payload.processor,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/company-intel-briefings/upsert", response_model=DataEnvelope)
+async def internal_upsert_company_intel_briefings(
+    payload: InternalUpsertCompanyIntelBriefingsRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_company_intel_briefing(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        company_name=payload.company_name,
+        client_company_name=payload.client_company_name,
+        client_company_description=payload.client_company_description,
+        raw_parallel_output=payload.raw_parallel_output,
+        parallel_run_id=payload.parallel_run_id,
+        processor=payload.processor,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/person-intel-briefings/upsert", response_model=DataEnvelope)
+async def internal_upsert_person_intel_briefings(
+    payload: InternalUpsertPersonIntelBriefingsRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_person_intel_briefing(
+        org_id=org_id,
+        person_full_name=payload.person_full_name,
+        person_linkedin_url=payload.person_linkedin_url,
+        person_current_company_name=payload.person_current_company_name,
+        person_current_job_title=payload.person_current_job_title,
+        client_company_name=payload.client_company_name,
+        client_company_description=payload.client_company_description,
+        customer_company_name=payload.customer_company_name,
         raw_parallel_output=payload.raw_parallel_output,
         parallel_run_id=payload.parallel_run_id,
         processor=payload.processor,
