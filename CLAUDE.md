@@ -132,6 +132,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/v1/entities/timeline`
 - `POST /api/v1/entity-relationships/query`
 - `POST /api/v1/icp-job-titles/query`
+- `POST /api/v1/icp-title-details/query`
 - `POST /api/v1/company-intel-briefings/query`
 - `POST /api/v1/person-intel-briefings/query`
 - `POST /api/internal/pipeline-runs/get`
@@ -207,6 +208,7 @@ Migration order:
 14. `014_entity_relationships.sql`
 15. `015_icp_job_titles.sql`
 16. `016_intel_briefing_tables.sql`
+17. `017_icp_title_extraction.sql`
 
 ## Environment Configuration
 

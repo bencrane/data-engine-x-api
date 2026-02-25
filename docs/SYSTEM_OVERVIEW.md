@@ -83,7 +83,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (60 live)
+## Operations (61 live)
 
 ### Company Enrichment (8)
 | Operation ID | Provider(s) |
@@ -122,11 +122,12 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.research.check_court_filings` | CourtListener Search API |
 | `company.research.get_docket_detail` | CourtListener Dockets API |
 
-### Company Derive (4)
+### Company Derive (5)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.derive.pricing_intelligence` | RevenueInfra (14 Gemini endpoints) |
 | `company.derive.icp_job_titles` | Parallel.ai Deep Research (direct from Trigger.dev — long-running async) |
+| `company.derive.extract_icp_titles` | Modal/Anthropic (extracts consistent title/buyer_role/reasoning from raw Parallel ICP output) |
 | `company.derive.intel_briefing` | Parallel.ai Deep Research (direct from Trigger.dev — company intelligence briefing framed through client lens) |
 | `company.derive.detect_changes` | Internal (entity snapshot diff) |
 
@@ -227,7 +228,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Database Schema (Migrations 001-016)
+## Database Schema (Migrations 001-017)
 
 | Migration | Purpose |
 |---|---|
@@ -247,6 +248,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | 014 | `entity_relationships` — typed, directional relationships between entities (companies and persons) with dedup and invalidation |
 | 015 | `icp_job_titles` — raw Parallel.ai ICP research output per company (JSONB), one row per company per org |
 | 016 | `company_intel_briefings` + `person_intel_briefings` — raw Parallel.ai intel briefing output, one row per entity per client lens |
+| 017 | `extracted_icp_job_title_details` + `icp_job_titles.extracted_titles` column — extracted ICP titles in flat and JSONB form |
 
 ---
 
@@ -289,7 +291,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (60 ops) | ✅ Live |
+| Operation registry (61 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
