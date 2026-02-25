@@ -33,6 +33,7 @@ def upsert_company_intel_briefing(
     company_domain: str,
     company_name: str | None = None,
     client_company_name: str | None = None,
+    client_company_domain: str | None = None,
     client_company_description: str | None = None,
     raw_parallel_output: dict[str, Any],
     parallel_run_id: str | None = None,
@@ -55,6 +56,8 @@ def upsert_company_intel_briefing(
         row["company_name"] = company_name
     if client_company_name is not None:
         row["client_company_name"] = client_company_name
+    if client_company_domain is not None:
+        row["client_company_domain"] = client_company_domain
     if client_company_description is not None:
         row["client_company_description"] = client_company_description
 

@@ -200,6 +200,7 @@ class InternalUpsertCompanyIntelBriefingsRequest(BaseModel):
     company_domain: str
     company_name: str | None = None
     client_company_name: str | None = None
+    client_company_domain: str | None = None
     client_company_description: str | None = None
     raw_parallel_output: dict[str, Any]
     parallel_run_id: str | None = None
@@ -527,6 +528,7 @@ async def internal_upsert_company_intel_briefings(
         company_domain=payload.company_domain,
         company_name=payload.company_name,
         client_company_name=payload.client_company_name,
+        client_company_domain=payload.client_company_domain,
         client_company_description=payload.client_company_description,
         raw_parallel_output=payload.raw_parallel_output,
         parallel_run_id=payload.parallel_run_id,

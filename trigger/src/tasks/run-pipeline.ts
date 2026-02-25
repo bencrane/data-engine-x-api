@@ -645,6 +645,7 @@ async function executeCompanyIntelBriefing(
   }
 
   const clientCompanyName = String(cumulativeContext.client_company_name || "");
+  const clientCompanyDomain = String(cumulativeContext.client_company_domain || "");
   const clientCompanyDescription = String(cumulativeContext.client_company_description || "");
   const targetCompanyName = String(
     cumulativeContext.target_company_name || cumulativeContext.company_name || "",
@@ -871,6 +872,7 @@ async function executeCompanyIntelBriefing(
         parallel_run_id: runId,
         processor,
         client_company_name: clientCompanyName,
+        client_company_domain: clientCompanyDomain,
         client_company_description: clientCompanyDescription,
         target_company_name: targetCompanyName,
         target_company_domain: targetCompanyDomain,
@@ -935,6 +937,7 @@ async function executePersonIntelBriefing(
   }
 
   const clientCompanyName = String(cumulativeContext.client_company_name || "");
+  const clientCompanyDomain = String(cumulativeContext.client_company_domain || "");
   const clientCompanyDescription = String(cumulativeContext.client_company_description || "");
   const customerCompanyName = String(cumulativeContext.customer_company_name || "");
   const customerCompanyDomain = String(cumulativeContext.customer_company_domain || "");
@@ -1163,6 +1166,7 @@ async function executePersonIntelBriefing(
         parallel_run_id: runId,
         processor,
         client_company_name: clientCompanyName,
+        client_company_domain: clientCompanyDomain,
         client_company_description: clientCompanyDescription,
         customer_company_name: customerCompanyName,
         customer_company_domain: customerCompanyDomain,
@@ -1792,6 +1796,7 @@ export const runPipeline = task({
               company_domain: result.output.domain || result.output.target_company_domain,
               company_name: result.output.company_name || result.output.target_company_name,
               client_company_name: result.output.client_company_name,
+              client_company_domain: result.output.client_company_domain,
               client_company_description: result.output.client_company_description,
               raw_parallel_output:
                 (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
@@ -1823,6 +1828,7 @@ export const runPipeline = task({
               person_current_company_domain: result.output.person_current_company_domain,
               person_current_job_title: result.output.title || result.output.person_current_job_title,
               client_company_name: result.output.client_company_name,
+              client_company_domain: result.output.client_company_domain,
               client_company_description: result.output.client_company_description,
               customer_company_name: result.output.customer_company_name,
               customer_company_domain: result.output.customer_company_domain,
