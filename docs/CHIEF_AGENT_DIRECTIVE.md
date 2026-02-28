@@ -40,12 +40,14 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **61 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
+- **62 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
 - **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
 - **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
 - **9 live blueprints** across 3 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1, ICP Job Titles Discovery v1, Company Intel Briefing v1, Person Intel Briefing v1
 - **3 Parallel.ai Deep Research operations** running directly from Trigger.dev: ICP job titles, company intel briefing, person intel briefing — with dedicated storage tables and auto-persist
+- **ICP title extraction** via Modal/Anthropic — normalizes inconsistent Parallel output into consistent `{ title, buyer_role, reasoning }` structure. Flat table `extracted_icp_job_title_details` for joins.
+- **Sales Navigator URL scraper** (`person.search.sales_nav_url`) — RapidAPI, accepts full Sales Nav URL, returns person results. Fan-out compatible.
 - **Entity relationships table** — typed, directional relationships between entities (has_customer, has_target, has_competitor, works_at, alumni_of) with dedup and invalidation
 - **6 CRM resolution operations** — domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain (all via HQ single-record lookup endpoints)
 - **Bright Data validation** via HQ (Indeed + LinkedIn raw tables, cross-source job validation endpoint)
@@ -77,9 +79,41 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 Read the "What's Not Built Yet" section in `docs/SYSTEM_OVERVIEW.md` for the current backlog.
 
-## Postmortems
+## Critical Open Issues
 
-Read `docs/POSTMORTEM_*.md` files. Key lessons:
+1. **`experience_key` dedup on HQ `core.person_work_history` is broken.** 2.17M rows have stale hash values from a prior process. Needs full re-key + re-dedup. Read `docs/troubleshooting-fixes/2026-02-25_experience_key_dedup_postmortem.md` before touching this table. The `trg_sync_person_experience` trigger is DISABLED.
+
+2. **ICP title extraction operation (`company.derive.extract_icp_titles`)** is built but Railway deploy was queued during a GitHub incident. Needs verification that it's live, then test on withcoverage.com.
+
+3. **Sales Nav alumni search (`person.search.sales_nav_alumni`)** — the template-based version that swaps LinkedIn org IDs per company — is NOT built. Blocked on HQ's `core.companies` not having a `linkedin_org_id` column. The URL-based scraper (`person.search.sales_nav_url`) IS built and works with exact URLs.
+
+4. **DOT number identity resolution** for FMCSA carriers + Enigma match operation — parked. `company_entities` needs a `dot_number` column for carriers without domains.
+
+## AlumniGTM Pipeline Status
+
+| Piece | Status |
+|---|---|
+| ICP job titles (Parallel Deep Research) | Live. 155 companies processed. Dedicated table. |
+| ICP title extraction (Modal/Anthropic) | Built, needs deploy verification + test. |
+| Company intel briefing (Parallel Deep Research) | Live. 3 companies tested. Dedicated table. |
+| Person intel briefing (Parallel Deep Research) | Live. 1 person tested. Dedicated table. |
+| Sales Nav URL scraper | Live. Untested in production. |
+| Entity relationships table | Live. Empty — no relationships recorded yet. |
+| Entity relationship wiring in pipeline | Not built. |
+| HQ person_work_history dedup | Broken. Needs re-key. |
+| HQ job title matching | Phase 1 done (generated columns). Phase 3 (matching) not started. |
+| GTM briefing assembly | Not built. |
+
+## Postmortems & Troubleshooting
+
+Read `docs/troubleshooting-fixes/` for incidents:
+- `2026-02-25_icp_auto_persist_not_writing.md` — Railway/Trigger.dev deploy timing gap
+- `2026-02-25_experience_key_dedup_postmortem.md` — stale hash values, incomplete dedup
+
+Key lessons:
 - Always provide complete env var checklists before deploy/test
 - Never print secrets to terminal
+- Deploy Railway FIRST, wait, then Trigger.dev
+- Always recompute hash columns on ALL rows, never just NULLs
+- Verify existing column values before assuming they're empty
 - User instruction is the hard boundary — don't overstep
