@@ -100,6 +100,7 @@ from app.services.resolve_operations import (
     execute_company_resolve_location_from_domain,
     execute_person_resolve_linkedin_from_email,
 )
+from app.services.salesnav_operations import execute_person_search_sales_nav_url
 
 router = APIRouter()
 
@@ -111,6 +112,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.contact.verify_email",
     "person.resolve.linkedin_from_email",
     "person.search",
+    "person.search.sales_nav_url",
     "person.enrich.profile",
     "person.derive.detect_changes",
     "company.enrich.profile",
@@ -364,6 +366,17 @@ async def execute_v1(
 
     if payload.operation_id == "person.search":
         result = await execute_person_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.search.sales_nav_url":
+        result = await execute_person_search_sales_nav_url(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
