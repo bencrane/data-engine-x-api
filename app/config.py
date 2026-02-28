@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     revenueinfra_api_url: str = "https://api.revenueinfra.com"
     revenueinfra_api_key: str | None = None
     revenueinfra_ingest_api_key: str | None = None
+    rapidapi_salesnav_scrape_api_key: str | None = None
     parallel_processor: str = "core"
     icypeas_poll_interval_ms: int = 2000
     icypeas_max_wait_ms: int = 45000
