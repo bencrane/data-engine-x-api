@@ -83,7 +83,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (61 live)
+## Operations (62 live)
 
 ### Company Enrichment (8)
 | Operation ID | Provider(s) |
@@ -150,10 +150,11 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.ads.search.meta` | Adyntel |
 | `company.ads.search.google` | Adyntel |
 
-### Person (7)
+### Person (8)
 | Operation ID | Provider(s) |
 |---|---|
 | `person.search` | Prospeo, BlitzAPI (Employee Finder + Waterfall ICP), CompanyEnrich, LeadMagic (Employee Finder + Role Finder) |
+| `person.search.sales_nav_url` | RapidAPI Sales Navigator scraper (accepts full Sales Nav URL, returns person results) |
 | `person.enrich.profile` | Prospeo → (AmpleLeads if include_work_history) → LeadMagic |
 | `person.contact.resolve_email` | LeadMagic → Icypeas → Parallel |
 | `person.contact.verify_email` | MillionVerifier → Reoon |
@@ -291,7 +292,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (61 ops) | ✅ Live |
+| Operation registry (62 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
