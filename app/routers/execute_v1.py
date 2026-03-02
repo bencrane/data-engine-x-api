@@ -115,6 +115,7 @@ from app.services.hq_workflow_operations import (
     execute_company_research_discover_customers_gemini,
     execute_company_research_icp_job_titles_gemini,
     execute_company_research_infer_linkedin_url,
+    execute_company_resolve_domain_from_name_hq,
 )
 from app.services.salesnav_operations import execute_person_search_sales_nav_url
 
@@ -144,6 +145,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.resolve.domain_from_email",
     "company.resolve.domain_from_linkedin",
     "company.resolve.domain_from_name",
+    "company.resolve.domain_from_name_hq",
     "company.resolve.linkedin_from_domain",
     "company.resolve.linkedin_from_domain_blitzapi",
     "company.resolve.location_from_domain",
@@ -361,6 +363,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.resolve.domain_from_name":
         result = await execute_company_resolve_domain_from_name(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.domain_from_name_hq":
+        result = await execute_company_resolve_domain_from_name_hq(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
