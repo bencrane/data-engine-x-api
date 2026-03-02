@@ -381,6 +381,49 @@ Focus research effort on:
 }
 \`\`\``;
 
+const PARALLEL_COMPANY_RESOLUTION_TASK_SPEC = {
+  input_schema: {
+    type: "json",
+    json_schema: {
+      type: "object",
+      properties: {
+        company_name: {
+          description: "The name of the company to find the domain and LinkedIn URL for.",
+          type: "string",
+        },
+        industry: {
+          description: "The industry of the company to find the domain and LinkedIn URL for.",
+          type: "string",
+        },
+        location: {
+          description: "The location of the company to find the domain and LinkedIn URL for.",
+          type: "string",
+        },
+      },
+    },
+  },
+  output_schema: {
+    type: "json",
+    json_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        company_domain: {
+          description:
+            "The primary internet domain name for the company (e.g., 'example.com'). If the domain cannot be found, return null.",
+          type: "string",
+        },
+        company_linkedin_url: {
+          description:
+            "The official LinkedIn profile URL for the company. If the LinkedIn URL cannot be found, return null.",
+          type: "string",
+        },
+      },
+      required: ["company_domain", "company_linkedin_url"],
+    },
+  },
+} as const;
+
 async function executeParallelDeepResearch(
   cumulativeContext: Record<string, unknown>,
   stepConfig: Record<string, unknown>,
@@ -613,6 +656,283 @@ async function executeParallelDeepResearch(
         {
           provider: "parallel",
           action: "deep_research_icp_job_titles",
+          status: "failed",
+          error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
+          parallel_run_id: runId,
+        },
+      ],
+    };
+  }
+}
+
+async function executeParallelCompanyResolution(
+  cumulativeContext: Record<string, unknown>,
+  stepConfig: Record<string, unknown>,
+): Promise<NonNullable<ExecuteResponseEnvelope["data"]>> {
+  const apiKey = process.env.PARALLEL_API_KEY;
+  if (!apiKey) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "resolve_company_domain",
+          status: "skipped",
+          skip_reason: "missing_parallel_api_key",
+        },
+      ],
+    };
+  }
+
+  const companyName = String(
+    cumulativeContext.current_company_name ||
+      cumulativeContext.company_name ||
+      cumulativeContext.canonical_name ||
+      "",
+  );
+  const industry = String(
+    cumulativeContext.current_company_industry || cumulativeContext.industry || "",
+  );
+  const location = String(
+    cumulativeContext.current_company_location || cumulativeContext.geo_region || "",
+  );
+
+  if (!companyName) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status: "failed",
+      output: null,
+      missing_inputs: ["company_name"],
+      provider_attempts: [],
+    };
+  }
+
+  const processor = String(stepConfig.processor || "lite");
+  const maxPollAttempts = Number(stepConfig.max_poll_attempts || 30);
+  const pollIntervalSeconds = Number(stepConfig.poll_interval_seconds || 10);
+
+  const headers: Record<string, string> = {
+    "x-api-key": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  const inputPayload: Record<string, string> = {
+    company_name: companyName,
+    ...(industry ? { industry } : {}),
+    ...(location ? { location } : {}),
+  };
+
+  let runId: string;
+  try {
+    const createResponse = await fetch("https://api.parallel.ai/v1/tasks/runs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        input: JSON.stringify(inputPayload),
+        processor,
+        task_spec: PARALLEL_COMPANY_RESOLUTION_TASK_SPEC,
+      }),
+    });
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "company.resolve.domain_from_name_parallel",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "resolve_company_domain",
+            status: "failed",
+            error: `task_creation_failed: ${createResponse.status}`,
+            raw_response: errorText,
+          },
+        ],
+      };
+    }
+    const createData = (await createResponse.json()) as { run_id: string; status: string };
+    runId = createData.run_id;
+    logger.info("Parallel company resolution task created", {
+      runId,
+      processor,
+      companyName,
+      industry: industry || null,
+      location: location || null,
+    });
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "resolve_company_domain",
+          status: "failed",
+          error: `task_creation_exception: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+    };
+  }
+
+  let taskStatus = "queued";
+  let pollCount = 0;
+
+  while (taskStatus !== "completed" && taskStatus !== "failed" && pollCount < maxPollAttempts) {
+    await wait.for({ seconds: pollIntervalSeconds });
+    pollCount++;
+
+    try {
+      const statusResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}`, {
+        method: "GET",
+        headers: { "x-api-key": apiKey },
+      });
+      if (!statusResponse.ok) {
+        logger.warn("Parallel company resolution status check returned non-OK", {
+          runId,
+          status: statusResponse.status,
+          pollCount,
+        });
+        continue;
+      }
+      const statusData = (await statusResponse.json()) as { status: string };
+      taskStatus = statusData.status;
+      logger.info("Parallel company resolution poll", { runId, taskStatus, pollCount });
+    } catch (error) {
+      logger.warn("Parallel company resolution status check exception", {
+        runId,
+        pollCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+  }
+
+  if (taskStatus === "failed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "resolve_company_domain",
+          status: "failed",
+          error: "parallel_task_failed",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  }
+
+  if (taskStatus !== "completed") {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "resolve_company_domain",
+          status: "failed",
+          error: "poll_timeout",
+          parallel_run_id: runId,
+          poll_count: pollCount,
+          max_poll_attempts: maxPollAttempts,
+        },
+      ],
+    };
+  }
+
+  try {
+    const resultResponse = await fetch(`https://api.parallel.ai/v1/tasks/runs/${runId}/result`, {
+      method: "GET",
+      headers: { "x-api-key": apiKey },
+    });
+    if (!resultResponse.ok) {
+      const errorText = await resultResponse.text();
+      return {
+        run_id: crypto.randomUUID(),
+        operation_id: "company.resolve.domain_from_name_parallel",
+        status: "failed",
+        output: null,
+        provider_attempts: [
+          {
+            provider: "parallel",
+            action: "resolve_company_domain",
+            status: "failed",
+            error: `result_fetch_failed: ${resultResponse.status}`,
+            raw_response: errorText,
+            parallel_run_id: runId,
+          },
+        ],
+      };
+    }
+
+    const resultData = (await resultResponse.json()) as Record<string, unknown>;
+    const outputObj = resultData.output as Record<string, unknown> | undefined;
+    const contentStr = String(outputObj?.content || "{}");
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(contentStr);
+    } catch {
+      parsed = {};
+    }
+
+    const companyDomain = typeof parsed.company_domain === "string" ? parsed.company_domain : "";
+    const companyLinkedinUrl =
+      typeof parsed.company_linkedin_url === "string" ? parsed.company_linkedin_url : "";
+    const status = companyDomain ? "found" : "not_found";
+
+    logger.info("Parallel company resolution completed", {
+      runId,
+      pollCount,
+      companyName,
+      status,
+    });
+
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status,
+      output: {
+        company_domain: companyDomain || null,
+        company_linkedin_url: companyLinkedinUrl || null,
+        parallel_run_id: runId,
+        processor,
+        source_company_name: companyName,
+        source_provider: "parallel",
+      },
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "resolve_company_domain",
+          status,
+          parallel_run_id: runId,
+          processor,
+          poll_count: pollCount,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      run_id: crypto.randomUUID(),
+      operation_id: "company.resolve.domain_from_name_parallel",
+      status: "failed",
+      output: null,
+      provider_attempts: [
+        {
+          provider: "parallel",
+          action: "resolve_company_domain",
           status: "failed",
           error: `result_fetch_exception: ${error instanceof Error ? error.message : String(error)}`,
           parallel_run_id: runId,
