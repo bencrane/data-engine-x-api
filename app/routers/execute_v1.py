@@ -40,6 +40,7 @@ from app.services.blitzapi_person_operations import (
     execute_person_search_employee_finder_blitzapi,
     execute_person_search_waterfall_icp_blitzapi,
 )
+from app.services.blitzapi_company_search import execute_company_search_blitzapi
 from app.services.operation_history import persist_operation_execution
 from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
 from app.services.research_operations import (
@@ -147,6 +148,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.resolve.linkedin_from_domain_blitzapi",
     "company.resolve.location_from_domain",
     "company.search",
+    "company.search.blitzapi",
     "company.search.fmcsa",
     "company.search.ecommerce",
     "company.ads.search.linkedin",
@@ -557,6 +559,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.search":
         result = await execute_company_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.search.blitzapi":
+        result = await execute_company_search_blitzapi(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
