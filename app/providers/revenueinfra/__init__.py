@@ -39,6 +39,12 @@ from app.providers.revenueinfra.resolve import (
     resolve_person_linkedin_from_email,
     resolve_company_location_from_domain,
 )
+from app.providers.revenueinfra.infer_linkedin_url import infer_linkedin_url
+from app.providers.revenueinfra.icp_job_titles_gemini import research_icp_job_titles_gemini
+from app.providers.revenueinfra.discover_customers_gemini import discover_customers_gemini
+from app.providers.revenueinfra.icp_criterion import generate_icp_criterion
+from app.providers.revenueinfra.salesnav_url import build_salesnav_url
+from app.providers.revenueinfra.evaluate_icp_fit import evaluate_icp_fit
 
 __all__ = [
     "discover_competitors",
@@ -74,4 +80,10 @@ __all__ = [
     "resolve_linkedin_from_domain",
     "resolve_person_linkedin_from_email",
     "resolve_company_location_from_domain",
+    "infer_linkedin_url",
+    "research_icp_job_titles_gemini",
+    "discover_customers_gemini",
+    "generate_icp_criterion",
+    "build_salesnav_url",
+    "evaluate_icp_fit",
 ]
