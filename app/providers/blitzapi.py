@@ -168,6 +168,77 @@ async def domain_to_linkedin(
     }
 
 
+async def resolve_linkedin_from_domain(
+    *,
+    api_key: str | None,
+    domain: str | None,
+) -> ProviderAdapterResult:
+    normalized_domain = _as_str(domain)
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "resolve_linkedin_from_domain", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not normalized_domain:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "resolve_linkedin_from_domain", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/enrichment/domain-to-linkedin",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"domain": normalized_domain},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "resolve_linkedin_from_domain",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    if body.get("found"):
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "resolve_linkedin_from_domain",
+                "status": "found",
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {
+                "company_linkedin_url": body.get("company_linkedin_url"),
+                "resolve_source": "blitzapi",
+            },
+        }
+
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "resolve_linkedin_from_domain",
+            "status": "not_found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "company_linkedin_url": None,
+            "resolve_source": "blitzapi",
+        },
+    }
+
+
 async def company_search(
     *,
     api_key: str | None,
