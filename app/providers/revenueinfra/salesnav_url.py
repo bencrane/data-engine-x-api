@@ -25,6 +25,8 @@ async def build_salesnav_url(
     excluded_seniority: list[str] | None = None,
     regions: list[str] | None = None,
     company_hq_regions: list[str] | None = None,
+    company_headcount: list[str] | None = None,
+    function: list[str] | None = None,
 ) -> ProviderAdapterResult:
     normalized_base_url = _as_str(base_url) or _configured_base_url()
     normalized_org_id = _as_str(org_id)
@@ -54,6 +56,10 @@ async def build_salesnav_url(
         payload["regions"] = regions
     if company_hq_regions is not None:
         payload["companyHQRegions"] = company_hq_regions
+    if company_headcount is not None:
+        payload["companyHeadcount"] = company_headcount
+    if function is not None:
+        payload["function"] = function
 
     url = f"{normalized_base_url.rstrip('/')}/run/tools/claude/salesnav-url/build"
     start_ms = now_ms()

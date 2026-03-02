@@ -368,6 +368,8 @@ async def execute_company_derive_salesnav_url(
     excluded_seniority = _coerce_list_of_strings(_extract_list(input_data, ("excluded_seniority", "excludedSeniority")))
     regions = _coerce_list_of_strings(_extract_list(input_data, ("regions",)))
     company_hq_regions = _coerce_list_of_strings(_extract_list(input_data, ("company_hq_regions", "companyHQRegions")))
+    company_headcount = _coerce_list_of_strings(_extract_list(input_data, ("company_headcount", "companyHeadcount")))
+    function = _coerce_list_of_strings(_extract_list(input_data, ("function", "job_function")))
 
     missing_inputs: list[str] = []
     if not org_id:
@@ -391,6 +393,8 @@ async def execute_company_derive_salesnav_url(
         excluded_seniority=excluded_seniority,
         regions=regions,
         company_hq_regions=company_hq_regions,
+        company_headcount=company_headcount,
+        function=function,
     )
     attempt = result.get("attempt", {})
     attempts.append(attempt if isinstance(attempt, dict) else {})
