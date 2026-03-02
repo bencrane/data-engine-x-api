@@ -263,6 +263,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | 016 | `company_intel_briefings` + `person_intel_briefings` — raw Parallel.ai intel briefing output, one row per entity per client lens |
 | 017 | `extracted_icp_job_title_details` + `icp_job_titles.extracted_titles` column — extracted ICP titles in flat and JSONB form |
 | 018 | AlumniGTM persistence layer — new `company_entities` columns (`company_linkedin_id`, `icp_criterion`, `salesnav_url`, `icp_fit_verdict`, `icp_fit_reasoning`) + `company_customers` and `gemini_icp_job_titles` tables |
+| 019 | Adyntel ads persistence layer — new `company_ads` table for LinkedIn/Meta/Google ad intelligence (dedup on `(org_id, company_domain, platform, ad_id)` when `ad_id` is present) |
 
 ---
 
@@ -311,6 +312,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Person entity filters (title, seniority, department) | ✅ Live |
 | Job posting entity type + query endpoint | ✅ Live |
 | AlumniGTM dedicated persistence tables (`company_customers`, `gemini_icp_job_titles`) | ✅ Live |
+| Adyntel ads dedicated persistence table (`company_ads`) | ✅ Live |
 | Bright Data cross-source job validation (via HQ) | ✅ Live |
 | Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live |
 | Doppler secrets management | ✅ Live |

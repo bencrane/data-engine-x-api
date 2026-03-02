@@ -134,6 +134,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/v1/icp-job-titles/query`
 - `POST /api/v1/company-customers/query`
 - `POST /api/v1/gemini-icp-job-titles/query`
+- `POST /api/v1/company-ads/query`
 - `POST /api/v1/icp-title-details/query`
 - `POST /api/v1/company-intel-briefings/query`
 - `POST /api/v1/person-intel-briefings/query`
@@ -152,6 +153,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `POST /api/internal/icp-job-titles/upsert`
 - `POST /api/internal/company-customers/upsert`
 - `POST /api/internal/gemini-icp-job-titles/upsert`
+- `POST /api/internal/company-ads/upsert`
 - `POST /api/internal/company-intel-briefings/upsert`
 - `POST /api/internal/person-intel-briefings/upsert`
 
@@ -214,6 +216,7 @@ Migration order:
 16. `016_intel_briefing_tables.sql`
 17. `017_icp_title_extraction.sql`
 18. `018_alumnigtm_persistence.sql`
+19. `019_company_ads.sql`
 
 ## Environment Configuration
 
