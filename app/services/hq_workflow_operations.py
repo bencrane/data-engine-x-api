@@ -10,6 +10,7 @@ from app.contracts.hq_workflow import (
     GeminiIcpJobTitlesOutput,
     IcpCriterionOutput,
     InferLinkedInUrlOutput,
+    LookupCompanyByNameOutput,
     SalesNavUrlOutput,
 )
 from app.providers import revenueinfra
@@ -455,6 +456,60 @@ async def execute_company_derive_evaluate_icp_fit(
         payload={
             "icp_fit_verdict": mapped.get("icp_fit_verdict"),
             "icp_fit_reasoning": mapped.get("icp_fit_reasoning"),
+            "source_provider": mapped.get("source_provider") or "revenueinfra",
+        },
+        run_id=run_id,
+        operation_id=operation_id,
+        attempts=attempts,
+    )
+    if error:
+        return error
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_resolve_domain_from_name_hq(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.resolve.domain_from_name_hq"
+    attempts: list[dict[str, Any]] = []
+
+    company_name = _extract_str(
+        input_data,
+        ("company_name", "current_company_name", "canonical_name", "name"),
+    )
+    if not company_name:
+        return _missing_inputs_result(
+            run_id=run_id,
+            operation_id=operation_id,
+            missing_inputs=["company_name"],
+            attempts=attempts,
+        )
+
+    settings = get_settings()
+    result = await revenueinfra.lookup_company_by_name(
+        base_url=settings.revenueinfra_api_url,
+        company_name=company_name,
+    )
+    attempt = result.get("attempt", {})
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result.get("mapped"), dict) else {}
+    status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+
+    output, error = _validate_output(
+        model=LookupCompanyByNameOutput,
+        payload={
+            "company_domain": mapped.get("company_domain"),
+            "company_linkedin_url": mapped.get("company_linkedin_url"),
+            "match_type": mapped.get("match_type"),
+            "matched_name": mapped.get("matched_name"),
             "source_provider": mapped.get("source_provider") or "revenueinfra",
         },
         run_id=run_id,
