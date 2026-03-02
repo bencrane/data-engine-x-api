@@ -20,6 +20,7 @@ from app.services.company_operations import (
     execute_company_enrich_ecommerce,
     execute_company_enrich_locations,
     execute_company_enrich_profile,
+    execute_company_enrich_profile_blitzapi,
     execute_company_enrich_technographics,
 )
 from app.services.person_enrich_operations import execute_person_enrich_profile
@@ -117,6 +118,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.enrich.profile",
     "person.derive.detect_changes",
     "company.enrich.profile",
+    "company.enrich.profile_blitzapi",
     "company.enrich.fmcsa",
     "company.enrich.card_revenue",
     "company.enrich.locations",
@@ -423,6 +425,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.profile":
         result = await execute_company_enrich_profile(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.profile_blitzapi":
+        result = await execute_company_enrich_profile_blitzapi(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
