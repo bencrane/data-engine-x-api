@@ -83,7 +83,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (73 live)
+## Operations (74 live)
 
 ### Company Enrichment (9)
 | Operation ID | Provider(s) |
@@ -98,10 +98,11 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.enrich.card_revenue` | Enigma (GraphQL match → analytics) |
 | `company.enrich.fmcsa` | FMCSA QCMobile API (3-call merge: base + BASIC scores + authority) |
 
-### Company Search / Discovery (5)
+### Company Search / Discovery (6)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.search` | Prospeo, BlitzAPI, CompanyEnrich |
+| `company.search.blitzapi` | BlitzAPI (company search with keyword, industry, location, size, type, founded year filters + pagination) |
 | `company.search.ecommerce` | StoreLeads |
 | `company.search.fmcsa` | FMCSA QCMobile API |
 | `company.search.by_tech_stack` | TheirStack |
@@ -304,7 +305,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (73 ops) | ✅ Live |
+| Operation registry (74 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
