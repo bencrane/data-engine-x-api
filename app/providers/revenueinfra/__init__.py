@@ -40,6 +40,7 @@ from app.providers.revenueinfra.resolve import (
     resolve_company_location_from_domain,
 )
 from app.providers.revenueinfra.infer_linkedin_url import infer_linkedin_url
+from app.providers.revenueinfra.lookup_company_by_name import lookup_company_by_name
 from app.providers.revenueinfra.icp_job_titles_gemini import research_icp_job_titles_gemini
 from app.providers.revenueinfra.discover_customers_gemini import discover_customers_gemini
 from app.providers.revenueinfra.icp_criterion import generate_icp_criterion
@@ -81,6 +82,7 @@ __all__ = [
     "resolve_person_linkedin_from_email",
     "resolve_company_location_from_domain",
     "infer_linkedin_url",
+    "lookup_company_by_name",
     "research_icp_job_titles_gemini",
     "discover_customers_gemini",
     "generate_icp_criterion",
