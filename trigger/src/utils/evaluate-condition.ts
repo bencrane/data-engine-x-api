@@ -121,7 +121,7 @@ export function evaluateCondition(
     return true;
   }
 
-  const conditionValue = condition as Condition;
+  const conditionValue = condition as Record<string, unknown>;
 
   if ("all" in conditionValue) {
     const allConditions = conditionValue.all;
@@ -139,11 +139,52 @@ export function evaluateCondition(
     );
   }
 
+  if ("not" in conditionValue && isRecord(conditionValue.not)) {
+    return !evaluateCondition(conditionValue.not, context);
+  }
+
+  if ("exists" in conditionValue && typeof conditionValue.exists === "string") {
+    return evaluateSingleCondition(
+      { field: conditionValue.exists, op: "exists" },
+      context,
+    );
+  }
+
+  const shorthandOps: Exclude<ComparisonOp, "exists">[] = [
+    "eq",
+    "ne",
+    "lt",
+    "gt",
+    "lte",
+    "gte",
+    "contains",
+    "icontains",
+    "in",
+  ];
+  for (const op of shorthandOps) {
+    if (op in conditionValue && isRecord(conditionValue[op])) {
+      const inner = conditionValue[op] as Record<string, unknown>;
+      if (typeof inner.field === "string") {
+        return evaluateSingleCondition(
+          { field: inner.field, op, value: inner.value },
+          context,
+        );
+      }
+    }
+  }
+
   if ("field" in conditionValue && "op" in conditionValue) {
     if (typeof conditionValue.field !== "string" || typeof conditionValue.op !== "string") {
       return false;
     }
-    return evaluateSingleCondition(conditionValue as SingleCondition, context);
+    return evaluateSingleCondition(
+      {
+        field: conditionValue.field,
+        op: conditionValue.op as ComparisonOp,
+        value: conditionValue.value,
+      },
+      context,
+    );
   }
 
   return false;
