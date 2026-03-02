@@ -520,6 +520,81 @@ async def search_employees(
     }
 
 
+async def search_companies(
+    *,
+    api_key: str | None,
+    company_filters: dict[str, Any] | None = None,
+    max_results: int = 10,
+    cursor: str | None = None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "search_companies", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": {"results": [], "pagination": {"cursor": None, "totalItems": None, "pageItems": 0}},
+        }
+
+    payload: dict[str, Any] = {"max_results": max(min(max_results, 50), 1)}
+    if company_filters and isinstance(company_filters, dict):
+        payload["company"] = company_filters
+    if cursor:
+        payload["cursor"] = cursor
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/search/companies",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "search_companies",
+                "status": "not_found" if res.status_code == 404 else "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {"results": [], "pagination": {"cursor": None, "totalItems": None, "pageItems": 0}},
+        }
+
+    mapped_results: list[dict[str, Any]] = []
+    for row in _as_list(body.get("results")):
+        mapped = canonical_company_result(company=_as_dict(row))
+        # Keep a first-class linkedin_id field for company search fan-out workflows.
+        mapped["company_linkedin_id"] = mapped.get("source_company_id")
+        mapped["company_type"] = _as_dict(row).get("type")
+        mapped["employee_count"] = _as_dict(row).get("employees_on_linkedin")
+        mapped["hq_locality"] = _as_dict(_as_dict(row).get("hq")).get("city")
+        mapped["description_raw"] = _as_dict(row).get("about")
+        mapped["specialties"] = _as_dict(row).get("specialties")
+        mapped["follower_count"] = _as_dict(row).get("followers")
+        mapped_results.append(mapped)
+
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "search_companies",
+            "status": "found" if mapped_results else "not_found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "results": mapped_results,
+            "pagination": {
+                "cursor": body.get("cursor"),
+                "totalItems": body.get("total_results"),
+                "pageItems": body.get("results_count"),
+            },
+        },
+    }
+
+
 async def search_icp_waterfall(
     *,
     api_key: str | None,
