@@ -10,6 +10,7 @@ from app.contracts.resolve import (
     ResolveLocationOutput,
     ResolvePersonLinkedInOutput,
 )
+from app.providers import blitzapi
 from app.providers import revenueinfra
 
 
@@ -247,6 +248,51 @@ async def execute_company_resolve_linkedin_from_domain(
         }
 
     output = ResolveLinkedInOutput.model_validate({**mapped, "source_provider": "revenueinfra"}).model_dump()
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_resolve_linkedin_from_domain_blitzapi(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.resolve.linkedin_from_domain_blitzapi"
+    attempts: list[dict[str, Any]] = []
+
+    domain = _extract_domain(input_data)
+    if not domain:
+        return _missing_input_result(
+            run_id=run_id,
+            operation_id=operation_id,
+            missing_input="domain",
+            attempts=attempts,
+        )
+
+    settings = get_settings()
+    result = await blitzapi.resolve_linkedin_from_domain(
+        api_key=settings.blitzapi_api_key,
+        domain=domain,
+    )
+    attempt = result.get("attempt", {})
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped")
+    status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+
+    if not isinstance(mapped, dict):
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    output = ResolveLinkedInOutput.model_validate({**mapped, "source_provider": "blitzapi"}).model_dump()
     return {
         "run_id": run_id,
         "operation_id": operation_id,
