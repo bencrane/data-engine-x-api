@@ -49,6 +49,13 @@ def _normalize_text(value: Any) -> str | None:
     return text if text else None
 
 
+def _clean_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 def _normalize_email(value: Any) -> str | None:
     text = _normalize_text(value)
     return text.lower() if text else None
@@ -225,6 +232,7 @@ def _company_fields_from_context(canonical_fields: dict[str, Any]) -> dict[str, 
             canonical_fields.get("linkedin_url")
             or canonical_fields.get("company_linkedin_url")
         ),
+        "company_linkedin_id": _normalize_text(canonical_fields.get("company_linkedin_id")),
         "industry": _normalize_text(
             canonical_fields.get("industry")
             or canonical_fields.get("industry_primary")
@@ -246,6 +254,22 @@ def _company_fields_from_context(canonical_fields: dict[str, Any]) -> dict[str, 
         "enrichment_confidence": _normalize_float(
             canonical_fields.get("enrichment_confidence")
             or canonical_fields.get("confidence")
+        ),
+        "icp_criterion": _clean_text(
+            canonical_fields.get("icp_criterion")
+            or canonical_fields.get("criterion")
+        ),
+        "salesnav_url": _clean_text(
+            canonical_fields.get("salesnav_url")
+            or canonical_fields.get("url")
+        ),
+        "icp_fit_verdict": _clean_text(
+            canonical_fields.get("icp_fit_verdict")
+            or canonical_fields.get("verdict")
+        ),
+        "icp_fit_reasoning": _clean_text(
+            canonical_fields.get("icp_fit_reasoning")
+            or canonical_fields.get("reasoning")
         ),
         "source_providers": _extract_str_list(canonical_fields.get("source_providers")),
     }
@@ -639,6 +663,21 @@ def upsert_company_entity(
         "enrichment_confidence": normalized_fields["enrichment_confidence"]
         if normalized_fields["enrichment_confidence"] is not None
         else (existing.get("enrichment_confidence") if existing else None),
+        "company_linkedin_id": normalized_fields["company_linkedin_id"]
+        if normalized_fields["company_linkedin_id"] is not None
+        else (existing.get("company_linkedin_id") if existing else None),
+        "icp_criterion": normalized_fields["icp_criterion"]
+        if normalized_fields["icp_criterion"] is not None
+        else (existing.get("icp_criterion") if existing else None),
+        "salesnav_url": normalized_fields["salesnav_url"]
+        if normalized_fields["salesnav_url"] is not None
+        else (existing.get("salesnav_url") if existing else None),
+        "icp_fit_verdict": normalized_fields["icp_fit_verdict"]
+        if normalized_fields["icp_fit_verdict"] is not None
+        else (existing.get("icp_fit_verdict") if existing else None),
+        "icp_fit_reasoning": normalized_fields["icp_fit_reasoning"]
+        if normalized_fields["icp_fit_reasoning"] is not None
+        else (existing.get("icp_fit_reasoning") if existing else None),
         "last_enriched_at": _utc_now_iso(),
         "last_operation_id": _normalize_text(last_operation_id)
         if _normalize_text(last_operation_id) is not None
