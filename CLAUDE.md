@@ -247,8 +247,10 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
 
 - `app/`
   - `app/providers/` — provider adapters (prospeo, blitzapi, enigma, theirstack, revenueinfra/, etc.)
+    - includes HQ workflow `/run/` adapters for `infer_linkedin_url`, `icp_job_titles_gemini`, `discover_customers_gemini`, `icp_criterion`, `salesnav_url`, `evaluate_icp_fit`
   - `app/contracts/` — Pydantic output models
   - `app/services/` — operation service functions
+    - `app/services/hq_workflow_operations.py` — HQ workflow operation services (6 RevenueInfra-backed workflow ops)
   - `app/routers/execute_v1.py` — operation dispatch + SUPPORTED_OPERATION_IDS
   - `app/routers/entities_v1.py` — entity query endpoints (companies, persons, job-postings, timeline)
   - `app/services/entity_state.py` — entity upsert + identity resolution (company, person, job)

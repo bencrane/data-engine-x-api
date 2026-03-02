@@ -83,7 +83,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (64 live)
+## Operations (70 live)
 
 ### Company Enrichment (9)
 | Operation ID | Provider(s) |
@@ -107,7 +107,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.search.by_tech_stack` | TheirStack |
 | `company.search.by_job_postings` | TheirStack |
 
-### Company Research (11)
+### Company Research (15)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.research.resolve_g2_url` | Gemini → OpenAI |
@@ -115,6 +115,9 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.research.discover_competitors` | RevenueInfra |
 | `company.research.find_similar_companies` | RevenueInfra |
 | `company.research.lookup_customers` | RevenueInfra |
+| `company.research.infer_linkedin_url` | RevenueInfra (HQ Gemini) |
+| `company.research.icp_job_titles_gemini` | RevenueInfra (HQ Gemini) |
+| `company.research.discover_customers_gemini` | RevenueInfra (HQ Gemini) |
 | `company.research.lookup_champions` | RevenueInfra |
 | `company.research.lookup_champion_testimonials` | RevenueInfra |
 | `company.research.lookup_alumni` | RevenueInfra |
@@ -123,10 +126,13 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.research.check_court_filings` | CourtListener Search API |
 | `company.research.get_docket_detail` | CourtListener Dockets API |
 
-### Company Derive (5)
+### Company Derive (8)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.derive.pricing_intelligence` | RevenueInfra (14 Gemini endpoints) |
+| `company.derive.icp_criterion` | RevenueInfra (HQ Gemini) |
+| `company.derive.salesnav_url` | RevenueInfra (HQ Claude tool) |
+| `company.derive.evaluate_icp_fit` | RevenueInfra (HQ Gemini) |
 | `company.derive.icp_job_titles` | Parallel.ai Deep Research (direct from Trigger.dev — long-running async) |
 | `company.derive.extract_icp_titles` | Modal/Anthropic (extracts consistent title/buyer_role/reasoning from raw Parallel ICP output) |
 | `company.derive.intel_briefing` | Parallel.ai Deep Research (direct from Trigger.dev — company intelligence briefing framed through client lens) |
@@ -295,7 +301,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (64 ops) | ✅ Live |
+| Operation registry (70 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
@@ -363,7 +369,6 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 - **Input ingestion** — CRM pull, CSV upload validation, auto-derived input requirements
 - **Bright Data connector** — automated puller/webhook to ingest Indeed + LinkedIn snapshots from Bright Data API (tables + ingestion endpoints exist in HQ, connector not wired)
 - **Cross-source job matching automation** — scheduled comparison of TheirStack job postings against Bright Data to auto-update `posting_status`
-- **ICP assessment operation** — LLM-based fit scoring
 - **Page content extraction** — scraping G2/pricing pages for structured intelligence
 - **Google Maps scrape + owner identification** — for local/SMB lead gen
 - **Website scrape for owner detection** — LLM-based owner identification from scraped content
