@@ -231,7 +231,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Database Schema (Migrations 001-017)
+## Database Schema (Migrations 001-018)
 
 | Migration | Purpose |
 |---|---|
@@ -252,6 +252,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | 015 | `icp_job_titles` — raw Parallel.ai ICP research output per company (JSONB), one row per company per org |
 | 016 | `company_intel_briefings` + `person_intel_briefings` — raw Parallel.ai intel briefing output, one row per entity per client lens |
 | 017 | `extracted_icp_job_title_details` + `icp_job_titles.extracted_titles` column — extracted ICP titles in flat and JSONB form |
+| 018 | AlumniGTM persistence layer — new `company_entities` columns (`company_linkedin_id`, `icp_criterion`, `salesnav_url`, `icp_fit_verdict`, `icp_fit_reasoning`) + `company_customers` and `gemini_icp_job_titles` tables |
 
 ---
 
@@ -299,6 +300,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
 | Job posting entity type + query endpoint | ✅ Live |
+| AlumniGTM dedicated persistence tables (`company_customers`, `gemini_icp_job_titles`) | ✅ Live |
 | Bright Data cross-source job validation (via HQ) | ✅ Live |
 | Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live |
 | Doppler secrets management | ✅ Live |
