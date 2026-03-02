@@ -83,12 +83,13 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (63 live)
+## Operations (64 live)
 
-### Company Enrichment (8)
+### Company Enrichment (9)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.enrich.profile` | Prospeo, BlitzAPI, CompanyEnrich, LeadMagic |
+| `company.enrich.profile_blitzapi` | BlitzAPI (dedicated single-provider company enrichment with linkedin_id) |
 | `company.enrich.technographics` | LeadMagic |
 | `company.enrich.tech_stack` | TheirStack (job-posting-derived) |
 | `company.enrich.hiring_signals` | TheirStack |
@@ -293,7 +294,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (63 ops) | ✅ Live |
+| Operation registry (64 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
