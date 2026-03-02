@@ -2018,6 +2018,43 @@ export const runPipeline = task({
           }
         }
 
+        if (operationId === "person.search.sales_nav_url" && result.status === "found" && result.output) {
+          try {
+            const output = result.output as Record<string, unknown>;
+            const results = output.results;
+            if (Array.isArray(results) && results.length > 0) {
+              const sourceCompanyDomain = String(
+                cumulativeContext.company_domain || cumulativeContext.domain || cumulativeContext.canonical_domain || "",
+              );
+              const sourceCompanyName = String(
+                cumulativeContext.company_name || cumulativeContext.canonical_name || "",
+              );
+              const sourceSalesnavUrl = String(output.source_url || "");
+              if (sourceCompanyDomain) {
+                await internalPost(internalConfig, "/api/internal/salesnav-prospects/upsert", {
+                  source_company_domain: sourceCompanyDomain,
+                  source_company_name: sourceCompanyName || null,
+                  source_salesnav_url: sourceSalesnavUrl || null,
+                  prospects: results,
+                  discovered_by_operation_id: operationId,
+                  source_submission_id: run.submission_id,
+                  source_pipeline_run_id: pipeline_run_id,
+                });
+                logger.info("Sales Nav prospects persisted to dedicated table", {
+                  domain: sourceCompanyDomain,
+                  prospect_count: results.length,
+                  pipeline_run_id,
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn("Failed to persist Sales Nav prospects to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         cumulativeContext = mergeContext(cumulativeContext, result.output);
         const stepFailed = result.status === "failed";
         if (stepFailed) {
