@@ -9,8 +9,10 @@ from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.company_customers import query_company_customers
 from app.services.company_intel_briefings import query_company_intel_briefings
 from app.services.entity_relationships import query_entity_relationships
+from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
 
@@ -103,6 +105,21 @@ class EntityRelationshipQueryRequest(BaseModel):
 
 
 class IcpJobTitlesQueryRequest(BaseModel):
+    company_domain: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class CompanyCustomersQueryRequest(BaseModel):
+    company_domain: str | None = None
+    company_entity_id: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class GeminiIcpJobTitlesQueryRequest(BaseModel):
     company_domain: str | None = None
     limit: int = 100
     offset: int = 0
@@ -445,6 +462,53 @@ async def query_icp_job_titles_rows(
         return error_response("org_id is required for super-admin ICP job title queries", 400)
 
     results = query_icp_job_titles(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/company-customers/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_company_customers_rows(
+    payload: CompanyCustomersQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin company customer queries", 400)
+
+    results = query_company_customers(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        company_entity_id=payload.company_entity_id,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/gemini-icp-job-titles/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_gemini_icp_job_titles_rows(
+    payload: GeminiIcpJobTitlesQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin Gemini ICP job title queries", 400)
+
+    results = query_gemini_icp_job_titles(
         org_id=org_id,
         company_domain=payload.company_domain,
         limit=payload.limit,
