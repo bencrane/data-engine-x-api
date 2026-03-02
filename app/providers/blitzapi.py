@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 import httpx
@@ -34,6 +36,45 @@ def _as_str_list(value: Any) -> list[str] | None:
         if candidate:
             cleaned.append(candidate)
     return cleaned or None
+
+
+logger = logging.getLogger(__name__)
+
+_BLITZAPI_MAX_RETRIES = 3
+_BLITZAPI_BASE_DELAY_SECONDS = 2.0
+
+
+async def _blitzapi_request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json: dict[str, Any] | None = None,
+) -> httpx.Response:
+    """Make an HTTP request to BlitzAPI with retry on 429 (Too Many Requests).
+
+    Uses exponential backoff: 2s, 4s, 8s between retries.
+    """
+    response: httpx.Response | None = None
+    for attempt in range(_BLITZAPI_MAX_RETRIES + 1):
+        response = await client.request(method, url, headers=headers, json=json)
+        if response.status_code != 429:
+            return response
+        if attempt < _BLITZAPI_MAX_RETRIES:
+            retry_after = response.headers.get("retry-after")
+            if retry_after and retry_after.isdigit():
+                delay = float(retry_after)
+            else:
+                delay = _BLITZAPI_BASE_DELAY_SECONDS * (2**attempt)
+            logger.warning(
+                "BlitzAPI rate limited (429), retrying",
+                extra={"attempt": attempt + 1, "delay_seconds": delay, "url": url},
+            )
+            await asyncio.sleep(delay)
+    if response is None:
+        raise RuntimeError("BlitzAPI response was not initialized")
+    return response
 
 
 def canonical_company_result(
@@ -101,7 +142,9 @@ async def domain_to_linkedin(
         }
     start_ms = now_ms()
     async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
             "https://api.blitz-api.ai/v2/enrichment/domain-to-linkedin",
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             json={"domain": domain},
@@ -142,7 +185,9 @@ async def company_search(
         }
     start_ms = now_ms()
     async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
             "https://api.blitz-api.ai/v2/enrichment/company",
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             json={"company_linkedin_url": company_linkedin_url},
@@ -190,7 +235,9 @@ async def person_search(
             cascade = blitz_input.get("cascade") or [
                 {"include_title": [query], "exclude_title": ["intern", "assistant", "junior"], "location": ["WORLD"], "include_headline_search": True}
             ]
-            res = await client.post(
+            res = await _blitzapi_request_with_retry(
+                client,
+                "POST",
                 "https://api.blitz-api.ai/v2/search/waterfall-icp-keyword",
                 headers={"x-api-key": api_key, "Content-Type": "application/json"},
                 json={"company_linkedin_url": company_linkedin_url, "cascade": cascade, "max_results": min(limit, 100)},
@@ -208,7 +255,9 @@ async def person_search(
             }
 
         pass_through = {k: v for k, v in blitz_input.items() if k not in {"company_linkedin_url", "company_domain"}}
-        res = await client.post(
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
             "https://api.blitz-api.ai/v2/search/employee-finder",
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             json={"company_linkedin_url": company_linkedin_url, "max_results": min(limit, 100), **pass_through},
@@ -264,7 +313,9 @@ async def search_employees(
 
     start_ms = now_ms()
     async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
             "https://api.blitz-api.ai/v2/search/employee-finder",
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             json=payload,
@@ -329,7 +380,9 @@ async def search_icp_waterfall(
     }
     start_ms = now_ms()
     async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
             "https://api.blitz-api.ai/v2/search/waterfall-icp-keyword",
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             json=payload,
@@ -392,7 +445,9 @@ async def phone_enrich(
         }
     start_ms = now_ms()
     async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
             "https://api.blitz-api.ai/v2/enrichment/phone",
             headers={"x-api-key": api_key, "Content-Type": "application/json"},
             json={"person_linkedin_url": person_linkedin_url},
