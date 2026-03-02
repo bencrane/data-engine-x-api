@@ -35,6 +35,11 @@ from app.services.adyntel_operations import (
     execute_company_ads_search_linkedin,
     execute_company_ads_search_meta,
 )
+from app.services.blitzapi_person_operations import (
+    execute_person_contact_resolve_email_blitzapi,
+    execute_person_search_employee_finder_blitzapi,
+    execute_person_search_waterfall_icp_blitzapi,
+)
 from app.services.operation_history import persist_operation_execution
 from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
 from app.services.research_operations import (
@@ -118,11 +123,14 @@ _security = HTTPBearer(auto_error=False)
 
 SUPPORTED_OPERATION_IDS = {
     "person.contact.resolve_email",
+    "person.contact.resolve_email_blitzapi",
     "person.contact.resolve_mobile_phone",
     "person.contact.verify_email",
     "person.resolve.linkedin_from_email",
     "person.search",
+    "person.search.employee_finder_blitzapi",
     "person.search.sales_nav_url",
+    "person.search.waterfall_icp_blitzapi",
     "person.enrich.profile",
     "person.derive.detect_changes",
     "company.enrich.profile",
@@ -294,6 +302,17 @@ async def execute_v1(
         )
         return DataEnvelope(data=result)
 
+    if payload.operation_id == "person.contact.resolve_email_blitzapi":
+        result = await execute_person_contact_resolve_email_blitzapi(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
     if payload.operation_id == "person.contact.resolve_mobile_phone":
         result = await execute_person_contact_resolve_mobile_phone(input_data=payload.input)
         persist_operation_execution(
@@ -395,6 +414,28 @@ async def execute_v1(
 
     if payload.operation_id == "person.search":
         result = await execute_person_search(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.search.waterfall_icp_blitzapi":
+        result = await execute_person_search_waterfall_icp_blitzapi(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.search.employee_finder_blitzapi":
+        result = await execute_person_search_employee_finder_blitzapi(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
