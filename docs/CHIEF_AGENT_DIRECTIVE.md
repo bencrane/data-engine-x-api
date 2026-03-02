@@ -40,7 +40,7 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **62 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
+- **63 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
 - **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
 - **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
@@ -98,11 +98,31 @@ Read the "What's Not Built Yet" section in `docs/SYSTEM_OVERVIEW.md` for the cur
 | Company intel briefing (Parallel Deep Research) | Live. 3 companies tested. Dedicated table. |
 | Person intel briefing (Parallel Deep Research) | Live. 1 person tested. Dedicated table. |
 | Sales Nav URL scraper | Live. Untested in production. |
+| BlitzAPI domain-to-LinkedIn resolver | Live. Untested in production. |
+| BlitzAPI rate limiting (retry on 429) | Live. |
 | Entity relationships table | Live. Empty — no relationships recorded yet. |
 | Entity relationship wiring in pipeline | Not built. |
 | HQ person_work_history dedup | Broken. Needs re-key. |
 | HQ job title matching | Phase 1 done (generated columns). Phase 3 (matching) not started. |
 | GTM briefing assembly | Not built. |
+
+## Next Priority: HQ Workflow Operations Blueprint
+
+7 HQ endpoints need to be wrapped as data-engine-x operations, then assembled into one blueprint. The endpoint schemas are in `docs/openapi/endpoints/`. The blueprint step order is:
+
+| Position | Operation | HQ Endpoint | Input |
+|---|---|---|---|
+| 1 | Domain → LinkedIn URL | `/run/companies/gemini/linkedin-url/get` | company_name, domain |
+| 2 | LinkedIn URL → Enriched Company | `/run/companies/clay-leadmagic/enrich/ingest` | domain, company_name, company_linkedin_url |
+| 3 | Generate ICP Criterion | `/run/companies/gemini/icp-criterion/generate` | company_name, domain, customers[], icp_titles[] |
+| 4 | ICP Job Titles (Gemini) | `/run/companies/gemini/icp-job-titles/research` | company_name, domain, company_description |
+| 5 | Customers Of | `/run/companies/gemini/customers-of/discover` | company_name, domain |
+| 6 | Build Sales Nav URL | `/run/tools/claude/salesnav-url/build` | orgId, companyName, titles[] |
+| 7 | Evaluate ICP Fit | `/run/companies/gemini/icp-fit/evaluate` | criterion, company_name, domain, description |
+
+Steps 1-6 are one blueprint in that order. Step 7 is a standalone operation.
+
+All follow the existing RevenueInfra provider adapter pattern — call HQ endpoint, map response, return via standard operation service. No HQ code changes needed.
 
 ## Postmortems & Troubleshooting
 
