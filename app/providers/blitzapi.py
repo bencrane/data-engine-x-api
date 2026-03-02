@@ -631,6 +631,49 @@ async def phone_enrich(
     }
 
 
+async def find_work_email(
+    *,
+    api_key: str | None,
+    person_linkedin_url: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "find_work_email", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not person_linkedin_url:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "find_work_email", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/enrichment/email",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"person_linkedin_url": person_linkedin_url},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+    if res.status_code >= 400:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "find_work_email", "status": "failed", "http_status": res.status_code, "duration_ms": now_ms() - start_ms, "raw_response": body},
+            "mapped": None,
+        }
+    found = bool(body.get("found"))
+    return {
+        "attempt": {"provider": "blitzapi", "action": "find_work_email", "status": "found" if found else "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
+        "mapped": {
+            "work_email": body.get("email"),
+            "all_emails": body.get("all_emails"),
+            "source_provider": "blitzapi",
+        }
+        if found
+        else None,
+    }
+
+
 async def enrich_company(
     *,
     api_key: str | None,
