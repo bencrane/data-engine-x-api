@@ -241,7 +241,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Database Schema (Migrations 001-018)
+## Database Schema (Migrations 001-020)
 
 | Migration | Purpose |
 |---|---|
@@ -264,6 +264,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | 017 | `extracted_icp_job_title_details` + `icp_job_titles.extracted_titles` column — extracted ICP titles in flat and JSONB form |
 | 018 | AlumniGTM persistence layer — new `company_entities` columns (`company_linkedin_id`, `icp_criterion`, `salesnav_url`, `icp_fit_verdict`, `icp_fit_reasoning`) + `company_customers` and `gemini_icp_job_titles` tables |
 | 019 | Adyntel ads persistence layer — new `company_ads` table for LinkedIn/Meta/Google ad intelligence (dedup on `(org_id, company_domain, platform, ad_id)` when `ad_id` is present) |
+| 020 | Sales Navigator prospects persistence layer — new `salesnav_prospects` table for `person.search.sales_nav_url` output (dedup on `(org_id, source_company_domain, linkedin_url)` when `linkedin_url` is present) |
 
 ---
 
@@ -313,6 +314,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Job posting entity type + query endpoint | ✅ Live |
 | AlumniGTM dedicated persistence tables (`company_customers`, `gemini_icp_job_titles`) | ✅ Live |
 | Adyntel ads dedicated persistence table (`company_ads`) | ✅ Live |
+| Sales Navigator prospects dedicated persistence table (`salesnav_prospects`) | ✅ Live |
 | Bright Data cross-source job validation (via HQ) | ✅ Live |
 | Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live |
 | Doppler secrets management | ✅ Live |
