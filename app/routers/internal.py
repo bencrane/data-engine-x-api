@@ -10,12 +10,14 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.company_customers import upsert_company_customers
 from app.services.entity_relationships import (
     invalidate_entity_relationship,
     record_entity_relationship,
     record_entity_relationships_batch,
 )
 from app.services.company_intel_briefings import upsert_company_intel_briefing
+from app.services.gemini_icp_job_titles import upsert_gemini_icp_job_titles
 from app.services.icp_job_titles import upsert_icp_job_titles
 from app.services.person_intel_briefings import upsert_person_intel_briefing
 from app.services.entity_state import (
@@ -192,6 +194,30 @@ class InternalUpsertIcpJobTitlesRequest(BaseModel):
     raw_parallel_output: dict[str, Any]
     parallel_run_id: str | None = None
     processor: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertCompanyCustomersRequest(BaseModel):
+    company_entity_id: str
+    company_domain: str
+    customers: list[dict[str, Any]]
+    discovered_by_operation_id: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertGeminiIcpJobTitlesRequest(BaseModel):
+    company_domain: str
+    company_name: str | None = None
+    company_description: str | None = None
+    inferred_product: str | None = None
+    buyer_persona: str | None = None
+    titles: list[dict[str, Any]] | None = None
+    champion_titles: list[str] | None = None
+    evaluator_titles: list[str] | None = None
+    decision_maker_titles: list[str] | None = None
+    raw_response: dict[str, Any]
     source_submission_id: str | None = None
     source_pipeline_run_id: str | None = None
 
@@ -510,6 +536,50 @@ async def internal_upsert_icp_job_titles(
         raw_parallel_output=payload.raw_parallel_output,
         parallel_run_id=payload.parallel_run_id,
         processor=payload.processor,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/company-customers/upsert", response_model=DataEnvelope)
+async def internal_upsert_company_customers(
+    payload: InternalUpsertCompanyCustomersRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_company_customers(
+        org_id=org_id,
+        company_entity_id=payload.company_entity_id,
+        company_domain=payload.company_domain,
+        customers=payload.customers,
+        discovered_by_operation_id=payload.discovered_by_operation_id,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/gemini-icp-job-titles/upsert", response_model=DataEnvelope)
+async def internal_upsert_gemini_icp_job_titles(
+    payload: InternalUpsertGeminiIcpJobTitlesRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_gemini_icp_job_titles(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        company_name=payload.company_name,
+        company_description=payload.company_description,
+        inferred_product=payload.inferred_product,
+        buyer_persona=payload.buyer_persona,
+        titles=payload.titles,
+        champion_titles=payload.champion_titles,
+        evaluator_titles=payload.evaluator_titles,
+        decision_maker_titles=payload.decision_maker_titles,
+        raw_response=payload.raw_response,
         source_submission_id=payload.source_submission_id,
         source_pipeline_run_id=payload.source_pipeline_run_id,
     )
