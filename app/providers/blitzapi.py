@@ -239,6 +239,100 @@ async def resolve_linkedin_from_domain(
     }
 
 
+async def enrich_company_profile(
+    *,
+    api_key: str | None,
+    company_linkedin_url: str | None,
+) -> ProviderAdapterResult:
+    normalized_linkedin_url = _as_str(company_linkedin_url)
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "enrich_company_profile",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+    if not normalized_linkedin_url:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "enrich_company_profile",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/enrichment/company",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"company_linkedin_url": normalized_linkedin_url},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "enrich_company_profile",
+                "status": "not_found" if res.status_code == 404 else "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    company = _as_dict(body.get("company"))
+    if not body.get("found") or not company:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "enrich_company_profile",
+                "status": "not_found",
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    hq = _as_dict(company.get("hq"))
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "enrich_company_profile",
+            "status": "found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "company_name": company.get("name"),
+            "company_domain": company.get("domain"),
+            "company_website": company.get("website"),
+            "company_linkedin_url": company.get("linkedin_url"),
+            "company_linkedin_id": str(company.get("linkedin_id")) if company.get("linkedin_id") is not None else None,
+            "company_type": company.get("type"),
+            "industry_primary": company.get("industry"),
+            "employee_count": company.get("employees_on_linkedin"),
+            "employee_range": company.get("size"),
+            "founded_year": company.get("founded_year"),
+            "hq_locality": hq.get("city"),
+            "hq_country_code": hq.get("country_code"),
+            "description_raw": company.get("about"),
+            "specialties": company.get("specialties"),
+            "follower_count": company.get("followers"),
+            "source_provider": "blitzapi",
+        },
+    }
+
+
 async def company_search(
     *,
     api_key: str | None,
