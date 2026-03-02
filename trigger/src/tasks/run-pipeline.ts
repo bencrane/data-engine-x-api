@@ -1919,6 +1919,105 @@ export const runPipeline = task({
           }
         }
 
+        if (operationId === "company.ads.search.linkedin" && result.status === "found" && result.output) {
+          try {
+            const output = result.output as Record<string, unknown>;
+            const ads = output.ads;
+            if (Array.isArray(ads) && ads.length > 0) {
+              const companyDomain = String(
+                cumulativeContext.company_domain || cumulativeContext.domain || cumulativeContext.canonical_domain || "",
+              );
+              if (companyDomain) {
+                await internalPost(internalConfig, "/api/internal/company-ads/upsert", {
+                  company_domain: companyDomain,
+                  company_entity_id: cumulativeContext.entity_id || null,
+                  platform: "linkedin",
+                  ads,
+                  discovered_by_operation_id: operationId,
+                  source_submission_id: run.submission_id,
+                  source_pipeline_run_id: pipeline_run_id,
+                });
+                logger.info("LinkedIn ads persisted to dedicated table", {
+                  domain: companyDomain,
+                  ads_count: ads.length,
+                  pipeline_run_id,
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn("Failed to persist LinkedIn ads to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        if (operationId === "company.ads.search.meta" && result.status === "found" && result.output) {
+          try {
+            const output = result.output as Record<string, unknown>;
+            const ads = output.results;
+            if (Array.isArray(ads) && ads.length > 0) {
+              const companyDomain = String(
+                cumulativeContext.company_domain || cumulativeContext.domain || cumulativeContext.canonical_domain || "",
+              );
+              if (companyDomain) {
+                await internalPost(internalConfig, "/api/internal/company-ads/upsert", {
+                  company_domain: companyDomain,
+                  company_entity_id: cumulativeContext.entity_id || null,
+                  platform: "meta",
+                  ads,
+                  discovered_by_operation_id: operationId,
+                  source_submission_id: run.submission_id,
+                  source_pipeline_run_id: pipeline_run_id,
+                });
+                logger.info("Meta ads persisted to dedicated table", {
+                  domain: companyDomain,
+                  ads_count: ads.length,
+                  pipeline_run_id,
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn("Failed to persist Meta ads to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        if (operationId === "company.ads.search.google" && result.status === "found" && result.output) {
+          try {
+            const output = result.output as Record<string, unknown>;
+            const ads = output.ads;
+            if (Array.isArray(ads) && ads.length > 0) {
+              const companyDomain = String(
+                cumulativeContext.company_domain || cumulativeContext.domain || cumulativeContext.canonical_domain || "",
+              );
+              if (companyDomain) {
+                await internalPost(internalConfig, "/api/internal/company-ads/upsert", {
+                  company_domain: companyDomain,
+                  company_entity_id: cumulativeContext.entity_id || null,
+                  platform: "google",
+                  ads,
+                  discovered_by_operation_id: operationId,
+                  source_submission_id: run.submission_id,
+                  source_pipeline_run_id: pipeline_run_id,
+                });
+                logger.info("Google ads persisted to dedicated table", {
+                  domain: companyDomain,
+                  ads_count: ads.length,
+                  pipeline_run_id,
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn("Failed to persist Google ads to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         cumulativeContext = mergeContext(cumulativeContext, result.output);
         const stepFailed = result.status === "failed";
         if (stepFailed) {
