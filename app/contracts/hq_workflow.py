@@ -40,3 +40,11 @@ class EvaluateIcpFitOutput(BaseModel):
     icp_fit_verdict: str | None = None
     icp_fit_reasoning: str | None = None
     source_provider: str = "revenueinfra"
+
+
+class LookupCompanyByNameOutput(BaseModel):
+    company_domain: str | None = None
+    company_linkedin_url: str | None = None
+    match_type: str | None = None
+    matched_name: str | None = None
+    source_provider: str = "revenueinfra"
