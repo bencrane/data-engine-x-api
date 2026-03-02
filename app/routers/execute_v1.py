@@ -96,6 +96,7 @@ from app.services.resolve_operations import (
     execute_company_resolve_domain_from_email,
     execute_company_resolve_domain_from_linkedin,
     execute_company_resolve_domain_from_name,
+    execute_company_resolve_linkedin_from_domain_blitzapi,
     execute_company_resolve_linkedin_from_domain,
     execute_company_resolve_location_from_domain,
     execute_person_resolve_linkedin_from_email,
@@ -125,6 +126,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.resolve.domain_from_linkedin",
     "company.resolve.domain_from_name",
     "company.resolve.linkedin_from_domain",
+    "company.resolve.linkedin_from_domain_blitzapi",
     "company.resolve.location_from_domain",
     "company.search",
     "company.search.fmcsa",
@@ -333,6 +335,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.resolve.linkedin_from_domain":
         result = await execute_company_resolve_linkedin_from_domain(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.resolve.linkedin_from_domain_blitzapi":
+        result = await execute_company_resolve_linkedin_from_domain_blitzapi(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
