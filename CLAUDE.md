@@ -263,7 +263,7 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `app/services/entity_timeline.py` — timeline event recording
   - `app/services/resolve_operations.py` — 7 CRM resolve operations
 - `trigger/`
-  - `trigger/src/tasks/run-pipeline.ts` — pipeline runner (supports company, person, job entity types + 3 Parallel Deep Research operations with direct API calls and auto-persist)
+  - `trigger/src/tasks/run-pipeline.ts` — pipeline runner (supports company, person, job entity types + 4 Parallel.ai direct operations with direct API calls and auto-persist)
 - `tests/`
 - `scripts/` — backfill scripts for dedicated tables (icp_job_titles, company/person intel briefings)
 - `supabase/migrations/`

@@ -83,7 +83,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (75 live)
+## Operations (76 live)
 
 ### Company Enrichment (9)
 | Operation ID | Provider(s) |
@@ -173,13 +173,14 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `person.derive.intel_briefing` | Parallel.ai Deep Research (direct from Trigger.dev — person intelligence briefing for outreach) |
 | `person.derive.detect_changes` | Internal (entity snapshot diff) |
 
-### Resolution / CRM Cleanup (8)
+### Resolution / CRM Cleanup (9)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.resolve.domain_from_email` | RevenueInfra HQ (reference.email_to_person + email domain extraction) |
 | `company.resolve.domain_from_linkedin` | RevenueInfra HQ (core.companies) |
 | `company.resolve.domain_from_name` | RevenueInfra HQ (extracted.cleaned_company_names) |
 | `company.resolve.domain_from_name_hq` | RevenueInfra HQ (`/run/lookup-company-by-name`) |
+| `company.resolve.domain_from_name_parallel` | Parallel.ai lite (resolve company domain + LinkedIn URL from name, direct from Trigger.dev) |
 | `company.resolve.linkedin_from_domain` | RevenueInfra HQ (core.companies) |
 | `company.resolve.linkedin_from_domain_blitzapi` | BlitzAPI (domain to LinkedIn URL lookup) |
 | `person.resolve.linkedin_from_email` | RevenueInfra HQ (reference.email_to_person) |
@@ -308,7 +309,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (75 ops) | ✅ Live |
+| Operation registry (76 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
