@@ -2073,6 +2073,11 @@ export const runPipeline = task({
           result = await executeCompanyIntelBriefing(cumulativeContext, stepSnapshot.step_config || {});
         } else if (operationId === "person.derive.intel_briefing") {
           result = await executePersonIntelBriefing(cumulativeContext, stepSnapshot.step_config || {});
+        } else if (operationId === "company.resolve.domain_from_name_parallel") {
+          result = await executeParallelCompanyResolution(
+            cumulativeContext,
+            stepSnapshot.step_config || {},
+          );
         } else {
           result = await callExecuteV1(internalConfig, {
             orgId: org_id,
