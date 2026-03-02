@@ -16,6 +16,7 @@ from app.services.entity_relationships import query_entity_relationships
 from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
+from app.services.salesnav_prospects import query_salesnav_prospects
 
 router = APIRouter()
 entity_relationships_router = APIRouter()
@@ -156,6 +157,15 @@ class PersonIntelBriefingsQueryRequest(BaseModel):
     person_linkedin_url: str | None = None
     person_current_company_name: str | None = None
     client_company_name: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class SalesNavProspectsQueryRequest(BaseModel):
+    source_company_domain: str | None = None
+    current_title: str | None = None
+    linkedin_url: str | None = None
     limit: int = 100
     offset: int = 0
     org_id: str | None = None
@@ -600,6 +610,31 @@ async def query_company_intel_briefings_rows(
         org_id=org_id,
         company_domain=payload.company_domain,
         client_company_name=payload.client_company_name,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/salesnav-prospects/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_salesnav_prospects_rows(
+    payload: SalesNavProspectsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin sales nav prospect queries", 400)
+
+    results = query_salesnav_prospects(
+        org_id=org_id,
+        source_company_domain=payload.source_company_domain,
+        current_title=payload.current_title,
+        linkedin_url=payload.linkedin_url,
         limit=payload.limit,
         offset=payload.offset,
     )
