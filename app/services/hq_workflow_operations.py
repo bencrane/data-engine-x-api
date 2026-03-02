@@ -58,7 +58,7 @@ def _coerce_customer_names(value: Any) -> list[str] | None:
     names: list[str] = []
     for item in value:
         if isinstance(item, dict):
-            name = _as_str(item.get("name"))
+            name = _as_str(item.get("name")) or _as_str(item.get("company_name"))
             if name:
                 names.append(name)
             continue
@@ -316,8 +316,8 @@ async def execute_company_derive_icp_criterion(
             attempts=attempts,
         )
 
-    customers = _coerce_customer_names(_extract_list(input_data, ("customers",)))
-    icp_titles = _coerce_titles(_extract_list(input_data, ("champion_titles", "titles")))
+    customers = _coerce_customer_names(_extract_list(input_data, ("customers",))) or []
+    icp_titles = _coerce_titles(_extract_list(input_data, ("champion_titles", "titles"))) or []
 
     settings = get_settings()
     result = await revenueinfra.generate_icp_criterion(

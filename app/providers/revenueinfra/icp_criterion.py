@@ -44,8 +44,8 @@ async def generate_icp_criterion(
     payload: dict[str, Any] = {
         "company_name": normalized_company_name,
         "domain": normalized_domain,
-        "customers": customers,
-        "icp_titles": icp_titles,
+        "customers": customers if customers is not None else [],
+        "icp_titles": icp_titles if icp_titles is not None else [],
     }
     start_ms = now_ms()
 
