@@ -248,7 +248,7 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `app/routers/entities_v1.py` — entity query endpoints (companies, persons, job-postings, timeline)
   - `app/services/entity_state.py` — entity upsert + identity resolution (company, person, job)
   - `app/services/entity_timeline.py` — timeline event recording
-  - `app/services/resolve_operations.py` — 6 CRM resolve operations
+  - `app/services/resolve_operations.py` — 7 CRM resolve operations
 - `trigger/`
   - `trigger/src/tasks/run-pipeline.ts` — pipeline runner (supports company, person, job entity types + 3 Parallel Deep Research operations with direct API calls and auto-persist)
 - `tests/`
