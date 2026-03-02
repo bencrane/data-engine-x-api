@@ -1,0 +1,373 @@
+{
+    "success": true,
+    "status": 200,
+    "response": {
+      "data": [
+        {
+          "firstName": "Kyohwe",
+          "fullName": "Kyohwe Goo",
+          "lastName": "Goo",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 4,
+              "numMonths": 8
+            },
+            "companyName": "Hyundai Motor Company",
+            "description": "Career that combines design, strategy and storytelling to support great products",
+            "title": "Design Strategy",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 4,
+              "numMonths": 8
+            },
+            "startedOn": {
+              "month": 5,
+              "year": 2020
+            }
+          },
+          "profilePictureDisplayImage": "https://media.licdn.com/dms/image/v2/C5603AQHxHEwsdVIcZQ/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1627174763212?e=1739404800&v=beta&t=K6NUJR-hCUigbCKRc7tMqfWm8xpAVt8P_95zfq_BIyo",
+          "summary": "Studied mechanical engineering, industrial/transportation design to create innovative solutions for future automotive/mobility design",
+          "profileUrn": "ACwAACc_JjIBSeHOEA2truT7un1QADxUExNCuoY",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAACc_JjIBSeHOEA2truT7un1QADxUExNCuoY",
+          "openLink": false
+        },
+        {
+          "firstName": "Tae Hun",
+          "fullName": "Tae Hun Goo",
+          "lastName": "Goo",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 32,
+              "numMonths": 5
+            },
+            "companyName": "Hyundai Motor Company",
+            "title": "Director",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 32,
+              "numMonths": 5
+            },
+            "startedOn": {
+              "month": 8,
+              "year": 1992
+            }
+          },
+          "profilePictureDisplayImage": "https://media.licdn.com/dms/image/v2/C5103AQHnCSzGO4gtxg/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1516993504974?e=1739404800&v=beta&t=6M9hsd9E3txETK-4kt4IPR62_zFqv8q-hO67ZSMGvNU",
+          "profileUrn": "ACwAACMuAn0BROoF7ki1uCL851tWgyJdJ18KLJM",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAACMuAn0BROoF7ki1uCL851tWgyJdJ18KLJM",
+          "openLink": false
+        },
+        {
+          "firstName": "Bouk-Goo",
+          "fullName": "Bouk-Goo Song",
+          "lastName": "Song",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 7,
+              "numMonths": 11
+            },
+            "companyName": "Hyundai Motor Company",
+            "title": "Director, Product Strategy Group",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 18
+            },
+            "startedOn": {
+              "month": 2,
+              "year": 2017
+            }
+          },
+          "profileUrn": "ACwAAAQX5XgB5v0dPho_N4tML-BxN62Zmxi57j8",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAAAQX5XgB5v0dPho_N4tML-BxN62Zmxi57j8",
+          "openLink": false
+        },
+        {
+          "firstName": "BONWOO",
+          "fullName": "BONWOO GOO",
+          "lastName": "GOO",
+          "geoRegion": "Seoul, South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 5,
+              "numMonths": 7
+            },
+            "companyName": "Hyundai Motor Company",
+            "title": "Fuel cell project manager",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 8,
+              "numMonths": 11
+            },
+            "startedOn": {
+              "month": 6,
+              "year": 2019
+            }
+          },
+          "profilePictureDisplayImage": "https://media.licdn.com/dms/image/v2/C5603AQHxZrBMkOU8Jw/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1650669752472?e=1739404800&v=beta&t=5JOWDE7ZE2E1rf83nf0vbRbkcSPNwW_8IST-rh1-ap4",
+          "profileUrn": "ACwAACUzgwoBCU73P5TA3P1NoIzmdVlgo6407eY",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAACUzgwoBCU73P5TA3P1NoIzmdVlgo6407eY",
+          "openLink": false
+        },
+        {
+          "firstName": "Mincheol",
+          "fullName": "Mincheol Goo",
+          "lastName": "Goo",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 7,
+              "numMonths": 6
+            },
+            "companyName": "Hyundai Motor Company (현대자동차)",
+            "description": "Hyundai Motor Company research engineer (Electric Motor / Controller)",
+            "title": "Research Engineer",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 7,
+              "numMonths": 6
+            },
+            "startedOn": {
+              "month": 7,
+              "year": 2017
+            }
+          },
+          "profileUrn": "ACwAAB4PyC0BXXcR8KLhcmXecXu6wqUt4W0dn-c",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAAB4PyC0BXXcR8KLhcmXecXu6wqUt4W0dn-c",
+          "openLink": false
+        },
+        {
+          "firstName": "TAE HUN",
+          "fullName": "TAE HUN GOO",
+          "lastName": "GOO",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {},
+            "companyName": "Hyundai Motor Company",
+            "title": "Vice President",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {}
+          },
+          "profileUrn": "ACwAAC3sB-4Bhnxxc-ImZQ1Xq60ibbaajSM5TuU",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAAC3sB-4Bhnxxc-ImZQ1Xq60ibbaajSM5TuU",
+          "openLink": false
+        },
+        {
+          "firstName": "kyung goo",
+          "fullName": "kyung goo LEE",
+          "lastName": "LEE",
+          "geoRegion": "Seoul, South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 2,
+              "numMonths": 2
+            },
+            "companyName": "Hyundai Motor Company (현대자동차)",
+            "title": "Kia Exterior Design Group (RESEARCH ENGINEER)",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 2,
+              "numMonths": 2
+            },
+            "startedOn": {
+              "month": 11,
+              "year": 2022
+            }
+          },
+          "profileUrn": "ACwAAAl-a7sBTp4ovjqovp9wF0jGBwOKe7rDkxg",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAAAl-a7sBTp4ovjqovp9wF0jGBwOKe7rDkxg",
+          "openLink": false
+        },
+        {
+          "firstName": "Dong Goo",
+          "fullName": "Dong Goo Kim",
+          "lastName": "Kim",
+          "geoRegion": "Seoul Incheon Metropolitan Area",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 3,
+              "numMonths": 3
+            },
+            "companyName": "Hyundai Motor Company",
+            "title": "책임연구원",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 3,
+              "numMonths": 3
+            },
+            "startedOn": {
+              "month": 10,
+              "year": 2021
+            }
+          },
+          "profileUrn": "ACwAACc4VAkBsl-YAWs--lgVjySY0VwxNxU1F0E",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAACc4VAkBsl-YAWs--lgVjySY0VwxNxU1F0E",
+          "openLink": false
+        },
+        {
+          "firstName": "Hon Goo",
+          "fullName": "Hon Goo Jeong",
+          "lastName": "Jeong",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 18,
+              "numMonths": 6
+            },
+            "companyName": "Hyundai Motor Company",
+            "title": "Project Manager",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 18,
+              "numMonths": 6
+            },
+            "startedOn": {
+              "month": 7,
+              "year": 2006
+            }
+          },
+          "profileUrn": "ACwAACuyIcgBrd2DtDCNMd7KlhwhC5QqFKGIdd8",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAACuyIcgBrd2DtDCNMd7KlhwhC5QqFKGIdd8",
+          "openLink": false
+        },
+        {
+          "firstName": "Goo",
+          "fullName": "Goo Park",
+          "lastName": "Park",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 8,
+              "numMonths": 11
+            },
+            "companyName": "Hyundai Motor Company",
+            "description": "-Electronics Control Engineering Design Team\n",
+            "title": "Research Engineer",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 8,
+              "numMonths": 11
+            },
+            "startedOn": {
+              "month": 2,
+              "year": 2016
+            }
+          },
+          "profileUrn": "ACwAAB1crp0BZbBAipqZUTIZ7Nx9yZtO4RZVids",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAAB1crp0BZbBAipqZUTIZ7Nx9yZtO4RZVids",
+          "openLink": false
+        },
+        {
+          "firstName": "Sun Goo",
+          "fullName": "Sun Goo KANG",
+          "lastName": "KANG",
+          "geoRegion": "South Korea",
+          "currentPosition": {
+            "tenureAtPosition": {
+              "numYears": 7,
+              "numMonths": 6
+            },
+            "companyName": "Hyundai Motor Company",
+            "title": "매니저",
+            "companyId": "825160",
+            "companyUrnResolutionResult": {
+              "name": "Hyundai Motor Company (현대자동차)",
+              "companyPictureDisplayImage": "https://media.licdn.com/dms/image/v2/D560BAQGdH5q8Y1WS4Q/company-logo_200_200/company-logo_200_200/0/1727213210065/hyundai_motor_company_logo?e=1741824000&v=beta&t=aHYcJqOKv1Tv3371vi_f7KjeTnwY0EaJeFyj6gADEF4",
+              "industry": "Motor Vehicle Manufacturing",
+              "location": "Seoul, Seoul, South Korea"
+            },
+            "current": true,
+            "tenureAtCompany": {
+              "numYears": 7,
+              "numMonths": 6
+            },
+            "startedOn": {
+              "month": 7,
+              "year": 2017
+            }
+          },
+          "profileUrn": "ACwAACpMufgBjrQvsIwTL3XkDHByd9a4aunIpTw",
+          "navigationUrl": "https://www.linkedin.com/in/ACwAACpMufgBjrQvsIwTL3XkDHByd9a4aunIpTw",
+          "openLink": false
+        }
+      ],
+      "pagination": {
+        "total": 11,
+        "count": 25,
+        "start": 0,
+        "links": []
+      }
+    }
+  }

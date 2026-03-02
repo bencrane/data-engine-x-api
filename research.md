@@ -1,0 +1,11 @@
+
+FULL SNAPSHOTS (load once, maintain via diffs):
+#DatasetSocrata IDURL1Company Census Fileaz4n-8mr2data.transportation.gov/.../az4n-8mr22Carrier - All With History6eyk-hxeedata.transportation.gov/.../6eyk-hxee3AuthHist - All With History9mw4-x3tudata.transportation.gov/.../9mw4-x3tu4BOC3 - All With History2emp-mxtbdata.transportation.gov/.../2emp-mxtb5ActPendInsur - All With Historyqh9u-swkpdata.transportation.gov/.../qh9u-swkp6InsHist - All With History6sqe-dvqsdata.transportation.gov/.../6sqe-dvqs7Insur - All With Historyypjt-5ydndata.transportation.gov/.../ypjt-5ydn8Rejected - All With History96tg-4mhfdata.transportation.gov/.../96tg-4mhf9Revocation - All With Historysa6p-acbpdata.transportation.gov/.../sa6p-acbp
+DAILY DIFFERENCE FEEDS (pull daily, these ARE your triggers):
+#DatasetSocrata IDURL10Carrier (daily diff)6qg9-x4f8data.transportation.gov/.../6qg9-x4f811AuthHist (daily diff)sn3k-dnx7data.transportation.gov/.../sn3k-dnx712BOC3 (daily diff)fb8g-ngamdata.transportation.gov/.../fb8g-ngam13ActPendInsur (daily diff)chgs-tx6xdata.transportation.gov/.../chgs-tx6x14InsHist (daily diff)xkmg-ff2tdata.transportation.gov/.../xkmg-ff2t15Insur (daily diff)mzmm-6xepdata.transportation.gov/.../mzmm-6xep16Rejected (daily diff)t3zq-c6n3data.transportation.gov/.../t3zq-c6n317Revocation (daily diff)pivg-szjedata.transportation.gov/.../pivg-szje
+SAFETY (daily for census/crash/inspection, monthly for SMS):
+#DatasetSocrata ID18Crash Fileaayw-vxb319Vehicle Inspection Filefx4q-ay7w20Inspections Per Unitwt8s-2hbx21Vehicle Inspections & Violations876r-jsdb22Inspections & Citationsqbt8-7vic23Out of Service Ordersp2mt-9ige
+SMS (monthly refresh, ~15th of following month):
+#DatasetSocrata ID24SMS Input - Censuskjg3-diqy25SMS Input - Inspectionrbkj-cgst26SMS Input - Crash4wxs-vbns27SMS Input - Violation8mt8-2mdr28SMS AB Passm3ry-qcip29SMS C Passh3zn-uid930SMS AB PassProperty4y6x-dmck31SMS C PassPropertyh9zy-gjn8
+All accessible at https://data.transportation.gov/Trucking-and-Motorcoaches/{name}/{socrata-id}. All free, public domain, no auth required. The Socrata SODA API lets you query any of these as JSON with filters instead of downloading full CSVs.
+For your cron setup, the priority tier is: 10-13, 17, 23 daily (the trigger feeds), 1-2 as your master tables, everything else as enrichment you pull on-demand or weekly.

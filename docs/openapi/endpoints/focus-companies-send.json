@@ -1,0 +1,38 @@
+{
+  "endpoint": "/run/focus-companies/send",
+  "method": "POST",
+  "summary": "Send selected focus companies to Data Engine X",
+  "description": "Sends selected focus company domains to a Data Engine X webhook to trigger a blueprint.",
+  "request": {
+    "schema": "FocusCompanySendRequest",
+    "properties": {
+      "webhook_url": {
+        "type": "string",
+        "required": true
+      },
+      "domains": {
+        "type": "array of strings",
+        "required": true
+      },
+      "blueprint_id": {
+        "type": "string | null",
+        "required": false
+      }
+    }
+  },
+  "response": {
+    "schema": "FocusCompanySendResponse",
+    "properties": {
+      "success": { "type": "boolean", "required": true },
+      "sent_count": { "type": "integer", "default": 0 },
+      "failed_count": { "type": "integer", "default": 0 },
+      "results": { "type": "array of objects | null" },
+      "error": { "type": "string | null" }
+    }
+  },
+  "example_request": {
+    "webhook_url": "https://data-engine-x.com/webhook/abc123",
+    "domains": ["salesforce.com", "hubspot.com", "zendesk.com"],
+    "blueprint_id": "bp-12345"
+  }
+}

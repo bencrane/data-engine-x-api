@@ -1,0 +1,36 @@
+OK. Are u able to transform this ? 
+{
+  "origin_company": {
+    "name": "WithCoverage",
+    "domain": "withcoverage.com",
+    "description": "The insurance brokerage industry is ready for a new standard: ambitious businesses often overpay for insurance, are inadequately protected, and are left with a non-transparent, disorganized experience. Most businesses don't have an in-house Risk Management Team. That's where we come in. WithCoverage provides ambitious businesses with a Modern Risk Management Solution. An expert team and powerful technology – designed to protect you today and as you scale. A few of our clients include: GoPuff, Chomps, Hungryroot, Blank Street, Bombas, Eight Sleep, Bluestone Lane, Salt & Straw, Kitsch, Happy Dad, and Elephante."
+  },
+  "target_company": {
+    "name": "HelloFresh",
+    "domain": "hellofresh.com",
+    "description": "HelloFresh is on a mission to change the way people eat, forever! From our 2011 founding in Europe's vibrant tech hub Berlin, we're evolving from the world's leading meal kit company to the world's leading food solutions group. We delivered 243.3 million meals and reached 7.5 million active customers around the world in Q3 2022. HelloFresh Group consists of six brands that provide customers with high quality food and recipes for different meal occasions. Every ingredient needed for our meals are carefully planned, responsibly sourced and delivered to your door when it's most convenient for you. Only HelloFresh gives you the tools to achieve something delicious every day.",
+    "url": "https://www.hellofresh.com/careers/locations"
+  },
+  "competitors_of_target_company": [
+    {
+      "name": "Home Chef",
+      "domain": "homechef.com",
+      "description": "Meal kit and prepared meal delivery service offering classic meal kits, express options, and Ready-to-Heat meals. Owned by Kroger. Also operates Tempo, a Ready-to-Heat brand for microwave-ready chef-curated meals. Built In Chicago Best Places to Work 2024 & 2025."
+    },
+    {
+      "name": "Instacart",
+      "domain": "instacart.com",
+      "description": "Leading grocery technology company in North America. Partners with 1,500+ retail banners across 85,000+ stores for online shopping, delivery, and pickup. Offers enterprise tech suite for retailers, advertising services via Instacart Ads, and Instacart Health for nutrition security initiatives. ~600,000 shoppers on platform."
+    },
+    {
+      "name": "Blue Apron",
+      "domain": "blueapron.com",
+      "description": "Meal kit delivery service offering pre-portioned ingredients and easy-to-follow recipes. Now part of Wonder Group. Delivers nationwide with no subscription required. Combines culinary excellence, innovation, and logistics for home cooking experiences."
+    },
+    {
+      "name": "CookUnity",
+      "domain": "cookunity.com",
+      "description": "Chef-Direct Subscription service and chef-to-food lover marketplace connecting talented chefs with consumers. Small-batch, restaurant-quality ready-to-eat meals delivered weekly from a diverse collective of all-star chefs for elevated at-home dining."
+    }
+  ]
+}

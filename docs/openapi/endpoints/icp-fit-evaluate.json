@@ -1,0 +1,49 @@
+{
+  "endpoint": "/run/companies/gemini/icp-fit/evaluate",
+  "method": "POST",
+  "summary": "Evaluate if a company fits an ICP criterion",
+  "description": "Wrapper for Modal function: evaluate_icp_fit",
+  "request": {
+    "schema": "EvaluateICPFitRequest",
+    "properties": {
+      "criterion": {
+        "type": "string",
+        "required": true
+      },
+      "company_name": {
+        "type": "string",
+        "required": true
+      },
+      "domain": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "string",
+        "required": true
+      }
+    }
+  },
+  "response": {
+    "schema": "EvaluateICPFitResponse",
+    "properties": {
+      "success": { "type": "boolean", "required": true },
+      "domain": { "type": "string | null" },
+      "company_name": { "type": "string | null" },
+      "criterion": { "type": "string | null" },
+      "verdict": { "type": "string | null" },
+      "reasoning": { "type": "string | null" },
+      "raw_response": { "type": "string | null" },
+      "input_tokens": { "type": "integer | null" },
+      "output_tokens": { "type": "integer | null" },
+      "cost_usd": { "type": "number | null" },
+      "error": { "type": "string | null" }
+    }
+  },
+  "example_request": {
+    "criterion": "Enterprise companies with 500+ employees in financial services",
+    "company_name": "JPMorgan Chase",
+    "domain": "jpmorganchase.com",
+    "description": "Global financial services firm with banking and investment operations"
+  }
+}

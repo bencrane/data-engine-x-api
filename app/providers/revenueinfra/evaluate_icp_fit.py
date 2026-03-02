@@ -13,7 +13,7 @@ from app.providers.revenueinfra._common import (
     ProviderAdapterResult,
 )
 
-_EVALUATE_ICP_FIT_TIMEOUT_SECONDS = 60.0
+_EVALUATE_ICP_FIT_TIMEOUT_SECONDS = 300.0
 
 
 async def evaluate_icp_fit(

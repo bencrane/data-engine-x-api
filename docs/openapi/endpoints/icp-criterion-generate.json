@@ -1,0 +1,46 @@
+{
+  "endpoint": "/run/companies/gemini/icp-criterion/generate",
+  "method": "POST",
+  "summary": "Generate ICP criterion from customers and titles",
+  "description": "Wrapper for Modal function: generate_icp_criterion",
+  "request": {
+    "schema": "GenerateICPCriterionRequest",
+    "properties": {
+      "company_name": {
+        "type": "string",
+        "required": true
+      },
+      "domain": {
+        "type": "string",
+        "required": true
+      },
+      "customers": {
+        "type": "array of strings",
+        "required": true
+      },
+      "icp_titles": {
+        "type": "array of strings",
+        "required": true
+      }
+    }
+  },
+  "response": {
+    "schema": "GenerateICPCriterionResponse",
+    "properties": {
+      "success": { "type": "boolean", "required": true },
+      "domain": { "type": "string | null" },
+      "company_name": { "type": "string | null" },
+      "criterion": { "type": "string | null" },
+      "input_tokens": { "type": "integer | null" },
+      "output_tokens": { "type": "integer | null" },
+      "cost_usd": { "type": "number | null" },
+      "error": { "type": "string | null" }
+    }
+  },
+  "example_request": {
+    "company_name": "Salesforce",
+    "domain": "salesforce.com",
+    "customers": ["Toyota", "American Express", "T-Mobile"],
+    "icp_titles": ["VP of Sales", "Sales Director", "CRO"]
+  }
+}

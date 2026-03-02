@@ -13,7 +13,7 @@ from app.providers.revenueinfra._common import (
     ProviderAdapterResult,
 )
 
-_ICP_JOB_TITLES_GEMINI_TIMEOUT_SECONDS = 60.0
+_ICP_JOB_TITLES_GEMINI_TIMEOUT_SECONDS = 300.0
 
 
 async def research_icp_job_titles_gemini(

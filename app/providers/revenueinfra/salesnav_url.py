@@ -13,7 +13,7 @@ from app.providers.revenueinfra._common import (
     ProviderAdapterResult,
 )
 
-_SALESNAV_URL_TIMEOUT_SECONDS = 60.0
+_SALESNAV_URL_TIMEOUT_SECONDS = 300.0
 
 
 async def build_salesnav_url(

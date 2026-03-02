@@ -13,7 +13,7 @@ from app.providers.revenueinfra._common import (
     ProviderAdapterResult,
 )
 
-_DISCOVER_CUSTOMERS_GEMINI_TIMEOUT_SECONDS = 60.0
+_DISCOVER_CUSTOMERS_GEMINI_TIMEOUT_SECONDS = 300.0
 
 
 async def discover_customers_gemini(

@@ -1,0 +1,9 @@
+Step 1 verification output (reference.job_title_lookup):
+                   raw_job_title                   |             raw_job_title_normalized---------------------------------------------------+--------------------------------------------------- Director, Executive Recruiting                    | director, executive recruiting People Operations Specialist                      | people operations specialist Senior Manager GTM Revenue Operations - Marketing | senior manager gtm revenue operations - marketing Recruiting and People Operations Specialist       | recruiting and people operations specialist Founding Software Engineer                        | founding software engineer(5 rows)
+Step 2 verification output (core.person_work_history):
+                              title                               |                         title_normalized------------------------------------------------------------------+------------------------------------------------------------------ Programmatic Sales Manager                                       | programmatic sales manager Director, Digital Partnerships                                   | director, digital partnerships Senior Vice President CRM Solutions & Business Development Group | senior vice president crm solutions & business development group Senior Vice President Conversant Media                           | senior vice president conversant media Ad Operations Sr. Campaign Mgr                                   | ad operations sr. campaign mgr(5 rows)
+Index creation confirmation:
+idx_job_title_lookup_raw_normalized created successfully (CREATE INDEX)
+idx_person_work_history_title_normalized created successfully (CREATE INDEX)
+Errors:
+No errors occurred in the executed schema/verification commands.

@@ -1,0 +1,44 @@
+{
+  "name": "AlumniGTM Company Workflow v1",
+  "description": "Infer LinkedIn URL, enrich company via BlitzAPI, research ICP job titles, discover customers, generate ICP criterion, and build Sales Navigator URL.",
+  "entity_type": "company",
+  "org_id": "b0293785-aa7a-4234-8201-cc47305295f8",
+  "steps": [
+    {
+      "position": 1,
+      "operation_id": "company.research.infer_linkedin_url",
+      "step_config": {}
+    },
+    {
+      "position": 2,
+      "operation_id": "company.enrich.profile_blitzapi",
+      "step_config": {},
+      "condition": {
+        "exists": "company_linkedin_url"
+      }
+    },
+    {
+      "position": 3,
+      "operation_id": "company.research.icp_job_titles_gemini",
+      "step_config": {}
+    },
+    {
+      "position": 4,
+      "operation_id": "company.research.discover_customers_gemini",
+      "step_config": {}
+    },
+    {
+      "position": 5,
+      "operation_id": "company.derive.icp_criterion",
+      "step_config": {}
+    },
+    {
+      "position": 6,
+      "operation_id": "company.derive.salesnav_url",
+      "step_config": {},
+      "condition": {
+        "exists": "company_linkedin_id"
+      }
+    }
+  ]
+}

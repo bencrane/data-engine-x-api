@@ -1,0 +1,55 @@
+{
+  "endpoint": "/run/tools/claude/salesnav-url/build",
+  "method": "POST",
+  "summary": "Build a LinkedIn Sales Navigator search URL",
+  "description": "Wrapper for Modal function: build_salesnav_url",
+  "request": {
+    "schema": "BuildSalesNavURLRequest",
+    "properties": {
+      "orgId": {
+        "type": "string",
+        "required": true
+      },
+      "companyName": {
+        "type": "string",
+        "required": true
+      },
+      "titles": {
+        "type": "array of strings",
+        "required": true
+      },
+      "excludedSeniority": {
+        "type": "array of strings | null",
+        "required": false
+      },
+      "regions": {
+        "type": "array of strings | null",
+        "required": false
+      },
+      "companyHQRegions": {
+        "type": "array of strings | null",
+        "required": false
+      }
+    }
+  },
+  "response": {
+    "schema": "BuildSalesNavURLResponse",
+    "properties": {
+      "success": { "type": "boolean", "required": true },
+      "url": { "type": "string | null" },
+      "orgId": { "type": "string | null" },
+      "companyName": { "type": "string | null" },
+      "titles": { "type": "array of strings | null" },
+      "usage": { "type": "object | null" },
+      "error": { "type": "string | null" }
+    }
+  },
+  "example_request": {
+    "orgId": "12345",
+    "companyName": "Salesforce",
+    "titles": ["VP of Sales", "Sales Director", "CRO"],
+    "excludedSeniority": ["Entry", "Training"],
+    "regions": ["United States"],
+    "companyHQRegions": ["United States"]
+  }
+}
