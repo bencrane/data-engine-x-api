@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.company_ads import upsert_company_ads
 from app.services.company_customers import upsert_company_customers
 from app.services.entity_relationships import (
     invalidate_entity_relationship,
@@ -203,6 +204,16 @@ class InternalUpsertCompanyCustomersRequest(BaseModel):
     company_domain: str
     customers: list[dict[str, Any]]
     discovered_by_operation_id: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertCompanyAdsRequest(BaseModel):
+    company_domain: str
+    company_entity_id: str | None = None
+    platform: str
+    ads: list[dict[str, Any]]
+    discovered_by_operation_id: str
     source_submission_id: str | None = None
     source_pipeline_run_id: str | None = None
 
@@ -554,6 +565,26 @@ async def internal_upsert_company_customers(
         company_entity_id=payload.company_entity_id,
         company_domain=payload.company_domain,
         customers=payload.customers,
+        discovered_by_operation_id=payload.discovered_by_operation_id,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/company-ads/upsert", response_model=DataEnvelope)
+async def internal_upsert_company_ads(
+    payload: InternalUpsertCompanyAdsRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_company_ads(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        company_entity_id=payload.company_entity_id,
+        platform=payload.platform,
+        ads=payload.ads,
         discovered_by_operation_id=payload.discovered_by_operation_id,
         source_submission_id=payload.source_submission_id,
         source_pipeline_run_id=payload.source_pipeline_run_id,
