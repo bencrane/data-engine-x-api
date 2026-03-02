@@ -1852,6 +1852,73 @@ export const runPipeline = task({
           }
         }
 
+        if (operationId === "company.research.discover_customers_gemini" && result.status === "found" && result.output) {
+          try {
+            const customers = (result.output as Record<string, unknown>).customers;
+            if (Array.isArray(customers) && customers.length > 0) {
+              const companyDomain = String(
+                cumulativeContext.company_domain || cumulativeContext.domain || cumulativeContext.canonical_domain || "",
+              );
+              const companyEntityId = String(cumulativeContext.entity_id || "");
+              if (companyDomain) {
+                await internalPost(internalConfig, "/api/internal/company-customers/upsert", {
+                  company_entity_id: companyEntityId,
+                  company_domain: companyDomain,
+                  customers,
+                  discovered_by_operation_id: operationId,
+                  source_submission_id: run.submission_id,
+                  source_pipeline_run_id: pipeline_run_id,
+                });
+                logger.info("Company customers persisted to dedicated table", {
+                  domain: companyDomain,
+                  customer_count: customers.length,
+                  pipeline_run_id,
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn("Failed to persist company customers to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        if (operationId === "company.research.icp_job_titles_gemini" && result.status === "found" && result.output) {
+          try {
+            const output = result.output as Record<string, unknown>;
+            const companyDomain = String(
+              output.domain || output.company_domain || cumulativeContext.company_domain || cumulativeContext.domain || "",
+            );
+            if (companyDomain) {
+              await internalPost(internalConfig, "/api/internal/gemini-icp-job-titles/upsert", {
+                company_domain: companyDomain,
+                company_name: output.company_name || cumulativeContext.company_name,
+                company_description:
+                  output.company_description || cumulativeContext.description_raw || cumulativeContext.description,
+                inferred_product: output.inferred_product,
+                buyer_persona: output.buyer_persona,
+                titles: output.titles,
+                champion_titles: output.champion_titles,
+                evaluator_titles: output.evaluator_titles,
+                decision_maker_titles: output.decision_maker_titles,
+                raw_response: output,
+                source_submission_id: run.submission_id,
+                source_pipeline_run_id: pipeline_run_id,
+              });
+              logger.info("Gemini ICP job titles persisted to dedicated table", {
+                domain: companyDomain,
+                pipeline_run_id,
+              });
+            }
+          } catch (error) {
+            logger.warn("Failed to persist Gemini ICP job titles to dedicated table", {
+              pipeline_run_id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         cumulativeContext = mergeContext(cumulativeContext, result.output);
         const stepFailed = result.status === "failed";
         if (stepFailed) {
