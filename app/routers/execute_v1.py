@@ -102,6 +102,14 @@ from app.services.resolve_operations import (
     execute_company_resolve_location_from_domain,
     execute_person_resolve_linkedin_from_email,
 )
+from app.services.hq_workflow_operations import (
+    execute_company_derive_evaluate_icp_fit,
+    execute_company_derive_icp_criterion,
+    execute_company_derive_salesnav_url,
+    execute_company_research_discover_customers_gemini,
+    execute_company_research_icp_job_titles_gemini,
+    execute_company_research_infer_linkedin_url,
+)
 from app.services.salesnav_operations import execute_person_search_sales_nav_url
 
 router = APIRouter()
@@ -141,6 +149,9 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.discover_competitors",
     "company.research.find_similar_companies",
     "company.research.lookup_customers",
+    "company.research.infer_linkedin_url",
+    "company.research.icp_job_titles_gemini",
+    "company.research.discover_customers_gemini",
     "company.fetch.icp_candidates",
     "company.research.lookup_alumni",
     "company.research.lookup_champions",
@@ -154,6 +165,9 @@ SUPPORTED_OPERATION_IDS = {
     "company.analyze.sec_10q",
     "company.analyze.sec_8k_executive",
     "company.derive.pricing_intelligence",
+    "company.derive.icp_criterion",
+    "company.derive.salesnav_url",
+    "company.derive.evaluate_icp_fit",
     "company.derive.extract_icp_titles",
     "company.derive.detect_changes",
     "company.search.by_tech_stack",
@@ -621,6 +635,39 @@ async def execute_v1(
         )
         return DataEnvelope(data=result)
 
+    if payload.operation_id == "company.research.infer_linkedin_url":
+        result = await execute_company_research_infer_linkedin_url(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.icp_job_titles_gemini":
+        result = await execute_company_research_icp_job_titles_gemini(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.discover_customers_gemini":
+        result = await execute_company_research_discover_customers_gemini(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
     if payload.operation_id == "company.fetch.icp_candidates":
         merged_input = {**payload.input, **(payload.options or {})}
         result = await execute_company_fetch_icp_candidates(input_data=merged_input)
@@ -756,6 +803,39 @@ async def execute_v1(
 
     if payload.operation_id == "company.derive.pricing_intelligence":
         result = await execute_company_derive_pricing_intelligence(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.derive.icp_criterion":
+        result = await execute_company_derive_icp_criterion(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.derive.salesnav_url":
+        result = await execute_company_derive_salesnav_url(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.derive.evaluate_icp_fit":
+        result = await execute_company_derive_evaluate_icp_fit(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
