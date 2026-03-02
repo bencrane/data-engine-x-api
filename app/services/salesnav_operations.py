@@ -42,8 +42,12 @@ async def execute_person_search_sales_nav_url(
         input_data.get("sales_nav_url")
         or context.get("sales_nav_url")
     )
-    page = _as_int(input_data.get("page") or options.get("page"), default=1, minimum=1)
     account_number = _as_int(input_data.get("account_number"), default=1, minimum=1)
+    max_pages = _as_int(
+        input_data.get("max_pages") or options.get("max_pages") or context.get("max_pages"),
+        default=50,
+        minimum=1,
+    )
 
     if not sales_nav_url:
         return {
@@ -55,24 +59,51 @@ async def execute_person_search_sales_nav_url(
         }
 
     settings = get_settings()
-    provider_result = await rapidapi_salesnav.scrape_sales_nav_url(
-        api_key=settings.rapidapi_salesnav_scrape_api_key,
-        sales_nav_url=sales_nav_url,
-        page=page,
-        account_number=account_number,
-    )
-    attempt = _as_dict(provider_result.get("attempt"))
-    attempts.append(attempt)
+    all_results: list[dict[str, Any]] = []
+    current_page = 1
+    total_available: int | None = None
 
-    mapped = _as_dict(provider_result.get("mapped"))
+    while current_page <= max_pages:
+        provider_result = await rapidapi_salesnav.scrape_sales_nav_url(
+            api_key=settings.rapidapi_salesnav_scrape_api_key,
+            sales_nav_url=sales_nav_url,
+            page=current_page,
+            account_number=account_number,
+        )
+        attempt = _as_dict(provider_result.get("attempt"))
+        attempts.append(attempt)
+
+        provider_status = attempt.get("status", "failed")
+        if provider_status in {"failed", "skipped"}:
+            break
+
+        mapped = _as_dict(provider_result.get("mapped"))
+        page_results = mapped.get("results")
+        if not isinstance(page_results, list):
+            page_results = []
+
+        all_results.extend(page_results)
+
+        if total_available is None:
+            total_available = mapped.get("total_available")
+
+        if len(page_results) == 0:
+            break
+
+        if isinstance(total_available, int) and len(all_results) >= total_available:
+            break
+
+        current_page += 1
+
     try:
         output = SalesNavSearchOutput.model_validate(
             {
-                "results": mapped.get("results"),
-                "result_count": mapped.get("result_count"),
-                "total_available": mapped.get("total_available"),
-                "page": mapped.get("page"),
-                "source_url": mapped.get("source_url"),
+                "results": all_results,
+                "result_count": len(all_results),
+                "total_available": total_available,
+                "page": current_page,
+                "pages_fetched": current_page if all_results else 0,
+                "source_url": sales_nav_url,
                 "source_provider": "rapidapi_salesnav",
             }
         ).model_dump()
@@ -88,14 +119,15 @@ async def execute_person_search_sales_nav_url(
             },
         }
 
-    provider_status = attempt.get("status", "failed")
-    if provider_status in {"failed", "skipped"}:
-        status = "failed"
-    elif provider_status == "not_found":
-        status = "not_found"
+    if not all_results and attempts:
+        last_attempt = attempts[-1]
+        last_status = last_attempt.get("status", "failed")
+        if last_status in {"failed", "skipped"}:
+            status = "failed"
+        else:
+            status = "not_found"
     else:
-        result_count = output.get("result_count")
-        status = "found" if isinstance(result_count, int) and result_count > 0 else "not_found"
+        status = "found" if all_results else "not_found"
 
     return {
         "run_id": run_id,

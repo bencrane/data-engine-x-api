@@ -28,5 +28,6 @@ class SalesNavSearchOutput(BaseModel):
     result_count: int | None = None
     total_available: int | None = None
     page: int | None = None
+    pages_fetched: int | None = None
     source_url: str | None = None
     source_provider: str = "rapidapi_salesnav"
