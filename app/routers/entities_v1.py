@@ -9,6 +9,7 @@ from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.company_ads import query_company_ads
 from app.services.company_customers import query_company_customers
 from app.services.company_intel_briefings import query_company_intel_briefings
 from app.services.entity_relationships import query_entity_relationships
@@ -114,6 +115,15 @@ class IcpJobTitlesQueryRequest(BaseModel):
 class CompanyCustomersQueryRequest(BaseModel):
     company_domain: str | None = None
     company_entity_id: str | None = None
+    limit: int = 100
+    offset: int = 0
+    org_id: str | None = None
+
+
+class CompanyAdsQueryRequest(BaseModel):
+    company_domain: str | None = None
+    company_entity_id: str | None = None
+    platform: str | None = None
     limit: int = 100
     offset: int = 0
     org_id: str | None = None
@@ -488,6 +498,37 @@ async def query_company_customers_rows(
         org_id=org_id,
         company_domain=payload.company_domain,
         company_entity_id=payload.company_entity_id,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/company-ads/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_company_ads_rows(
+    payload: CompanyAdsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin company ads queries", 400)
+
+    platform = _normalize_text(payload.platform)
+    if platform:
+        platform = platform.lower()
+        if platform not in {"linkedin", "meta", "google"}:
+            return error_response("platform must be one of: linkedin, meta, google", 400)
+
+    results = query_company_ads(
+        org_id=org_id,
+        company_domain=payload.company_domain,
+        company_entity_id=payload.company_entity_id,
+        platform=platform,
         limit=payload.limit,
         offset=payload.offset,
     )
