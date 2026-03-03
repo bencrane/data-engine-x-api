@@ -115,6 +115,7 @@ from app.services.hq_workflow_operations import (
     execute_company_research_discover_customers_gemini,
     execute_company_research_icp_job_titles_gemini,
     execute_company_research_infer_linkedin_url,
+    execute_company_research_lookup_customers_resolved,
     execute_company_resolve_domain_from_name_hq,
 )
 from app.services.salesnav_operations import execute_person_search_sales_nav_url
@@ -161,6 +162,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.research.discover_competitors",
     "company.research.find_similar_companies",
     "company.research.lookup_customers",
+    "company.research.lookup_customers_resolved",
     "company.research.infer_linkedin_url",
     "company.research.icp_job_titles_gemini",
     "company.research.discover_customers_gemini",
@@ -693,6 +695,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.research.lookup_customers":
         result = await execute_company_research_lookup_customers(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.research.lookup_customers_resolved":
+        result = await execute_company_research_lookup_customers_resolved(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
