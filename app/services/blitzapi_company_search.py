@@ -6,6 +6,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.blitzapi_company_search import BlitzAPICompanySearchOutput
 from app.providers import blitzapi
+from app.services._input_extraction import extract_company_name, extract_domain
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -152,6 +153,16 @@ def _build_company_filters(input_data: dict[str, Any]) -> dict[str, Any]:
     min_followers = _as_int(_extract_from_input_context_step(input_data, "min_linkedin_followers"))
     if min_followers is not None:
         company["min_linkedin_followers"] = min_followers
+
+    # Shared fallback extraction keeps company filter derivation consistent
+    # with other service functions when direct filters are absent.
+    derived_domain = extract_domain(input_data)
+    if derived_domain and "website" not in company:
+        company["website"] = {"include": [derived_domain], "exclude": []}
+
+    derived_company_name = extract_company_name(input_data)
+    if derived_company_name and "name" not in company:
+        company["name"] = {"include": [derived_company_name], "exclude": []}
 
     return company
 
