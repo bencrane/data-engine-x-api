@@ -14,6 +14,12 @@ from app.contracts.company_enrich import (
     TechnographicsOutput,
 )
 from app.providers import blitzapi, companyenrich, enigma, fmcsa, leadmagic, prospeo, storeleads_enrich
+from app.services._input_extraction import (
+    extract_company_linkedin_url,
+    extract_company_name,
+    extract_company_website,
+    extract_domain,
+)
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -222,10 +228,10 @@ async def _prospeo_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    company_website = _as_non_empty_str(input_data.get("company_website"))
-    company_domain = _as_non_empty_str(input_data.get("company_domain"))
-    company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
-    company_name = _as_non_empty_str(input_data.get("company_name"))
+    company_website = extract_company_website(input_data)
+    company_domain = extract_domain(input_data)
+    company_linkedin_url = extract_company_linkedin_url(input_data)
+    company_name = extract_company_name(input_data)
     source_company_id = _as_non_empty_str(input_data.get("source_company_id"))
     data = {
         "company_website": company_website or company_domain,
@@ -244,8 +250,8 @@ async def _blitzapi_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
-    domain = _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(input_data.get("company_website"))
+    linkedin_url = extract_company_linkedin_url(input_data)
+    domain = extract_domain(input_data) or _domain_from_website(extract_company_website(input_data))
     if not linkedin_url and domain:
         bridge = await blitzapi.domain_to_linkedin(api_key=settings.blitzapi_api_key, domain=domain)
         attempts.append(bridge["attempt"])
@@ -264,7 +270,7 @@ async def _companyenrich_company_enrich(
     attempts: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     settings = get_settings()
-    domain = _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(input_data.get("company_website"))
+    domain = extract_domain(input_data) or _domain_from_website(extract_company_website(input_data))
     result = await companyenrich.enrich_company(
         api_key=settings.companyenrich_api_key,
         domain=domain,
@@ -280,9 +286,9 @@ async def _leadmagic_company_enrich(
 ) -> dict[str, Any] | None:
     settings = get_settings()
     payload = {
-        "company_domain": _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(input_data.get("company_website")),
-        "profile_url": _as_non_empty_str(input_data.get("company_linkedin_url")),
-        "company_name": _as_non_empty_str(input_data.get("company_name")),
+        "company_domain": extract_domain(input_data) or _domain_from_website(extract_company_website(input_data)),
+        "profile_url": extract_company_linkedin_url(input_data),
+        "company_name": extract_company_name(input_data),
     }
     result = await leadmagic.enrich_company(api_key=settings.leadmagic_api_key, payload=payload)
     attempts.append(result["attempt"])
@@ -299,10 +305,10 @@ async def execute_company_enrich_profile(
     sources: list[str] = []
 
     current_input: dict[str, Any] = {
-        "company_domain": _as_non_empty_str(input_data.get("company_domain")),
-        "company_website": _as_non_empty_str(input_data.get("company_website")),
-        "company_linkedin_url": _as_non_empty_str(input_data.get("company_linkedin_url")),
-        "company_name": _as_non_empty_str(input_data.get("company_name")),
+        "company_domain": extract_domain(input_data),
+        "company_website": extract_company_website(input_data),
+        "company_linkedin_url": extract_company_linkedin_url(input_data),
+        "company_name": extract_company_name(input_data),
         "source_company_id": _as_non_empty_str(input_data.get("source_company_id")),
     }
 
@@ -392,19 +398,8 @@ async def execute_company_enrich_profile_blitzapi(
     run_id = str(uuid.uuid4())
     operation_id = "company.enrich.profile_blitzapi"
 
-    context = _as_dict(input_data.get("cumulative_context"))
-    company_linkedin_url = (
-        _as_non_empty_str(input_data.get("company_linkedin_url"))
-        or _as_non_empty_str(input_data.get("linkedin_url"))
-        or _as_non_empty_str(context.get("company_linkedin_url"))
-        or _as_non_empty_str(context.get("linkedin_url"))
-    )
-    company_domain = (
-        _as_non_empty_str(input_data.get("company_domain"))
-        or _as_non_empty_str(input_data.get("domain"))
-        or _as_non_empty_str(context.get("company_domain"))
-        or _as_non_empty_str(context.get("domain"))
-    )
+    company_linkedin_url = extract_company_linkedin_url(input_data)
+    company_domain = extract_domain(input_data)
 
     if not company_linkedin_url and not company_domain:
         return {
@@ -477,7 +472,7 @@ async def execute_company_enrich_technographics(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    company_domain = _as_non_empty_str(input_data.get("company_domain"))
+    company_domain = extract_domain(input_data)
     if not company_domain:
         return {
             "run_id": run_id,
@@ -536,7 +531,7 @@ async def execute_company_enrich_ecommerce(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    company_domain = _as_non_empty_str(input_data.get("company_domain"))
+    company_domain = extract_domain(input_data)
     if not company_domain:
         return {
             "run_id": run_id,
@@ -663,10 +658,8 @@ async def execute_company_enrich_card_revenue(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    company_name = _as_non_empty_str(input_data.get("company_name"))
-    company_domain = _as_non_empty_str(input_data.get("company_domain")) or _domain_from_website(
-        input_data.get("company_website")
-    )
+    company_name = extract_company_name(input_data)
+    company_domain = extract_domain(input_data) or _domain_from_website(extract_company_website(input_data))
 
     if not company_name and not company_domain:
         return {
@@ -766,14 +759,11 @@ async def execute_company_enrich_locations(
     operation_id = "company.enrich.locations"
 
     context = _as_dict(input_data.get("cumulative_context"))
-    enigma_brand_id = _as_non_empty_str(input_data.get("enigma_brand_id")) or _as_non_empty_str(
-        context.get("enigma_brand_id")
-    )
-    company_name = _as_non_empty_str(input_data.get("company_name")) or _as_non_empty_str(context.get("company_name"))
+    enigma_brand_id = _as_non_empty_str(input_data.get("enigma_brand_id")) or _as_non_empty_str(context.get("enigma_brand_id"))
+    company_name = extract_company_name(input_data)
     company_domain = (
-        _as_non_empty_str(input_data.get("company_domain"))
-        or _domain_from_website(input_data.get("company_website"))
-        or _as_non_empty_str(context.get("company_domain"))
+        extract_domain(input_data)
+        or _domain_from_website(extract_company_website(input_data))
         or _domain_from_website(context.get("company_website"))
     )
 
