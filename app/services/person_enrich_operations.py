@@ -9,6 +9,16 @@ from app.config import get_settings
 from app.contracts.person_enrich import PersonEnrichProfileOutput
 from app.providers import ampleleads
 from app.providers.common import now_ms, parse_json_or_raw
+from app.services._input_extraction import (
+    extract_company_linkedin_url,
+    extract_company_name,
+    extract_domain,
+    extract_person_email,
+    extract_person_first_name,
+    extract_person_full_name,
+    extract_person_last_name,
+    extract_person_linkedin_url,
+)
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -424,14 +434,14 @@ async def execute_person_enrich_profile(
     run_id = str(uuid.uuid4())
     attempts: list[dict[str, Any]] = []
 
-    linkedin_url = _as_non_empty_str(input_data.get("linkedin_url"))
-    first_name = _as_non_empty_str(input_data.get("first_name"))
-    last_name = _as_non_empty_str(input_data.get("last_name"))
-    full_name = _as_non_empty_str(input_data.get("full_name"))
-    company_domain = _domain_from_value(input_data.get("company_domain"))
-    company_name = _as_non_empty_str(input_data.get("company_name"))
-    company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
-    email = _as_non_empty_str(input_data.get("email"))
+    linkedin_url = extract_person_linkedin_url(input_data)
+    first_name = extract_person_first_name(input_data)
+    last_name = extract_person_last_name(input_data)
+    full_name = extract_person_full_name(input_data)
+    company_domain = _domain_from_value(extract_domain(input_data))
+    company_name = extract_company_name(input_data)
+    company_linkedin_url = extract_company_linkedin_url(input_data)
+    email = extract_person_email(input_data)
     person_id = _as_non_empty_str(input_data.get("person_id"))
     step_config = _as_dict(input_data.get("step_config"))
     include_work_history = _as_bool(

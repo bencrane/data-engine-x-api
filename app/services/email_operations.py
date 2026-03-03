@@ -6,6 +6,15 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.person_contact import ResolveEmailOutput, ResolveMobilePhoneOutput, VerifyEmailOutput
 from app.providers import blitzapi, icypeas, leadmagic, millionverifier, parallel_ai, reoon
+from app.services._input_extraction import (
+    extract_company_name,
+    extract_domain,
+    extract_person_email,
+    extract_person_first_name,
+    extract_person_full_name,
+    extract_person_last_name,
+    extract_person_linkedin_url,
+)
 
 INCONCLUSIVE_MILLIONVERIFIER_RESULTS = {"unknown", "catch_all"}
 INCONCLUSIVE_REOON_STATUSES = {"unknown", "catch_all"}
@@ -176,16 +185,16 @@ async def execute_person_contact_resolve_email(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    full_name = _as_non_empty_str(input_data.get("full_name"))
-    first_name = _as_non_empty_str(input_data.get("first_name"))
-    last_name = _as_non_empty_str(input_data.get("last_name"))
+    full_name = extract_person_full_name(input_data)
+    first_name = extract_person_first_name(input_data)
+    last_name = extract_person_last_name(input_data)
     if not first_name and not last_name:
         split_first, split_last = _split_full_name(full_name)
         first_name = first_name or split_first
         last_name = last_name or split_last
 
-    company_domain = _as_non_empty_str(input_data.get("company_domain"))
-    company_name = _as_non_empty_str(input_data.get("company_name"))
+    company_domain = extract_domain(input_data)
+    company_name = extract_company_name(input_data)
     domain_or_company = company_domain or company_name
 
     if not domain_or_company:
@@ -287,7 +296,7 @@ async def execute_person_contact_verify_email(
 ) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
-    email = _as_non_empty_str(input_data.get("email"))
+    email = extract_person_email(input_data)
     if not email:
         return {
             "run_id": run_id,
@@ -337,8 +346,8 @@ async def execute_person_contact_resolve_mobile_phone(
     attempts: list[dict[str, Any]] = []
     run_id = str(uuid.uuid4())
 
-    profile_url = _as_non_empty_str(input_data.get("profile_url")) or _as_non_empty_str(input_data.get("linkedin_url"))
-    work_email = _as_non_empty_str(input_data.get("work_email"))
+    profile_url = extract_person_linkedin_url(input_data)
+    work_email = extract_person_email(input_data)
     personal_email = _as_non_empty_str(input_data.get("personal_email"))
     if not (profile_url or work_email or personal_email):
         return {

@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable
 
 from app.contracts.pricing_intelligence import PricingIntelligenceOutput
 from app.providers import revenueinfra
+from app.services._input_extraction import extract_company_name, extract_domain, extract_pricing_page_url
 
 _OPERATION_ID = "company.derive.pricing_intelligence"
 _PROVIDER = "revenueinfra"
@@ -35,15 +36,9 @@ def _extract_inputs(input_data: dict[str, Any]) -> tuple[str | None, str | None,
     context = cumulative if isinstance(cumulative, dict) else input_data
     company_profile = context.get("company_profile") if isinstance(context.get("company_profile"), dict) else {}
 
-    company_domain = (
-        _as_str(context.get("company_domain"))
-        or _as_str(company_profile.get("company_domain"))
-    )
-    pricing_page_url = _as_str(context.get("pricing_page_url"))
-    company_name = (
-        _as_str(context.get("company_name"))
-        or _as_str(company_profile.get("company_name"))
-    )
+    company_domain = _as_str(extract_domain(input_data) or company_profile.get("company_domain"))
+    pricing_page_url = _as_str(extract_pricing_page_url(input_data) or context.get("pricing_page_url"))
+    company_name = _as_str(extract_company_name(input_data) or company_profile.get("company_name"))
     return company_domain, pricing_page_url, company_name
 
 

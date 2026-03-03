@@ -6,6 +6,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.company_ads import GoogleAdsOutput, LinkedInAdsOutput, MetaAdsOutput
 from app.providers import adyntel
+from app.services._input_extraction import extract_domain
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -69,7 +70,7 @@ async def execute_company_ads_search_linkedin(
             "provider_attempts": attempts,
         }
 
-    company_domain = _normalize_domain(input_data.get("company_domain"))
+    company_domain = _normalize_domain(extract_domain(input_data))
     linkedin_page_id = _as_non_empty_str(input_data.get("linkedin_page_id"))
     if not company_domain and not linkedin_page_id:
         return {
@@ -136,7 +137,7 @@ async def execute_company_ads_search_meta(
             "provider_attempts": attempts,
         }
 
-    company_domain = _normalize_domain(input_data.get("company_domain"))
+    company_domain = _normalize_domain(extract_domain(input_data))
     facebook_url = _as_non_empty_str(input_data.get("facebook_url"))
     keyword = _as_non_empty_str(input_data.get("keyword"))
     optional = _normalize_optional_text_fields(
@@ -217,7 +218,7 @@ async def execute_company_ads_search_google(
             "provider_attempts": attempts,
         }
 
-    company_domain = _normalize_domain(input_data.get("company_domain"))
+    company_domain = _normalize_domain(extract_domain(input_data))
     if not company_domain:
         return {
             "run_id": run_id,

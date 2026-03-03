@@ -10,6 +10,7 @@ from app.contracts.courtlistener import (
     DocketDetailOutput,
 )
 from app.providers import courtlistener
+from app.services._input_extraction import extract_company_name
 
 _CHECK_COURT_FILINGS_OPERATION_ID = "company.research.check_court_filings"
 _BANKRUPTCY_FILINGS_OPERATION_ID = "company.signal.bankruptcy_filings"
@@ -74,8 +75,7 @@ def _extract_company_name(input_data: dict[str, Any], context: dict[str, Any]) -
     company_profile = _as_dict(context.get("company_profile"))
     output = _as_dict(context.get("output"))
     return _as_str(
-        input_data.get("company_name")
-        or context.get("company_name")
+        extract_company_name(input_data)
         or company_profile.get("company_name")
         or output.get("company_name")
     )

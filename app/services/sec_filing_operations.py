@@ -7,6 +7,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.sec_filings import FetchSECFilingsOutput, SECAnalysisOutput
 from app.providers import revenueinfra
+from app.services._input_extraction import extract_company_name, extract_domain
 
 _FETCH_OPERATION_ID = "company.research.fetch_sec_filings"
 _ANALYZE_10K_OPERATION_ID = "company.analyze.sec_10k"
@@ -40,8 +41,7 @@ def _context(input_data: dict[str, Any]) -> dict[str, Any]:
 def _company_domain(input_data: dict[str, Any], context: dict[str, Any]) -> str | None:
     company_profile = _as_dict(context.get("company_profile"))
     return _as_str(
-        input_data.get("company_domain")
-        or context.get("company_domain")
+        extract_domain(input_data)
         or company_profile.get("company_domain")
     )
 
@@ -49,8 +49,7 @@ def _company_domain(input_data: dict[str, Any], context: dict[str, Any]) -> str 
 def _company_name(input_data: dict[str, Any], context: dict[str, Any]) -> str | None:
     company_profile = _as_dict(context.get("company_profile"))
     return _as_str(
-        input_data.get("company_name")
-        or context.get("company_name")
+        extract_company_name(input_data)
         or company_profile.get("company_name")
     )
 

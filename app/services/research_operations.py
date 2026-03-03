@@ -19,6 +19,7 @@ from app.contracts.company_research import (
 from app.contracts.icp_companies import FetchIcpCompaniesOutput
 from app.contracts.job_validation import JobValidationOutput
 from app.providers import gemini, openai_provider, revenueinfra
+from app.services._input_extraction import extract_company_linkedin_url, extract_company_name, extract_domain
 
 
 def _normalize_company_domain(value: Any) -> str | None:
@@ -180,8 +181,8 @@ async def execute_company_research_resolve_g2_url(
     run_id = str(uuid.uuid4())
     attempts: list[dict[str, Any]] = []
 
-    company_name = input_data.get("company_name")
-    company_domain = _normalize_company_domain(input_data.get("company_domain"))
+    company_name = extract_company_name(input_data)
+    company_domain = _normalize_company_domain(extract_domain(input_data))
     if not isinstance(company_name, str) or not company_name.strip():
         return {
             "run_id": run_id,
@@ -263,8 +264,8 @@ async def execute_company_research_resolve_pricing_page_url(
     run_id = str(uuid.uuid4())
     attempts: list[dict[str, Any]] = []
 
-    company_name = input_data.get("company_name")
-    company_domain = _normalize_company_domain(input_data.get("company_domain"))
+    company_name = extract_company_name(input_data)
+    company_domain = _normalize_company_domain(extract_domain(input_data))
     if not isinstance(company_name, str) or not company_name.strip():
         return {
             "run_id": run_id,
@@ -362,8 +363,7 @@ def _extract_company_domain(input_data: dict[str, Any]) -> str | None:
     company_profile = context.get("company_profile")
     profile = company_profile if isinstance(company_profile, dict) else {}
     return _normalize_company_domain(
-        input_data.get("company_domain")
-        or context.get("company_domain")
+        extract_domain(input_data)
         or profile.get("company_domain")
     )
 
@@ -373,8 +373,7 @@ def _extract_company_name(input_data: dict[str, Any]) -> str | None:
     company_profile = context.get("company_profile")
     profile = company_profile if isinstance(company_profile, dict) else {}
     return _as_non_empty_str(
-        input_data.get("company_name")
-        or context.get("company_name")
+        extract_company_name(input_data)
         or profile.get("company_name")
     )
 
@@ -384,8 +383,7 @@ def _extract_company_linkedin_url(input_data: dict[str, Any]) -> str | None:
     company_profile = context.get("company_profile")
     profile = company_profile if isinstance(company_profile, dict) else {}
     return _as_non_empty_str(
-        input_data.get("company_linkedin_url")
-        or context.get("company_linkedin_url")
+        extract_company_linkedin_url(input_data)
         or profile.get("company_linkedin_url")
     )
 
@@ -458,8 +456,7 @@ def _extract_job_validation_company_domain(input_data: dict[str, Any]) -> str | 
     company_object = context.get("company_object")
     company = company_object if isinstance(company_object, dict) else {}
     return _normalize_company_domain(
-        input_data.get("company_domain")
-        or context.get("company_domain")
+        extract_domain(input_data)
         or company.get("domain")
     )
 
@@ -477,8 +474,7 @@ def _extract_job_validation_company_name(input_data: dict[str, Any]) -> str | No
     company_object = context.get("company_object")
     company = company_object if isinstance(company_object, dict) else {}
     return _as_non_empty_str(
-        input_data.get("company_name")
-        or context.get("company_name")
+        extract_company_name(input_data)
         or company.get("name")
     )
 

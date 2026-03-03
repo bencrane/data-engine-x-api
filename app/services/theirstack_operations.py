@@ -11,6 +11,7 @@ from app.contracts.theirstack import (
     TheirStackTechStackOutput,
 )
 from app.providers import theirstack
+from app.services._input_extraction import extract_company_linkedin_url, extract_company_name, extract_domain
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -404,9 +405,9 @@ async def execute_company_enrich_tech_stack(
     operation_id = "company.enrich.tech_stack"
     attempts: list[dict[str, Any]] = []
 
-    company_domain = _as_non_empty_str(_first_context_value(input_data, "company_domain"))
-    company_name = _as_non_empty_str(_first_context_value(input_data, "company_name"))
-    company_linkedin_url = _as_non_empty_str(_first_context_value(input_data, "company_linkedin_url"))
+    company_domain = extract_domain(input_data) or _as_non_empty_str(_first_context_value(input_data, "company_domain"))
+    company_name = extract_company_name(input_data) or _as_non_empty_str(_first_context_value(input_data, "company_name"))
+    company_linkedin_url = extract_company_linkedin_url(input_data) or _as_non_empty_str(_first_context_value(input_data, "company_linkedin_url"))
 
     if not (company_domain or company_name or company_linkedin_url):
         return {
@@ -472,7 +473,7 @@ async def execute_company_enrich_hiring_signals(
     operation_id = "company.enrich.hiring_signals"
     attempts: list[dict[str, Any]] = []
 
-    company_domain = _as_non_empty_str(_first_context_value(input_data, "company_domain"))
+    company_domain = extract_domain(input_data) or _as_non_empty_str(_first_context_value(input_data, "company_domain"))
     if not company_domain:
         return {
             "run_id": run_id,

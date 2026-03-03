@@ -5,6 +5,7 @@ from typing import Any
 
 from app.contracts.icp_extraction import ExtractIcpTitlesOutput
 from app.providers.modal_extract_icp import extract_icp_titles
+from app.services._input_extraction import extract_domain
 from app.services.icp_job_titles import (
     query_icp_job_titles,
     update_icp_extracted_titles,
@@ -55,7 +56,7 @@ def _extract_parallel_raw_output(input_data: dict[str, Any]) -> dict[str, Any] |
 def _extract_company_domain(input_data: dict[str, Any]) -> str | None:
     context = _context(input_data)
     return _normalize_company_domain(
-        input_data.get("company_domain")
+        extract_domain(input_data)
         or context.get("company_domain")
     )
 

@@ -6,6 +6,12 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.search import CompanySearchOutput, EcommerceSearchOutput, FMCSACarrierSearchOutput, PersonSearchOutput
 from app.providers import blitzapi, companyenrich, fmcsa, leadmagic, prospeo, storeleads_search
+from app.services._input_extraction import (
+    extract_company_linkedin_url,
+    extract_company_name,
+    extract_company_website,
+    extract_domain,
+)
 
 
 def _domain_from_value(value: Any) -> str | None:
@@ -376,7 +382,7 @@ def _first_non_empty_string(values: list[Any]) -> str | None:
 
 
 def _extract_carrier_name(input_data: dict[str, Any]) -> str | None:
-    direct = _first_non_empty_string([input_data.get("carrier_name"), input_data.get("company_name")])
+    direct = _first_non_empty_string([input_data.get("carrier_name"), extract_company_name(input_data)])
     if direct:
         return direct
 
@@ -694,9 +700,9 @@ async def execute_person_search(
     limit = _as_int(input_data.get("limit"), default=100, minimum=1)
     max_results = _as_int(input_data.get("max_results"), default=limit, minimum=1)
     limit = max_results
-    company_domain = _domain_from_value(input_data.get("company_domain") or input_data.get("company_website"))
-    company_name = _as_non_empty_str(input_data.get("company_name"))
-    company_linkedin_url = _as_non_empty_str(input_data.get("company_linkedin_url"))
+    company_domain = _domain_from_value(extract_domain(input_data) or extract_company_website(input_data))
+    company_name = extract_company_name(input_data)
+    company_linkedin_url = extract_company_linkedin_url(input_data)
     job_title = _as_non_empty_str(input_data.get("job_title"))
     job_level = _as_non_empty_str_or_list(input_data.get("job_level"))
     job_function = _as_non_empty_str_or_list(input_data.get("job_function"))
