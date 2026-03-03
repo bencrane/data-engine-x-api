@@ -712,8 +712,8 @@ async function executeParallelCompanyResolution(
   }
 
   const processor = String(stepConfig.processor || "lite");
-  const maxPollAttempts = Number(stepConfig.max_poll_attempts || 30);
-  const pollIntervalSeconds = Number(stepConfig.poll_interval_seconds || 10);
+  const maxPollAttempts = Number(stepConfig.max_poll_attempts || 3);
+  const pollIntervalSeconds = Number(stepConfig.poll_interval_seconds || 240);
 
   const headers: Record<string, string> = {
     "x-api-key": apiKey,
