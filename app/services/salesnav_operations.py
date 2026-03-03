@@ -6,6 +6,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.sales_nav import SalesNavSearchOutput
 from app.providers import rapidapi_salesnav
+from app.services._input_extraction import extract_sales_nav_url
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -35,16 +36,12 @@ async def execute_person_search_sales_nav_url(
     operation_id = "person.search.sales_nav_url"
     attempts: list[dict[str, Any]] = []
 
-    context = _as_dict(input_data.get("cumulative_context"))
     options = _as_dict(input_data.get("options"))
 
-    sales_nav_url = _as_non_empty_str(
-        input_data.get("sales_nav_url")
-        or context.get("sales_nav_url")
-    )
+    sales_nav_url = extract_sales_nav_url(input_data)
     account_number = _as_int(input_data.get("account_number"), default=1, minimum=1)
     max_pages = _as_int(
-        input_data.get("max_pages") or options.get("max_pages") or context.get("max_pages"),
+        input_data.get("max_pages") or options.get("max_pages") or _as_dict(input_data.get("cumulative_context")).get("max_pages"),
         default=50,
         minimum=1,
     )
