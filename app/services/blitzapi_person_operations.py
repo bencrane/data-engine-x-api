@@ -6,6 +6,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.blitzapi_person import EmployeeFinderOutput, FindWorkEmailOutput, WaterfallIcpSearchOutput
 from app.providers import blitzapi
+from app.services._input_extraction import extract_company_linkedin_url, extract_person_linkedin_url
 
 _DEFAULT_WATERFALL_CASCADE: list[dict[str, Any]] = [
     {
@@ -50,19 +51,6 @@ def _step_config(input_data: dict[str, Any]) -> dict[str, Any]:
     return _as_dict(input_data.get("step_config"))
 
 
-def _extract_by_aliases(input_data: dict[str, Any], aliases: tuple[str, ...]) -> str | None:
-    for alias in aliases:
-        direct_value = _as_non_empty_str(input_data.get(alias))
-        if direct_value:
-            return direct_value
-    context = _cumulative_context(input_data)
-    for alias in aliases:
-        context_value = _as_non_empty_str(context.get(alias))
-        if context_value:
-            return context_value
-    return None
-
-
 def _extract_from_input_context_step(input_data: dict[str, Any], key: str) -> Any:
     if key in input_data and input_data.get(key) is not None:
         return input_data.get(key)
@@ -80,7 +68,7 @@ async def execute_person_search_waterfall_icp_blitzapi(
     operation_id = "person.search.waterfall_icp_blitzapi"
     attempts: list[dict[str, Any]] = []
 
-    company_linkedin_url = _extract_by_aliases(input_data, ("company_linkedin_url", "linkedin_url"))
+    company_linkedin_url = extract_company_linkedin_url(input_data)
     if not company_linkedin_url:
         return {
             "run_id": run_id,
@@ -141,7 +129,7 @@ async def execute_person_search_employee_finder_blitzapi(
     operation_id = "person.search.employee_finder_blitzapi"
     attempts: list[dict[str, Any]] = []
 
-    company_linkedin_url = _extract_by_aliases(input_data, ("company_linkedin_url", "linkedin_url"))
+    company_linkedin_url = extract_company_linkedin_url(input_data)
     if not company_linkedin_url:
         return {
             "run_id": run_id,
@@ -209,7 +197,7 @@ async def execute_person_contact_resolve_email_blitzapi(
     operation_id = "person.contact.resolve_email_blitzapi"
     attempts: list[dict[str, Any]] = []
 
-    person_linkedin_url = _extract_by_aliases(input_data, ("person_linkedin_url", "linkedin_url"))
+    person_linkedin_url = extract_person_linkedin_url(input_data)
     if not person_linkedin_url:
         return {
             "run_id": run_id,
