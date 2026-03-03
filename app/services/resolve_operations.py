@@ -12,6 +12,12 @@ from app.contracts.resolve import (
 )
 from app.providers import blitzapi
 from app.providers import revenueinfra
+from app.services._input_extraction import (
+    extract_company_linkedin_url,
+    extract_company_name,
+    extract_domain,
+    extract_person_email,
+)
 
 
 def _as_non_empty_str(value: Any) -> str | None:
@@ -21,40 +27,20 @@ def _as_non_empty_str(value: Any) -> str | None:
     return cleaned or None
 
 
-def _cumulative_context(input_data: dict[str, Any]) -> dict[str, Any]:
-    context = input_data.get("cumulative_context")
-    if isinstance(context, dict):
-        return context
-    return {}
-
-
-def _extract_by_aliases(input_data: dict[str, Any], aliases: tuple[str, ...]) -> str | None:
-    for alias in aliases:
-        value = _as_non_empty_str(input_data.get(alias))
-        if value:
-            return value
-    context = _cumulative_context(input_data)
-    for alias in aliases:
-        value = _as_non_empty_str(context.get(alias))
-        if value:
-            return value
-    return None
-
-
 def _extract_email(input_data: dict[str, Any]) -> str | None:
-    return _extract_by_aliases(input_data, ("work_email", "email"))
+    return extract_person_email(input_data)
 
 
 def _extract_domain(input_data: dict[str, Any]) -> str | None:
-    return _extract_by_aliases(input_data, ("domain", "company_domain", "canonical_domain"))
+    return extract_domain(input_data)
 
 
 def _extract_company_linkedin_url(input_data: dict[str, Any]) -> str | None:
-    return _extract_by_aliases(input_data, ("company_linkedin_url", "linkedin_url"))
+    return extract_company_linkedin_url(input_data)
 
 
 def _extract_company_name(input_data: dict[str, Any]) -> str | None:
-    return _extract_by_aliases(input_data, ("company_name",))
+    return extract_company_name(input_data)
 
 
 def _missing_input_result(
