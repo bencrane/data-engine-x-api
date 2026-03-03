@@ -15,6 +15,19 @@ from app.contracts.hq_workflow import (
     SalesNavUrlOutput,
 )
 from app.providers import revenueinfra
+from app.services._input_extraction import (
+    COMPANY_DOMAIN,
+    COMPANY_NAME,
+    CUSTOMERS,
+    ICP_TITLES,
+    extract_company_linkedin_id,
+    extract_company_name,
+    extract_criterion,
+    extract_description,
+    extract_domain,
+    extract_list,
+    extract_str,
+)
 
 
 def _as_str(value: Any) -> str | None:
@@ -38,6 +51,7 @@ def _coerce_list_of_strings(value: Any) -> list[str] | None:
     return cleaned or None
 
 
+# Deprecated: use shared extraction in app.services._input_extraction.
 def _coerce_titles(value: Any) -> list[str] | None:
     if not isinstance(value, list):
         return None
@@ -54,6 +68,7 @@ def _coerce_titles(value: Any) -> list[str] | None:
     return titles or None
 
 
+# Deprecated: use shared extraction in app.services._input_extraction.
 def _coerce_customer_names(value: Any) -> list[str] | None:
     if not isinstance(value, list):
         return None
@@ -70,6 +85,7 @@ def _coerce_customer_names(value: Any) -> list[str] | None:
     return names or None
 
 
+# Deprecated: use shared extraction in app.services._input_extraction.
 def _ctx(input_data: dict[str, Any]) -> dict[str, Any]:
     context = input_data.get("cumulative_context")
     if isinstance(context, dict):
@@ -77,6 +93,7 @@ def _ctx(input_data: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+# Deprecated: use shared extraction in app.services._input_extraction.
 def _extract_str(input_data: dict[str, Any], aliases: tuple[str, ...]) -> str | None:
     for alias in aliases:
         value = _as_str(input_data.get(alias))
@@ -90,6 +107,7 @@ def _extract_str(input_data: dict[str, Any], aliases: tuple[str, ...]) -> str | 
     return None
 
 
+# Deprecated: use shared extraction in app.services._input_extraction.
 def _extract_list(input_data: dict[str, Any], aliases: tuple[str, ...]) -> list[Any] | None:
     for alias in aliases:
         value = _as_list(input_data.get(alias))
@@ -150,8 +168,8 @@ async def execute_company_research_infer_linkedin_url(
     operation_id = "company.research.infer_linkedin_url"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
-    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
+    company_name = extract_company_name(input_data)
+    domain = extract_domain(input_data)
     if not company_name:
         return _missing_inputs_result(
             run_id=run_id,
@@ -200,9 +218,9 @@ async def execute_company_research_icp_job_titles_gemini(
     operation_id = "company.research.icp_job_titles_gemini"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
-    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
-    company_description = _extract_str(input_data, ("company_description", "description_raw", "description"))
+    company_name = extract_company_name(input_data)
+    domain = extract_domain(input_data)
+    company_description = extract_description(input_data)
     if not company_name and not domain:
         return _missing_inputs_result(
             run_id=run_id,
@@ -257,8 +275,8 @@ async def execute_company_research_discover_customers_gemini(
     operation_id = "company.research.discover_customers_gemini"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
-    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
+    company_name = extract_company_name(input_data)
+    domain = extract_domain(input_data)
     if not company_name and not domain:
         return _missing_inputs_result(
             run_id=run_id,
@@ -308,7 +326,7 @@ async def execute_company_research_lookup_customers_resolved(
     operation_id = "company.research.lookup_customers_resolved"
     attempts: list[dict[str, Any]] = []
 
-    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
+    domain = extract_domain(input_data)
     if not domain:
         return _missing_inputs_result(
             run_id=run_id,
@@ -357,8 +375,8 @@ async def execute_company_derive_icp_criterion(
     operation_id = "company.derive.icp_criterion"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
-    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
+    company_name = extract_company_name(input_data)
+    domain = extract_domain(input_data)
     if not company_name and not domain:
         return _missing_inputs_result(
             run_id=run_id,
@@ -367,8 +385,8 @@ async def execute_company_derive_icp_criterion(
             attempts=attempts,
         )
 
-    customers = _coerce_customer_names(_extract_list(input_data, ("customers",))) or []
-    icp_titles = _coerce_titles(_extract_list(input_data, ("champion_titles", "titles"))) or []
+    customers = _coerce_customer_names(extract_list(input_data, CUSTOMERS)) or []
+    icp_titles = _coerce_titles(extract_list(input_data, ICP_TITLES)) or []
 
     settings = get_settings()
     result = await revenueinfra.generate_icp_criterion(
@@ -412,14 +430,14 @@ async def execute_company_derive_salesnav_url(
     operation_id = "company.derive.salesnav_url"
     attempts: list[dict[str, Any]] = []
 
-    org_id = _extract_str(input_data, ("company_linkedin_id", "org_id", "orgId", "linkedin_id"))
-    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
-    titles = _coerce_titles(_extract_list(input_data, ("champion_titles", "titles")))
-    excluded_seniority = _coerce_list_of_strings(_extract_list(input_data, ("excluded_seniority", "excludedSeniority")))
-    regions = _coerce_list_of_strings(_extract_list(input_data, ("regions",)))
-    company_hq_regions = _coerce_list_of_strings(_extract_list(input_data, ("company_hq_regions", "companyHQRegions")))
-    company_headcount = _coerce_list_of_strings(_extract_list(input_data, ("company_headcount", "companyHeadcount")))
-    function = _coerce_list_of_strings(_extract_list(input_data, ("function", "job_function")))
+    org_id = extract_company_linkedin_id(input_data)
+    company_name = extract_company_name(input_data)
+    titles = _coerce_titles(extract_list(input_data, ICP_TITLES))
+    excluded_seniority = _coerce_list_of_strings(extract_list(input_data, ("excluded_seniority", "excludedSeniority")))
+    regions = _coerce_list_of_strings(extract_list(input_data, ("regions",)))
+    company_hq_regions = _coerce_list_of_strings(extract_list(input_data, ("company_hq_regions", "companyHQRegions")))
+    company_headcount = _coerce_list_of_strings(extract_list(input_data, ("company_headcount", "companyHeadcount")))
+    function = _coerce_list_of_strings(extract_list(input_data, ("function", "job_function")))
 
     missing_inputs: list[str] = []
     if not org_id:
@@ -480,10 +498,10 @@ async def execute_company_derive_evaluate_icp_fit(
     operation_id = "company.derive.evaluate_icp_fit"
     attempts: list[dict[str, Any]] = []
 
-    criterion = _extract_str(input_data, ("criterion", "icp_criterion"))
-    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
-    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
-    description = _extract_str(input_data, ("description", "description_raw"))
+    criterion = extract_criterion(input_data)
+    company_name = extract_company_name(input_data)
+    domain = extract_domain(input_data)
+    description = extract_str(input_data, ("description", "description_raw"))
     if not criterion:
         return _missing_inputs_result(
             run_id=run_id,
@@ -535,10 +553,7 @@ async def execute_company_resolve_domain_from_name_hq(
     operation_id = "company.resolve.domain_from_name_hq"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(
-        input_data,
-        ("company_name", "current_company_name", "canonical_name", "name"),
-    )
+    company_name = extract_str(input_data, COMPANY_NAME)
     if not company_name:
         return _missing_inputs_result(
             run_id=run_id,
