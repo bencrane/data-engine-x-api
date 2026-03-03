@@ -732,7 +732,7 @@ async function executeParallelCompanyResolution(
       method: "POST",
       headers,
       body: JSON.stringify({
-        input: JSON.stringify(inputPayload),
+        input: inputPayload,
         processor,
         task_spec: PARALLEL_COMPANY_RESOLUTION_TASK_SPEC,
       }),
