@@ -83,7 +83,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (76 live)
+## Operations (77 live)
 
 ### Company Enrichment (9)
 | Operation ID | Provider(s) |
@@ -108,7 +108,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.search.by_tech_stack` | TheirStack |
 | `company.search.by_job_postings` | TheirStack |
 
-### Company Research (15)
+### Company Research (16)
 | Operation ID | Provider(s) |
 |---|---|
 | `company.research.resolve_g2_url` | Gemini → OpenAI |
@@ -116,6 +116,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 | `company.research.discover_competitors` | RevenueInfra |
 | `company.research.find_similar_companies` | RevenueInfra |
 | `company.research.lookup_customers` | RevenueInfra |
+| `company.research.lookup_customers_resolved` | RevenueInfra (HQ resolved DB lookup) |
 | `company.research.infer_linkedin_url` | RevenueInfra (HQ Gemini) |
 | `company.research.icp_job_titles_gemini` | RevenueInfra (HQ Gemini) |
 | `company.research.discover_customers_gemini` | RevenueInfra (HQ Gemini) |
@@ -309,7 +310,7 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | Entity snapshots + change detection | ✅ Live |
 | Entity relationships (typed, directional, deduped) | ✅ Live |
 | Per-step entity timeline | ✅ Live |
-| Operation registry (76 ops) | ✅ Live |
+| Operation registry (77 ops) | ✅ Live |
 | AI blueprint assembler (NL + fields) | ✅ Live |
 | Coverage check endpoint | ✅ Live |
 | Person entity filters (title, seniority, department) | ✅ Live |
