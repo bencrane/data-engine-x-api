@@ -10,6 +10,7 @@ from app.contracts.hq_workflow import (
     GeminiIcpJobTitlesOutput,
     IcpCriterionOutput,
     InferLinkedInUrlOutput,
+    LookupCustomersResolvedOutput,
     LookupCompanyByNameOutput,
     SalesNavUrlOutput,
 )
@@ -279,6 +280,55 @@ async def execute_company_research_discover_customers_gemini(
 
     output, error = _validate_output(
         model=DiscoverCustomersGeminiOutput,
+        payload={
+            "customers": mapped.get("customers"),
+            "customer_count": mapped.get("customer_count"),
+            "source_provider": mapped.get("source_provider") or "revenueinfra",
+        },
+        run_id=run_id,
+        operation_id=operation_id,
+        attempts=attempts,
+    )
+    if error:
+        return error
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_research_lookup_customers_resolved(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.research.lookup_customers_resolved"
+    attempts: list[dict[str, Any]] = []
+
+    domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
+    if not domain:
+        return _missing_inputs_result(
+            run_id=run_id,
+            operation_id=operation_id,
+            missing_inputs=["domain"],
+            attempts=attempts,
+        )
+
+    settings = get_settings()
+    result = await revenueinfra.lookup_customers_resolved(
+        base_url=settings.revenueinfra_api_url,
+        domain=domain,
+    )
+    attempt = result.get("attempt", {})
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped") if isinstance(result.get("mapped"), dict) else {}
+    status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+
+    output, error = _validate_output(
+        model=LookupCustomersResolvedOutput,
         payload={
             "customers": mapped.get("customers"),
             "customer_count": mapped.get("customer_count"),
