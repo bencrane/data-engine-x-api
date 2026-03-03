@@ -60,7 +60,7 @@ def _coerce_customer_names(value: Any) -> list[str] | None:
     names: list[str] = []
     for item in value:
         if isinstance(item, dict):
-            name = _as_str(item.get("name")) or _as_str(item.get("company_name"))
+            name = _as_str(item.get("name")) or _as_str(item.get("company_name")) or _as_str(item.get("customer_name"))
             if name:
                 names.append(name)
             continue

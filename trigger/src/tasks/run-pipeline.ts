@@ -2177,7 +2177,12 @@ export const runPipeline = task({
           }
         }
 
-        if (operationId === "company.research.discover_customers_gemini" && result.status === "found" && result.output) {
+        if (
+          (operationId === "company.research.discover_customers_gemini" ||
+            operationId === "company.research.lookup_customers_resolved") &&
+          result.status === "found" &&
+          result.output
+        ) {
           try {
             const customers = (result.output as Record<string, unknown>).customers;
             if (Array.isArray(customers) && customers.length > 0) {
