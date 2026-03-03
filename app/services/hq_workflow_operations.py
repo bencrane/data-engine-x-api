@@ -150,7 +150,7 @@ async def execute_company_research_infer_linkedin_url(
     operation_id = "company.research.infer_linkedin_url"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "canonical_name", "name"))
+    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
     domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
     if not company_name:
         return _missing_inputs_result(
@@ -200,7 +200,7 @@ async def execute_company_research_icp_job_titles_gemini(
     operation_id = "company.research.icp_job_titles_gemini"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "canonical_name", "name"))
+    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
     domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
     company_description = _extract_str(input_data, ("company_description", "description_raw", "description"))
     if not company_name and not domain:
@@ -257,7 +257,7 @@ async def execute_company_research_discover_customers_gemini(
     operation_id = "company.research.discover_customers_gemini"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "canonical_name", "name"))
+    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
     domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
     if not company_name and not domain:
         return _missing_inputs_result(
@@ -357,7 +357,7 @@ async def execute_company_derive_icp_criterion(
     operation_id = "company.derive.icp_criterion"
     attempts: list[dict[str, Any]] = []
 
-    company_name = _extract_str(input_data, ("company_name", "canonical_name", "name"))
+    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
     domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
     if not company_name and not domain:
         return _missing_inputs_result(
@@ -413,7 +413,7 @@ async def execute_company_derive_salesnav_url(
     attempts: list[dict[str, Any]] = []
 
     org_id = _extract_str(input_data, ("company_linkedin_id", "org_id", "orgId", "linkedin_id"))
-    company_name = _extract_str(input_data, ("company_name", "canonical_name", "name"))
+    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
     titles = _coerce_titles(_extract_list(input_data, ("champion_titles", "titles")))
     excluded_seniority = _coerce_list_of_strings(_extract_list(input_data, ("excluded_seniority", "excludedSeniority")))
     regions = _coerce_list_of_strings(_extract_list(input_data, ("regions",)))
@@ -481,7 +481,7 @@ async def execute_company_derive_evaluate_icp_fit(
     attempts: list[dict[str, Any]] = []
 
     criterion = _extract_str(input_data, ("criterion", "icp_criterion"))
-    company_name = _extract_str(input_data, ("company_name", "canonical_name", "name"))
+    company_name = _extract_str(input_data, ("company_name", "current_company_name", "canonical_name", "name"))
     domain = _extract_str(input_data, ("domain", "company_domain", "canonical_domain"))
     description = _extract_str(input_data, ("description", "description_raw"))
     if not criterion:

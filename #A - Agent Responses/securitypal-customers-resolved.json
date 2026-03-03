@@ -1,0 +1,408 @@
+[
+  {
+    "customer_name": "ContentStack",
+    "customer_domain": "contentstack.com",
+    "origin_company_name": null,
+    "customer_linkedin_url": "https://www.linkedin.com/company/contentstack",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "fm: systems",
+    "customer_domain": "fmsystems.com",
+    "origin_company_name": null,
+    "customer_linkedin_url": "https://www.linkedin.com/company/fmsystems/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Log Rhythm",
+    "customer_domain": "logrhythm.com",
+    "origin_company_name": null,
+    "customer_linkedin_url": "https://www.linkedin.com/company/logarhythm",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Elastic",
+    "customer_domain": "elastic.co",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://linkedin.com/company/elastic",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Figma",
+    "customer_domain": "figma.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/figma/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "FM:Systems",
+    "customer_domain": "fmsystems.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/fmsystems/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Grammarly",
+    "customer_domain": "grammarly.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/grammarly/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Productiv",
+    "customer_domain": "productiv.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/productiv/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Contentstack",
+    "customer_domain": "contentstack.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/contentstack",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "LangChain",
+    "customer_domain": "langchain.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/langchain/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "LogRhythm",
+    "customer_domain": "logrhythm.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/logarhythm",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Monday",
+    "customer_domain": "monday.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://linkedin.com/company/mondaydotcom",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "OpenAI",
+    "customer_domain": "openai.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://linkedin.com/company/openai",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Orum",
+    "customer_domain": "orum.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/orumhq/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Plaid",
+    "customer_domain": "plaid.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/plaid-/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Snap",
+    "customer_domain": "snap.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/snap-inc-co/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Stack Overflow",
+    "customer_domain": "stackoverflow.co",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/stack-overflow/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Supabase",
+    "customer_domain": "supabase.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/supabase/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "WEX",
+    "customer_domain": "wexinc.com",
+    "origin_company_name": "SecurityPal AI",
+    "customer_linkedin_url": "https://www.linkedin.com/company/wexinc/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Snap Inc.",
+    "customer_domain": "snap.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/snap-inc-co/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Airtable",
+    "customer_domain": "airtable.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/airtable/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Loom",
+    "customer_domain": "loom.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/useloom/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "ClickUp",
+    "customer_domain": "clickup.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/clickup",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Vanta",
+    "customer_domain": "vanta.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/vanta-security/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Rippling",
+    "customer_domain": "rippling.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/rippling/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Sendoso",
+    "customer_domain": "sendoso.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/17906988",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Appcues",
+    "customer_domain": "appcues.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/appcues/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Drift",
+    "customer_domain": "drift.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/drift",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "MasterClass",
+    "customer_domain": "masterclass.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/masterclassinc/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "UserTesting",
+    "customer_domain": "usertesting.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/usertesting-com/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "AuditBoard",
+    "customer_domain": "auditboard.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/auditboard/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Claroty",
+    "customer_domain": "claroty.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/claroty/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Mural",
+    "customer_domain": "mural.co",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/mural.co/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Productboard",
+    "customer_domain": "productboard.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/productboard/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Snyk",
+    "customer_domain": "snyk.io",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/snyk",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Talkdesk",
+    "customer_domain": "talkdesk.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/talkdesk/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "ThoughtSpot",
+    "customer_domain": "thoughtspot.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/thoughtspot/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Unity",
+    "customer_domain": "unity.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/unity/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Webflow",
+    "customer_domain": "webflow.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/intellimize",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Zapier",
+    "customer_domain": "zapier.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/zapier",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "ZoomInfo",
+    "customer_domain": "zoominfo.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/zoominfo",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Miro",
+    "customer_domain": "miro.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/mirohq/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Algolia",
+    "customer_domain": "algolia.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/algolia/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "6sense",
+    "customer_domain": "6sense.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/slintel/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Branch",
+    "customer_domain": "branch.io",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/3813083",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Fivetran",
+    "customer_domain": "fivetran.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/fivetran",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Gong",
+    "customer_domain": "gong.io",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/gong",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Ironclad",
+    "customer_domain": "ironcladapp.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/ironclad-inc-/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Modern Health",
+    "customer_domain": "modernhealth.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/modern-health/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Pendo",
+    "customer_domain": "pendo.io",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/pendo-io/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Postman",
+    "customer_domain": "postman.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/postman-platform/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Sentry",
+    "customer_domain": "sentry.io",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/getsentry",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Veriff",
+    "customer_domain": "veriff.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/veriff",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Workato",
+    "customer_domain": "workato.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/workato/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Zendesk",
+    "customer_domain": "zendesk.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/zendesk",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Zscaler",
+    "customer_domain": "zscaler.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/zscaler/",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "MongoDB",
+    "customer_domain": "mongodb.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://linkedin.com/company/mongodb",
+    "origin_company_domain": "securitypalhq.com"
+  },
+  {
+    "customer_name": "Databricks",
+    "customer_domain": "databricks.com",
+    "origin_company_name": "Securitypal Ai",
+    "customer_linkedin_url": "https://www.linkedin.com/company/databricks/",
+    "origin_company_domain": "securitypalhq.com"
+  }
+]
