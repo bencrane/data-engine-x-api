@@ -149,3 +149,123 @@ async def lookup_customers(*, base_url: str, domain: str) -> ProviderAdapterResu
             "customer_count": customer_count,
         },
     }
+
+
+async def lookup_customers_resolved(
+    *,
+    base_url: str | None,
+    domain: str | None,
+) -> ProviderAdapterResult:
+    normalized_base_url = _as_str(base_url) or _configured_base_url()
+    normalized_domain = _as_str(domain)
+    action = "lookup_customers_resolved"
+
+    if not normalized_domain:
+        return {
+            "attempt": {
+                "provider": _PROVIDER,
+                "action": action,
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    url = f"{normalized_base_url.rstrip('/')}/run/companies/db/company-customers/lookup-resolved"
+    payload: dict[str, Any] = {"domain": normalized_domain}
+    start_ms = now_ms()
+
+    try:
+        async with httpx.AsyncClient(timeout=_LOOKUP_CUSTOMERS_TIMEOUT_SECONDS) as client:
+            response = await client.post(url, json=payload)
+            body = parse_json_or_raw(response.text, response.json)
+    except httpx.TimeoutException:
+        return {
+            "attempt": {
+                "provider": _PROVIDER,
+                "action": action,
+                "status": "failed",
+                "error": "timeout",
+                "duration_ms": now_ms() - start_ms,
+            },
+            "mapped": None,
+        }
+    except httpx.HTTPError as exc:
+        return {
+            "attempt": {
+                "provider": _PROVIDER,
+                "action": action,
+                "status": "failed",
+                "error": f"http_error:{exc.__class__.__name__}",
+                "duration_ms": now_ms() - start_ms,
+            },
+            "mapped": None,
+        }
+
+    duration_ms = now_ms() - start_ms
+    if response.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": _PROVIDER,
+                "action": action,
+                "status": "failed",
+                "http_status": response.status_code,
+                "duration_ms": duration_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    success = bool(body.get("success")) if isinstance(body, dict) else False
+    if not success:
+        return {
+            "attempt": {
+                "provider": _PROVIDER,
+                "action": action,
+                "status": "failed",
+                "http_status": response.status_code,
+                "duration_ms": duration_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    customers = body.get("customers") if isinstance(body, dict) else None
+    if not isinstance(customers, list):
+        customers = []
+    customer_count = body.get("customer_count") if isinstance(body, dict) else None
+    if not isinstance(customer_count, int):
+        customer_count = len(customers)
+
+    if not customers:
+        return {
+            "attempt": {
+                "provider": _PROVIDER,
+                "action": action,
+                "status": "not_found",
+                "http_status": response.status_code,
+                "duration_ms": duration_ms,
+                "raw_response": body,
+            },
+            "mapped": {
+                "customers": [],
+                "customer_count": 0,
+                "source_provider": "revenueinfra",
+            },
+        }
+
+    return {
+        "attempt": {
+            "provider": _PROVIDER,
+            "action": action,
+            "status": "found",
+            "http_status": response.status_code,
+            "duration_ms": duration_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "customers": customers,
+            "customer_count": customer_count,
+            "source_provider": "revenueinfra",
+        },
+    }

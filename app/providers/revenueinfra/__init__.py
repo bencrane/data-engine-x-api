@@ -5,7 +5,7 @@ from app.providers.revenueinfra.champions import (
     lookup_champion_testimonials,
     lookup_champions,
 )
-from app.providers.revenueinfra.customers import lookup_customers
+from app.providers.revenueinfra.customers import lookup_customers, lookup_customers_resolved
 from app.providers.revenueinfra.pricing import (
     infer_add_ons_offered,
     infer_annual_commitment_required,
@@ -54,6 +54,7 @@ __all__ = [
     "lookup_champions",
     "lookup_champion_testimonials",
     "lookup_customers",
+    "lookup_customers_resolved",
     "infer_add_ons_offered",
     "infer_annual_commitment_required",
     "infer_billing_default",
