@@ -26,6 +26,12 @@ class DiscoverCustomersGeminiOutput(BaseModel):
     source_provider: str = "revenueinfra"
 
 
+class LookupCustomersResolvedOutput(BaseModel):
+    customers: list[Any] | None = None
+    customer_count: int | None = None
+    source_provider: str = "revenueinfra"
+
+
 class IcpCriterionOutput(BaseModel):
     icp_criterion: str | None = None
     source_provider: str = "revenueinfra"
