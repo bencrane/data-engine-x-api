@@ -359,6 +359,9 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | 25 | FMCSA daily signal pipeline (separate repo, 6 feeds, all working) |
 | 26 | Staffing vertical: TheirStack adapter enrichment (41 fields, `job.search` op, 65+ filters), job posting entity type, Bright Data validation, staffing enrichment blueprint |
 | 27 | Enigma operating locations (`company.enrich.locations`), 6 CRM resolve operations (domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain), CRM Cleanup + CRM Enrichment blueprints, super-admin auth on `/api/v1/execute` |
+| 28 | AlumniGTM pipeline: BlitzAPI company enrichment (dedicated), 6 HQ workflow operations, 3 BlitzAPI person operations, BlitzAPI company search, HQ company name lookup, HQ resolved customer lookup, Parallel.ai company resolution |
+| 29 | Persistence layer: `company_customers`, `gemini_icp_job_titles`, `company_ads`, `salesnav_prospects` tables + auto-persist + query endpoints. New columns on `company_entities`. |
+| 30 | Infrastructure: unified input extraction (`_input_extraction.py`), condition evaluator shorthand, Sales Nav auto-pagination, HQ Gemini 300s timeouts |
 
 ---
 
@@ -369,13 +372,17 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 | CRM Cleanup v1 | Staffing Activation, Revenue Activation | 7 | Domain resolution cascade (email → LinkedIn → name), fill LinkedIn/location, verify email |
 | CRM Enrichment v1 | Staffing Activation, Revenue Activation | 3 | Company profile enrichment, resolve email where missing, verify email |
 | Staffing Enrichment v1 | Staffing Activation, Revenue Activation | 7 | Job search → validate active → company enrich → person search → email → verify → phone (2 fan-outs) |
+| AlumniGTM Company Workflow v1 | AlumniGTM | 7 | Infer LinkedIn URL → BlitzAPI enrich → Gemini ICP titles → HQ customer lookup (→ Gemini fallback) → ICP criterion → Sales Nav URL |
+| AlumniGTM Company Resolution Only v1 | AlumniGTM | 5 | HQ name lookup → Gemini infer LinkedIn → BlitzAPI domain-to-LinkedIn → BlitzAPI enrich → Sales Nav URL build |
+| AlumniGTM Prospect Discovery v1 | AlumniGTM | 6 | Sales Nav scrape (fan-out) → HQ name resolve → Gemini infer LinkedIn → BlitzAPI domain-to-LinkedIn → BlitzAPI enrich → ICP fit evaluate |
 
 ---
 
 ## What's Not Built Yet
 
-- **Sales Nav alumni search operation** — `person.search.sales_nav_alumni` via RapidAPI Sales Navigator scraper (HQ template table + endpoint exist, provider adapter not built)
-- **Alumni Discovery blueprint** — chain CRM cleanup → alumni search → enrich → email (pending Sales Nav operation)
+- **Blueprint auto-chaining** — automatic submission of next blueprint when current completes (Blueprint 1 → 2 → 3 hands-off)
+- **Person enrichment from Sales Nav URLs** — resolve hashed LinkedIn URLs to canonical `/in/username` format for Prospeo/LeadMagic enrichment
+- **Entity relationship wiring** — record customer/alumni/works_at relationships during pipeline execution
 - **Output delivery** — push results to CRM, campaign tool, webhook, CSV
 - **Input ingestion** — CRM pull, CSV upload validation, auto-derived input requirements
 - **Bright Data connector** — automated puller/webhook to ingest Indeed + LinkedIn snapshots from Bright Data API (tables + ingestion endpoints exist in HQ, connector not wired)

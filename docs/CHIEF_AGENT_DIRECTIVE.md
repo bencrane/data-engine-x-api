@@ -40,16 +40,21 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
 ## Current System State
 
-- **63 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
+- **77 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
 - **21+ providers** with canonical contracts and hardened adapters
 - **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
-- **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution, entity dedup, snapshots, change detection, per-step timeline
-- **9 live blueprints** across 3 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1, ICP Job Titles Discovery v1, Company Intel Briefing v1, Person Intel Briefing v1
-- **3 Parallel.ai Deep Research operations** running directly from Trigger.dev: ICP job titles, company intel briefing, person intel briefing — with dedicated storage tables and auto-persist
+- **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution (with shorthand format support: `exists`, `not`, `eq`, etc.), entity dedup, snapshots, change detection, per-step timeline
+- **12 live blueprints** across 3 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1, ICP Job Titles Discovery v1, Company Intel Briefing v1, Person Intel Briefing v1, AlumniGTM Company Workflow v1, AlumniGTM Company Resolution Only v1, AlumniGTM Prospect Discovery v1, AlumniGTM Prospect Resolution v1
+- **4 Parallel.ai operations** running directly from Trigger.dev: ICP job titles, company intel briefing, person intel briefing, company domain resolution (lite) — with dedicated storage tables and auto-persist
+- **AlumniGTM pipeline** — full 3-blueprint chain: target company analysis → customer enrichment + Sales Nav URL build → prospect scrape + company resolution + ICP fit evaluation. Tested end-to-end with SecurityPal AI.
+- **Dedicated persistence tables**: `company_customers`, `gemini_icp_job_titles`, `company_ads`, `salesnav_prospects` — all with auto-persist wiring in run-pipeline.ts and tenant query endpoints
+- **Unified input extraction** — single shared module (`app/services/_input_extraction.py`) with canonical alias maps for all field name variants. All 16 service files migrated.
 - **ICP title extraction** via Modal/Anthropic — normalizes inconsistent Parallel output into consistent `{ title, buyer_role, reasoning }` structure. Flat table `extracted_icp_job_title_details` for joins.
-- **Sales Navigator URL scraper** (`person.search.sales_nav_url`) — RapidAPI, accepts full Sales Nav URL, returns person results. Fan-out compatible.
+- **Sales Navigator URL scraper** (`person.search.sales_nav_url`) — RapidAPI, auto-pagination (up to 50 pages), fan-out compatible.
+- **BlitzAPI standalone operations** — dedicated single-provider operations: company enrichment, company search, domain-to-LinkedIn, waterfall ICP search, employee finder, find work email
+- **HQ workflow operations** — 8 operations wrapping HQ `/run/` endpoints: infer LinkedIn URL, ICP job titles (Gemini), discover customers (Gemini), lookup customers (resolved), ICP criterion, Sales Nav URL builder, evaluate ICP fit, company name lookup
 - **Entity relationships table** — typed, directional relationships between entities (has_customer, has_target, has_competitor, works_at, alumni_of) with dedup and invalidation
-- **6 CRM resolution operations** — domain from email/LinkedIn/name, LinkedIn from domain, person LinkedIn from email, location from domain (all via HQ single-record lookup endpoints)
+- **9 CRM resolution operations** — domain from email/LinkedIn/name, LinkedIn from domain (HQ + BlitzAPI), person LinkedIn from email, location from domain, domain from name (HQ + Parallel)
 - **Bright Data validation** via HQ (Indeed + LinkedIn raw tables, cross-source job validation endpoint)
 - **Enigma operating locations** — brand → physical locations with open/closed status
 - **AI blueprint assembler** with natural language mode (Claude → OpenAI → Gemini)
@@ -58,7 +63,7 @@ See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 - **Super-admin auth on `/api/v1/execute`** — requires `org_id` + `company_id` in body
 - **20 Modal micro-functions** for Parallel.ai fallbacks
 - **FMCSA daily signal pipeline** in separate repo (`ongoing-data-pulls`)
-- **36+ test files**, 17 migrations
+- **50+ test files**, 20 migrations
 
 ## Key Files
 
@@ -91,38 +96,31 @@ Read the "What's Not Built Yet" section in `docs/SYSTEM_OVERVIEW.md` for the cur
 
 ## AlumniGTM Pipeline Status
 
+**Pipeline is fully operational end-to-end.** Tested with SecurityPal AI → 18 customers discovered → 15 enriched with Sales Nav URLs → Elastic alumni scrape produced 66 prospects → 34 evaluated as ICP fit = yes.
+
 | Piece | Status |
 |---|---|
+| Blueprint 1: Company Workflow (7 steps) | **Live.** Infer LinkedIn → BlitzAPI enrich → Gemini ICP titles → HQ customer lookup → Gemini fallback → ICP criterion → Sales Nav URL |
+| Blueprint 2: Company Resolution (5 steps) | **Live.** HQ name lookup → Gemini infer LinkedIn → BlitzAPI domain-to-LinkedIn → BlitzAPI enrich → Sales Nav URL build |
+| Blueprint 3: Prospect Discovery (6 steps) | **Live.** Sales Nav scrape (fan-out) → HQ name resolve → Gemini infer LinkedIn → BlitzAPI domain-to-LinkedIn → BlitzAPI enrich → ICP fit evaluate |
 | ICP job titles (Parallel Deep Research) | Live. 155 companies processed. Dedicated table. |
-| ICP title extraction (Modal/Anthropic) | Built, needs deploy verification + test. |
-| Company intel briefing (Parallel Deep Research) | Live. 3 companies tested. Dedicated table. |
-| Person intel briefing (Parallel Deep Research) | Live. 1 person tested. Dedicated table. |
-| Sales Nav URL scraper | Live. Untested in production. |
-| BlitzAPI domain-to-LinkedIn resolver | Live. Untested in production. |
-| BlitzAPI rate limiting (retry on 429) | Live. |
+| ICP job titles (Gemini) | Live. Dedicated `gemini_icp_job_titles` table. |
+| Company customers (HQ resolved lookup) | Live. Dedicated `company_customers` table with auto-persist. |
+| Sales Nav prospects | Live. Dedicated `salesnav_prospects` table with auto-persist. |
+| Company ads (Adyntel) | Live. Dedicated `company_ads` table with auto-persist. |
+| BlitzAPI standalone operations | Live. Company enrich, company search, domain-to-LinkedIn, waterfall ICP, employee finder, find work email. |
+| Unified input extraction | Live. Single alias map across all 16 service files. |
+| Condition evaluator shorthand | Live. Supports `exists`, `not`, `eq`, `ne`, etc. |
+| Sales Nav auto-pagination | Live. Up to 50 pages per scrape. |
 | Entity relationships table | Live. Empty — no relationships recorded yet. |
-| Entity relationship wiring in pipeline | Not built. |
-| HQ person_work_history dedup | Broken. Needs re-key. |
-| HQ job title matching | Phase 1 done (generated columns). Phase 3 (matching) not started. |
-| GTM briefing assembly | Not built. |
+| HQ person_work_history dedup | Broken. Needs re-key. (deprioritized) |
+| Blueprint auto-chaining | Not built. Blueprints triggered manually in sequence. |
 
-## Next Priority: HQ Workflow Operations Blueprint
+## Next Priorities
 
-7 HQ endpoints need to be wrapped as data-engine-x operations, then assembled into one blueprint. The endpoint schemas are in `docs/openapi/endpoints/`. The blueprint step order is:
-
-| Position | Operation | HQ Endpoint | Input |
-|---|---|---|---|
-| 1 | Domain → LinkedIn URL | `/run/companies/gemini/linkedin-url/get` | company_name, domain |
-| 2 | LinkedIn URL → Enriched Company | `/run/companies/clay-leadmagic/enrich/ingest` | domain, company_name, company_linkedin_url |
-| 3 | Generate ICP Criterion | `/run/companies/gemini/icp-criterion/generate` | company_name, domain, customers[], icp_titles[] |
-| 4 | ICP Job Titles (Gemini) | `/run/companies/gemini/icp-job-titles/research` | company_name, domain, company_description |
-| 5 | Customers Of | `/run/companies/gemini/customers-of/discover` | company_name, domain |
-| 6 | Build Sales Nav URL | `/run/tools/claude/salesnav-url/build` | orgId, companyName, titles[] |
-| 7 | Evaluate ICP Fit | `/run/companies/gemini/icp-fit/evaluate` | criterion, company_name, domain, description |
-
-Steps 1-6 are one blueprint in that order. Step 7 is a standalone operation.
-
-All follow the existing RevenueInfra provider adapter pattern — call HQ endpoint, map response, return via standard operation service. No HQ code changes needed.
+1. **Blueprint auto-chaining** — automatic submission of next blueprint when current completes (Blueprint 1 → 2 → 3 hands-off)
+2. **Entity relationship wiring** — record customer/alumni relationships during pipeline execution
+3. **Person enrichment from Sales Nav URLs** — resolve hashed LinkedIn URLs to canonical `/in/username` format for Prospeo/LeadMagic enrichment
 
 ## Postmortems & Troubleshooting
 
