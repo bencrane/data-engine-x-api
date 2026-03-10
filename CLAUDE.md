@@ -6,6 +6,117 @@ Authoritative context for agents working in `data-engine-x-api`.
 
 Read `docs/STRATEGIC_DIRECTIVE.md` before architecture or implementation decisions.
 
+## Production State (as of 2026-03-10)
+
+This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which was verified against live production SQL.
+
+### What Works End-to-End
+
+- The core pipeline loop works: submission -> pipeline run -> step execution -> entity state upsert. Production has `48` `submissions`, `837` `pipeline_runs`, `3283` `step_results`, `88` `company_entities`, `503` `person_entities`, `1` `job_posting_entities`, `4345` `entity_timeline` rows, and `93` `entity_snapshots`.
+- Blueprints with at least one completed production submission:
+  - `AlumniGTM Company Resolution Only v1` - `2` completed submissions
+  - `AlumniGTM Company Workflow v1` - `5` completed submissions
+  - `AlumniGTM Prospect Discovery v1` - `1` completed submission
+  - `Company Intel Briefing v1` - `3` completed submissions
+  - `ICP Job Titles Discovery v1` - `3` completed submissions
+  - `Person Intel Briefing v1` - `1` completed submission
+  - `Company Enrichment + Person Enrichment Fan Out` - `1` completed submission
+  - `Staffing Enrichment v1` - `1` completed submission
+- Healthy auto-persist paths in production:
+  - `icp_job_titles` - healthy; `161` successful found steps materialized into `156` distinct table rows with `0` missing matches
+  - `company_intel_briefings` - healthy; `3` successful steps materialized into `3` rows
+  - `person_intel_briefings` - healthy; `1` successful step materialized into `1` row
+
+### What Is Broken
+
+- `company_customers` is broken. Production has `17` successful customer-producing steps and `331` emitted customer items, but the table has `0` rows.
+- `gemini_icp_job_titles` is broken. Production has `20` successful upstream steps over `12` distinct company domains, but the table has `0` rows.
+- `salesnav_prospects` is broken. Production has `17` successful prospect-producing steps and `349` emitted prospect rows, but the table has `0` rows. The most likely cause is context shape failure: successful `person.search.sales_nav_url` steps do not carry a usable `source_company_domain`, so the Trigger auto-persist branch never fires.
+- `company_ads` is broken harder than the others. The prod table does not exist at all. The repo has `supabase/migrations/019_company_ads.sql`, but migration `019` never reached production.
+- `8` `pipeline_runs` are stuck in `running` for `7-14` days.
+- `7` `step_results` are stuck in `running`, and `190` are still `queued`.
+- End-to-end pipeline reliability is not clean. Pipelines frequently fail to complete cleanly due to silent auto-persist failures, context-shape issues, and the deploy-sequencing landmine between Railway and Trigger.dev.
+
+### What Has Never Been Used
+
+- `46` executable operations in the current code catalog have never been called in production:
+  - `address.search`
+  - `address.search.residents`
+  - `company.analyze.sec_10k`
+  - `company.analyze.sec_10q`
+  - `company.analyze.sec_8k_executive`
+  - `company.derive.detect_changes`
+  - `company.derive.extract_icp_titles`
+  - `company.enrich.ecommerce`
+  - `company.enrich.fmcsa`
+  - `company.enrich.hiring_signals`
+  - `company.enrich.locations`
+  - `company.enrich.tech_stack`
+  - `company.research.check_court_filings`
+  - `company.research.fetch_sec_filings`
+  - `company.research.get_docket_detail`
+  - `company.resolve.domain_from_email`
+  - `company.resolve.domain_from_linkedin`
+  - `company.resolve.domain_from_name`
+  - `company.resolve.linkedin_from_domain`
+  - `company.resolve.linkedin_from_domain_blitzapi`
+  - `company.resolve.location_from_domain`
+  - `company.search`
+  - `company.search.blitzapi`
+  - `company.search.by_job_postings`
+  - `company.search.by_tech_stack`
+  - `company.search.ecommerce`
+  - `company.search.fmcsa`
+  - `company.signal.bankruptcy_filings`
+  - `contractor.enrich`
+  - `contractor.search`
+  - `contractor.search.employees`
+  - `market.enrich.geo_detail`
+  - `market.enrich.metrics_current`
+  - `market.enrich.metrics_monthly`
+  - `market.search.cities`
+  - `market.search.counties`
+  - `market.search.jurisdictions`
+  - `market.search.zipcodes`
+  - `permit.search`
+  - `person.contact.resolve_email_blitzapi`
+  - `person.contact.resolve_mobile_phone`
+  - `person.contact.verify_email`
+  - `person.derive.detect_changes`
+  - `person.resolve.linkedin_from_email`
+  - `person.search.employee_finder_blitzapi`
+  - `person.search.waterfall_icp_blitzapi`
+- Unused blueprints:
+  - `AlumniGTM Prospect Resolution v1`
+  - `Phase6 Blueprint 1771280001`
+  - `Revenue Activation / CRM Cleanup v1`
+  - `Revenue Activation / CRM Enrichment v1`
+  - `Revenue Activation / Staffing Enrichment v1`
+  - `Staffing Activation / CRM Cleanup v1`
+  - `Staffing Activation / CRM Enrichment v1`
+- Tables with zero production usage:
+  - `entity_relationships` has `0` rows
+  - `extracted_icp_job_title_details` has `0` rows
+
+### Known Architectural Problems
+
+- See `docs/DATA_ENGINE_X_ARCHITECTURE.md`, section `7. Known Architectural Problems`, for the full list.
+- Top 3 problems:
+  - auto-persist silent failures: Trigger catches dedicated-table write failures and keeps the pipeline green, so `step_results` can be full while dedicated tables stay empty
+  - `run-pipeline.ts` monolith: the orchestration, direct-provider execution, persistence side effects, fan-out control, and failure semantics are concentrated in one oversized task file
+  - deploy-sequencing landmine: Railway must be live before Trigger.dev deploys, or new Trigger code calls internal FastAPI endpoints that do not exist yet
+
+## Diagnostic Reports
+
+- `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` - live production state audit
+- `docs/DATA_ENGINE_X_ARCHITECTURE.md` - full architecture doc including known problems
+
+If `CLAUDE.md` or `docs/SYSTEM_OVERVIEW.md` conflict with these reports, the reports are correct.
+
+## Entity Database Design
+
+Read `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` before any schema work on entity tables.
+
 ## Project Overview
 
 `data-engine-x-api` is a multi-tenant enrichment backend. It accepts operation and batch requests, executes deterministic provider-backed steps through Trigger.dev, and persists execution lineage plus canonical entity intelligence.

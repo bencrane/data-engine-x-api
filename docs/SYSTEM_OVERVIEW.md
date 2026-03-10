@@ -85,6 +85,8 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ## Operations (77 live)
 
+Production reality note as of `2026-03-10`: only `36` operations have ever been called against real production data. `46` executable operations in the current code catalog have never been called in production. That larger never-called count includes the `4` Trigger-direct operations that live outside the `77` FastAPI operation registry rows in this table. See `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` for the audited call set.
+
 ### Company Enrichment (9)
 | Operation ID | Provider(s) |
 |---|---|
@@ -302,26 +304,26 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 | Feature | Status |
 |---|---|
-| Batch orchestration | ✅ Live |
-| Nested fan-out (recursive) | ✅ Live |
-| Conditional step execution | ✅ Live |
-| Entity deduplication (fan-out + freshness) | ✅ Live |
-| Entity state accumulation (company, person, job) | ✅ Live |
-| Entity snapshots + change detection | ✅ Live |
-| Entity relationships (typed, directional, deduped) | ✅ Live |
-| Per-step entity timeline | ✅ Live |
-| Operation registry (77 ops) | ✅ Live |
-| AI blueprint assembler (NL + fields) | ✅ Live |
-| Coverage check endpoint | ✅ Live |
-| Person entity filters (title, seniority, department) | ✅ Live |
-| Job posting entity type + query endpoint | ✅ Live |
-| AlumniGTM dedicated persistence tables (`company_customers`, `gemini_icp_job_titles`) | ✅ Live |
-| Adyntel ads dedicated persistence table (`company_ads`) | ✅ Live |
-| Sales Navigator prospects dedicated persistence table (`salesnav_prospects`) | ✅ Live |
-| Bright Data cross-source job validation (via HQ) | ✅ Live |
-| Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live |
-| Doppler secrets management | ✅ Live |
-| Super-admin API key auth | ✅ Live |
+| Batch orchestration | ✅ Live - production has `48` submissions and `837` pipeline runs. |
+| Nested fan-out (recursive) | ✅ Live - child pipeline runs are present in production and active blueprints depend on fan-out. |
+| Conditional step execution | ✅ Live - production has `990` skipped `step_results`, which reflects active conditional/skip behavior. |
+| Entity deduplication (fan-out + freshness) | ⚠️ Built and active, but not fully trustworthy under current stuck-run and persistence-failure conditions. |
+| Entity state accumulation (company, person, job) | ✅ Live - production has `88` `company_entities`, `503` `person_entities`, and `1` `job_posting_entities`. |
+| Entity snapshots + change detection | ⚠️ Snapshots are live (`93` rows), but detect-changes operations have never been called in production. |
+| Entity relationships (typed, directional, deduped) | 🔲 Never used in production - table exists but has `0` rows. |
+| Per-step entity timeline | ✅ Live - production has `4345` `entity_timeline` rows. |
+| Operation registry (77 ops) | ⚠️ Built, but production has only executed `36` operations. Most of the registry has never been used with real data. |
+| AI blueprint assembler (NL + fields) | ⚠️ Built, but production usage was not verifiable from the database audit. |
+| Coverage check endpoint | ⚠️ Built, but production usage was not verifiable from the database audit. |
+| Person entity filters (title, seniority, department) | ⚠️ Built, but production usage was not verifiable from the database audit. |
+| Job posting entity type + query endpoint | ✅ Live - production has job pipeline activity and `job_posting_entities` data, though only `1` row currently exists. |
+| AlumniGTM dedicated persistence tables (`company_customers`, `gemini_icp_job_titles`) | ⚠️ Broken in prod - both tables exist but have `0` rows despite successful upstream step outputs. |
+| Adyntel ads dedicated persistence table (`company_ads`) | ⚠️ Broken in prod - the table is missing entirely from production; migration `019` never landed. |
+| Sales Navigator prospects dedicated persistence table (`salesnav_prospects`) | ⚠️ Broken in prod - table exists but has `0` rows despite successful upstream steps; context shape prevents auto-persist from firing. |
+| Bright Data cross-source job validation (via HQ) | ✅ Live - `job.validate.is_active` has been executed successfully in production. |
+| Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live - it has completed successfully in production. |
+| Doppler secrets management | ✅ Live - production app runtime is using Doppler-injected secrets. |
+| Super-admin API key auth | ⚠️ Built, but production usage was not verifiable from the database audit. |
 
 ---
 
