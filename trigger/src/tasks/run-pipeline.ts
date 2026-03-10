@@ -1659,6 +1659,24 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function extractParallelRawOutput(value: unknown): Record<string, unknown> | unknown {
+  if (!isObject(value)) {
+    return value;
+  }
+
+  const output = value["output"];
+  if (!isObject(output)) {
+    return value;
+  }
+
+  const content = output["content"];
+  if (!isObject(content)) {
+    return value;
+  }
+
+  return content;
+}
+
 function getStepCondition(
   stepSnapshot: InternalPipelineRun["blueprint_snapshot"]["steps"][number],
 ): Record<string, unknown> | null {
@@ -2095,9 +2113,7 @@ export const runPipeline = task({
               company_domain: result.output.domain || result.output.company_domain,
               company_name: result.output.company_name,
               company_description: result.output.company_description,
-              raw_parallel_output:
-                (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
-                result.output.parallel_raw_response,
+              raw_parallel_output: extractParallelRawOutput(result.output.parallel_raw_response),
               parallel_run_id: result.output.parallel_run_id,
               processor: result.output.processor,
               source_submission_id: run.submission_id,
@@ -2123,9 +2139,7 @@ export const runPipeline = task({
               client_company_name: result.output.client_company_name,
               client_company_domain: result.output.client_company_domain,
               client_company_description: result.output.client_company_description,
-              raw_parallel_output:
-                (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
-                result.output.parallel_raw_response,
+              raw_parallel_output: extractParallelRawOutput(result.output.parallel_raw_response),
               parallel_run_id: result.output.parallel_run_id,
               processor: result.output.processor,
               source_submission_id: run.submission_id,
@@ -2157,9 +2171,7 @@ export const runPipeline = task({
               client_company_description: result.output.client_company_description,
               customer_company_name: result.output.customer_company_name,
               customer_company_domain: result.output.customer_company_domain,
-              raw_parallel_output:
-                (result.output.parallel_raw_response as Record<string, unknown>)?.output?.content ||
-                result.output.parallel_raw_response,
+              raw_parallel_output: extractParallelRawOutput(result.output.parallel_raw_response),
               parallel_run_id: result.output.parallel_run_id,
               processor: result.output.processor,
               source_submission_id: run.submission_id,
