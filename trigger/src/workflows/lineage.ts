@@ -25,6 +25,26 @@ export interface WorkflowStepReference {
   step_position: number;
 }
 
+export interface RecordStepTimelineEventParams {
+  orgId: string;
+  companyId?: string | null;
+  submissionId: string;
+  pipelineRunId: string;
+  entityType: "person" | "company" | "job";
+  cumulativeContext: WorkflowContext;
+  stepResultId: string;
+  stepPosition: number;
+  operationId: string;
+  stepStatus: "succeeded" | "failed" | "skipped";
+  skipReason?: string | null;
+  durationMs?: number | null;
+  providerAttempts?: Array<Record<string, unknown>>;
+  condition?: Record<string, unknown> | null;
+  errorMessage?: string | null;
+  errorDetails?: Record<string, unknown> | null;
+  operationResult?: Record<string, unknown> | null;
+}
+
 interface UpdatePipelineRunStatusParams {
   pipelineRunId: string;
   status: PipelineRunStatus;
@@ -243,4 +263,32 @@ export async function skipRemainingWorkflowSteps(
   }
 
   return skippedResults;
+}
+
+export async function recordStepTimelineEvent(
+  client: InternalApiClient,
+  params: RecordStepTimelineEventParams,
+): Promise<Record<string, unknown>> {
+  return confirmedInternalWrite<Record<string, unknown>>(client, {
+    path: "/api/internal/entity-timeline/record-step-event",
+    payload: {
+      org_id: params.orgId,
+      company_id: params.companyId ?? undefined,
+      submission_id: params.submissionId,
+      pipeline_run_id: params.pipelineRunId,
+      entity_type: params.entityType,
+      cumulative_context: params.cumulativeContext,
+      step_result_id: params.stepResultId,
+      step_position: params.stepPosition,
+      operation_id: params.operationId,
+      step_status: params.stepStatus,
+      skip_reason: params.skipReason ?? undefined,
+      duration_ms: params.durationMs ?? undefined,
+      provider_attempts: params.providerAttempts ?? [],
+      condition: params.condition ?? undefined,
+      error_message: params.errorMessage ?? undefined,
+      error_details: params.errorDetails ?? undefined,
+      operation_result: params.operationResult ?? undefined,
+    },
+  });
 }
