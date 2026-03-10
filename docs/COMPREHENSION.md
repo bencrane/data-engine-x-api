@@ -1,5 +1,17 @@
 # data-engine-x-api — Comprehension
 
+## Status Of This Document
+
+This is an older comprehension note, not a current production-state document.
+
+It should be treated as historical architecture thinking and schema planning context, not as a factual description of what is true in production right now.
+
+For current factual state, use:
+
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+3. `CLAUDE.md`
+
 ## 1) System Understanding
 
 `data-engine-x-api` is a multi-tenant processing backend that takes raw company/CRM data, runs deterministic step pipelines, and returns transformed outputs for downstream consumption (dashboard, CRM, or both).
@@ -52,6 +64,8 @@ Access invariants:
 ## 5) Proposed Database Schema
 
 Below is the schema I would implement first-pass in Postgres for this system.
+
+This is explicitly a proposed schema section, not the live production schema.
 
 ### 5.1 Suggested enums
 

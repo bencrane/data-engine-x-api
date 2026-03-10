@@ -4,12 +4,26 @@ You are the overseer/technical lead for `data-engine-x-api`. You do NOT write co
 
 ## Your Role
 
-1. **Understand the system deeply** — read `CLAUDE.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/CAPABILITIES.md`, and `docs/STRATEGIC_DIRECTIVE.md` before doing anything.
+1. **Understand the system deeply** — read `CLAUDE.md`, `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, `docs/SYSTEM_OVERVIEW.md`, `docs/CAPABILITIES.md`, and `docs/STRATEGIC_DIRECTIVE.md` before doing anything.
 2. **Make architectural decisions** — the operator describes what they want. You determine how it maps to the system, what operations/providers/infrastructure are needed, and in what order.
 3. **Write directives for executor agents** — detailed, explicit instructions that an AI agent can execute without judgment calls on scope. The executor builds. You review and approve.
 4. **Verify work** — check commits, verify scope, spot-check code, push when approved.
 5. **Deploy when needed** — see Deploy Protocol below.
 6. **Run migrations** — `psql "$DATABASE_URL" -f supabase/migrations/0XX_*.sql`
+
+## Ground Truth Precedence
+
+Do **not** rely on `docs/SYSTEM_OVERVIEW.md` or this file alone for production truth.
+
+They are useful reference documents, but parts of them are outdated and inaccurate if read as direct statements about production reality. They have historically described built capability as if it were working cleanly in production. That is misleading.
+
+For factual, current, production-state truth, use these in this order:
+
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+3. `CLAUDE.md`
+
+If those documents conflict with `docs/SYSTEM_OVERVIEW.md` or this file, the production audit and architecture report are correct.
 
 ## Operating Rules
 
@@ -38,39 +52,39 @@ See `docs/troubleshooting-fixes/2026-02-25_icp_auto_persist_not_writing.md` for 
 
 See `docs/WRITING_EXECUTOR_DIRECTIVES.md` for the full guide with examples.
 
-## Current System State
+## Current System State (Production Reality as of 2026-03-10)
 
-- **77 operations** across 7 verticals (B2B SaaS, Ecommerce, Trucking, Construction, Legal/Risk, Revenue Intelligence, Staffing)
-- **21+ providers** with canonical contracts and hardened adapters
-- **3 entity types**: `company`, `person`, `job` — each with state accumulation, snapshots, timeline, change detection
-- **Full pipeline infrastructure**: batch orchestration, nested fan-out, conditional execution (with shorthand format support: `exists`, `not`, `eq`, etc.), entity dedup, snapshots, change detection, per-step timeline
-- **12 live blueprints** across 3 orgs: CRM Cleanup v1, CRM Enrichment v1, Staffing Enrichment v1, ICP Job Titles Discovery v1, Company Intel Briefing v1, Person Intel Briefing v1, AlumniGTM Company Workflow v1, AlumniGTM Company Resolution Only v1, AlumniGTM Prospect Discovery v1, AlumniGTM Prospect Resolution v1
-- **4 Parallel.ai operations** running directly from Trigger.dev: ICP job titles, company intel briefing, person intel briefing, company domain resolution (lite) — with dedicated storage tables and auto-persist
-- **AlumniGTM pipeline** — full 3-blueprint chain: target company analysis → customer enrichment + Sales Nav URL build → prospect scrape + company resolution + ICP fit evaluation. Tested end-to-end with SecurityPal AI.
-- **Dedicated persistence tables**: `company_customers`, `gemini_icp_job_titles`, `company_ads`, `salesnav_prospects` — all with auto-persist wiring in run-pipeline.ts and tenant query endpoints
-- **Unified input extraction** — single shared module (`app/services/_input_extraction.py`) with canonical alias maps for all field name variants. All 16 service files migrated.
-- **ICP title extraction** via Modal/Anthropic — normalizes inconsistent Parallel output into consistent `{ title, buyer_role, reasoning }` structure. Flat table `extracted_icp_job_title_details` for joins.
-- **Sales Navigator URL scraper** (`person.search.sales_nav_url`) — RapidAPI, auto-pagination (up to 50 pages), fan-out compatible.
-- **BlitzAPI standalone operations** — dedicated single-provider operations: company enrichment, company search, domain-to-LinkedIn, waterfall ICP search, employee finder, find work email
-- **HQ workflow operations** — 8 operations wrapping HQ `/run/` endpoints: infer LinkedIn URL, ICP job titles (Gemini), discover customers (Gemini), lookup customers (resolved), ICP criterion, Sales Nav URL builder, evaluate ICP fit, company name lookup
-- **Entity relationships table** — typed, directional relationships between entities (has_customer, has_target, has_competitor, works_at, alumni_of) with dedup and invalidation
-- **9 CRM resolution operations** — domain from email/LinkedIn/name, LinkedIn from domain (HQ + BlitzAPI), person LinkedIn from email, location from domain, domain from name (HQ + Parallel)
-- **Bright Data validation** via HQ (Indeed + LinkedIn raw tables, cross-source job validation endpoint)
-- **Enigma operating locations** — brand → physical locations with open/closed status
-- **AI blueprint assembler** with natural language mode (Claude → OpenAI → Gemini)
-- **Coverage check** endpoint for pre-outbound readiness
-- **Operation registry** with formal input/output metadata
-- **Super-admin auth on `/api/v1/execute`** — requires `org_id` + `company_id` in body
-- **20 Modal micro-functions** for Parallel.ai fallbacks
-- **FMCSA daily signal pipeline** in separate repo (`ongoing-data-pulls`)
-- **50+ test files**, 20 migrations
+- The core pipeline loop is real: production has `48` `submissions`, `837` `pipeline_runs`, `3283` `step_results`, `1899` `operation_runs`, `88` `company_entities`, `503` `person_entities`, `1` `job_posting_entities`, `4345` `entity_timeline` rows, and `93` `entity_snapshots`.
+- The executable code catalog currently contains `82` operations (`78` in `app/routers/execute_v1.py` plus `4` Trigger-direct operations), but only `36` have ever been called in production.
+- Healthy dedicated persistence paths:
+  - `icp_job_titles`
+  - `company_intel_briefings`
+  - `person_intel_briefings`
+- Broken dedicated persistence paths:
+  - `company_customers` - successful upstream steps exist, table still has `0` rows
+  - `gemini_icp_job_titles` - successful upstream steps exist, table still has `0` rows
+  - `salesnav_prospects` - successful upstream steps exist, table still has `0` rows
+  - `company_ads` - prod table does not exist at all
+- Stale runtime state exists in production:
+  - `8` `pipeline_runs` stuck in `running`
+  - `7` `step_results` stuck in `running`
+  - `190` `step_results` still `queued`
+- Production is overwhelmingly operation-native already:
+  - `72/73` `blueprint_steps` rows are operation-native
+  - the only legacy `step_id` row belongs to an unused Phase6 blueprint
+- Unused production surfaces:
+  - `entity_relationships` has `0` rows
+  - `extracted_icp_job_title_details` has `0` rows
+  - `46` executable operations have never been called in production
 
 ## Key Files
 
 | File | What it is |
 |---|---|
-| `CLAUDE.md` | Project conventions, tech stack, directory structure |
-| `docs/SYSTEM_OVERVIEW.md` | Complete technical reference — all operations, providers, schema, architecture |
+| `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` | Production state audit; primary factual source for what actually works and what is broken |
+| `docs/DATA_ENGINE_X_ARCHITECTURE.md` | Ground-truth architecture doc with known production problems |
+| `CLAUDE.md` | Project conventions plus production-state summary |
+| `docs/SYSTEM_OVERVIEW.md` | Technical reference snapshot; useful, but not authoritative on its own for live production state |
 | `docs/CAPABILITIES.md` | Business-facing capabilities and GTM use cases |
 | `docs/STRATEGIC_DIRECTIVE.md` | Non-negotiable build rules |
 | `docs/CONDITION_SCHEMA.md` | Conditional step execution schema |
@@ -96,23 +110,37 @@ Read the "What's Not Built Yet" section in `docs/SYSTEM_OVERVIEW.md` for the cur
 
 ## AlumniGTM Pipeline Status
 
-**Pipeline is fully operational end-to-end.** Tested with SecurityPal AI → 18 customers discovered → 15 enriched with Sales Nav URLs → Elastic alumni scrape produced 66 prospects → 34 evaluated as ICP fit = yes.
+Do **not** describe the AlumniGTM pipeline as fully operational end-to-end.
+
+What is true in production:
+
+- Some AlumniGTM blueprints have completed successfully.
+- `company.derive.evaluate_icp_fit`, `company.derive.salesnav_url`, `company.resolve.domain_from_name_hq`, `company.research.infer_linkedin_url`, and `company.enrich.profile_blitzapi` are heavily exercised in production.
+- `icp_job_titles` auto-persist is healthy right now.
+
+What is false or misleading if stated without qualification:
+
+- `company_customers` is not landing in production.
+- `gemini_icp_job_titles` is not landing in production.
+- `salesnav_prospects` is not landing in production.
+- `company_ads` does not exist in prod.
+- production still contains stale `running` runs and stale `running` steps.
 
 | Piece | Status |
 |---|---|
-| Blueprint 1: Company Workflow (7 steps) | **Live.** Infer LinkedIn → BlitzAPI enrich → Gemini ICP titles → HQ customer lookup → Gemini fallback → ICP criterion → Sales Nav URL |
-| Blueprint 2: Company Resolution (5 steps) | **Live.** HQ name lookup → Gemini infer LinkedIn → BlitzAPI domain-to-LinkedIn → BlitzAPI enrich → Sales Nav URL build |
-| Blueprint 3: Prospect Discovery (6 steps) | **Live.** Sales Nav scrape (fan-out) → HQ name resolve → Gemini infer LinkedIn → BlitzAPI domain-to-LinkedIn → BlitzAPI enrich → ICP fit evaluate |
-| ICP job titles (Parallel Deep Research) | Live. 155 companies processed. Dedicated table. |
-| ICP job titles (Gemini) | Live. Dedicated `gemini_icp_job_titles` table. |
-| Company customers (HQ resolved lookup) | Live. Dedicated `company_customers` table with auto-persist. |
-| Sales Nav prospects | Live. Dedicated `salesnav_prospects` table with auto-persist. |
-| Company ads (Adyntel) | Live. Dedicated `company_ads` table with auto-persist. |
-| BlitzAPI standalone operations | Live. Company enrich, company search, domain-to-LinkedIn, waterfall ICP, employee finder, find work email. |
-| Unified input extraction | Live. Single alias map across all 16 service files. |
-| Condition evaluator shorthand | Live. Supports `exists`, `not`, `eq`, `ne`, etc. |
-| Sales Nav auto-pagination | Live. Up to 50 pages per scrape. |
-| Entity relationships table | Live. Empty — no relationships recorded yet. |
+| Blueprint 1: Company Workflow (7 steps) | Used in production. Successful completions exist, but downstream dedicated persistence is not uniformly healthy. |
+| Blueprint 2: Company Resolution (5 steps) | Used in production. Successful completions exist. |
+| Blueprint 3: Prospect Discovery (6 steps) | Used in production. Successful completions exist, but downstream Sales Nav prospect persistence is broken. |
+| ICP job titles (Parallel Deep Research) | Healthy in production. 156 persisted rows are present in the dedicated table. |
+| ICP job titles (Gemini) | Built, but broken in prod. Successful upstream steps exist; `gemini_icp_job_titles` has `0` rows. |
+| Company customers (HQ resolved lookup) | Built, but broken in prod. Successful upstream steps exist; `company_customers` has `0` rows. |
+| Sales Nav prospects | Built, but broken in prod. Successful upstream steps exist; `salesnav_prospects` has `0` rows. |
+| Company ads (Adyntel) | Built in code, but broken in prod. `company_ads` table is missing entirely. |
+| BlitzAPI standalone operations | Used in production for company enrichment and related AlumniGTM flows. |
+| Unified input extraction | Built in code. Shared alias-map module exists across the migrated service files. |
+| Condition evaluator shorthand | Built in code and active in production skip behavior. |
+| Sales Nav auto-pagination | Built in code. Does not fix the broken prod `salesnav_prospects` persistence path. |
+| Entity relationships table | Built, never used in production. Table is empty. |
 | HQ person_work_history dedup | Broken. Needs re-key. (deprioritized) |
 | Blueprint auto-chaining | Not built. Blueprints triggered manually in sequence. |
 

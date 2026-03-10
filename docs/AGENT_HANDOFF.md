@@ -5,6 +5,20 @@ Repository: `data-engine-x-api`
 Primary branch: `main`
 Current HEAD at handoff update: `26bcbf6` (local `main`)
 
+## Status Of This Document
+
+This is a historical handoff note from `2026-02-17`.
+
+Do **not** use it as current production truth.
+
+It is outdated relative to the current system and will mislead you if read as a description of present production state.
+
+For current factual state, use:
+
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+3. `CLAUDE.md`
+
 ## 1) Project Snapshot
 
 `data-engine-x-api` is a multi-tenant entity intelligence backend with operation-native execution, batch orchestration, fan-out child pipelines, canonical entity state, and timeline history.
@@ -25,9 +39,11 @@ Local `main` may be ahead of `origin/main`. Verify with `git status` and `git lo
 
 Local temp artifacts can exist (for example `.tmp-docker-config/`) and should remain uncommitted unless explicitly requested.
 
-## 3) Live Operation IDs (execute v1)
+## 3) Historical Operation IDs Snapshot (execute v1)
 
-All are wired through `POST /api/v1/execute` and persisted to `operation_runs` / `operation_attempts`:
+This section reflects the state of the system at the time of the handoff and is not a current inventory.
+
+At that time, these were wired through `POST /api/v1/execute` and persisted to `operation_runs` / `operation_attempts`:
 
 1. `person.contact.resolve_email`
 2. `person.contact.resolve_mobile_phone`
@@ -61,7 +77,9 @@ Adyntel:
 - `ADYNTEL_ACCOUNT_EMAIL`
 - `ADYNTEL_TIMEOUT_SECONDS=90`
 
-## 5) What Is Implemented
+## 5) Historical Implemented State
+
+This section is historical and no longer accurate as a current-state summary.
 
 - Batch orchestration (`/api/v1/batch/submit`, `/api/v1/batch/status`)
 - Fan-out parent/child pipeline runs from operation outputs

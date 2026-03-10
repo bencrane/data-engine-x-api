@@ -2,6 +2,8 @@
 
 **Context:** You are working on `data-engine-x-api`. Read `CLAUDE.md` before starting.
 
+**Historical note:** This directive is a build artifact, not a production-state report. Treat any status language in this file as implementation-target language, not as evidence that the feature is healthy or used in production today.
+
 **Scope clarification on autonomy:** You are expected to make strong engineering decisions within the scope defined below. What you must not do is drift outside this scope, run deploy commands, or take actions not covered by this directive. Within scope, use your best judgment.
 
 **Background:** We need a foundational table that records typed, directional relationships between entities (companies and persons). Examples: "securitypal.com has_customer snap.com", "linkedin.com/in/jhiggins works_at coreweave.com", "coreweave.com has_competitor aws.amazon.com". This enables flat SQL queries for dashboard assembly, lead magnet generation, and GTM briefing construction — replacing the current need to walk pipeline run trees and parse step results. One table, many relationship types (not a closed enum — new types are just new string values, no migration needed).

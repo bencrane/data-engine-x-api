@@ -2,6 +2,8 @@
 
 How to write directives that executor agents can implement correctly without ambiguity.
 
+Production-truth rule: example directives in this file show structure, not current production truth. Do not infer system health, feature completeness, or production readiness from example wording. Cross-check current reality in `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
+
 ---
 
 ## Structure

@@ -1,6 +1,18 @@
 # System Overview: data-engine-x-api
 
-Comprehensive documentation of the system as of 2026-02-22. Written for AI agents or human engineers who need full context to continue development.
+Technical reference snapshot originally written on 2026-02-22 and updated with production reality notes on 2026-03-10.
+
+This file is useful, but it is **not** the sole source of truth for live production state.
+
+It is a broad technical reference, not a direct production audit. If you read it as if every built capability is working cleanly in production, you will be misled.
+
+For factual, current, production-state truth, use:
+
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+3. `CLAUDE.md`
+
+If this file conflicts with those documents, the production audit and architecture report are correct.
 
 ---
 
@@ -31,6 +43,8 @@ The system supports multiple product surfaces on the same infrastructure:
 ---
 
 ## Architecture
+
+Production reality note as of `2026-03-10`: the execution flow below is the intended active loop and it does run in production, but pipeline success does **not** guarantee that every side-effect landed. Dedicated-table auto-persist is partially broken in production. See `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`.
 
 ### Execution Flow
 
@@ -72,6 +86,8 @@ Client → POST /api/v1/batch/submit
 
 The `entity_relationships` table records typed, directional relationships between entities. Each relationship has a source entity (identified by domain or LinkedIn URL), a relationship type (e.g., `has_customer`, `has_competitor`, `works_at`, `alumni_of`), and a target entity. Relationships are org-scoped, deduplicated on (source, relationship, target), and support invalidation for time-bounded facts like employment.
 
+Production reality note as of `2026-03-10`: this capability exists in code and schema, but the production table has `0` rows. It has never been used in production.
+
 Internal endpoints: `/api/internal/entity-relationships/record`, `/record-batch`, `/invalidate`.
 Query endpoint: `/api/v1/entity-relationships/query`.
 
@@ -83,7 +99,7 @@ Query endpoint: `/api/v1/entity-relationships/query`.
 
 ---
 
-## Operations (77 live)
+## Operations (77 FastAPI-registered ops in code)
 
 Production reality note as of `2026-03-10`: only `36` operations have ever been called against real production data. `46` executable operations in the current code catalog have never been called in production. That larger never-called count includes the `4` Trigger-direct operations that live outside the `77` FastAPI operation registry rows in this table. See `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` for the audited call set.
 
@@ -304,25 +320,25 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 | Feature | Status |
 |---|---|
-| Batch orchestration | ✅ Live - production has `48` submissions and `837` pipeline runs. |
-| Nested fan-out (recursive) | ✅ Live - child pipeline runs are present in production and active blueprints depend on fan-out. |
-| Conditional step execution | ✅ Live - production has `990` skipped `step_results`, which reflects active conditional/skip behavior. |
+| Batch orchestration | ✅ Used in production - production has `48` submissions and `837` pipeline runs. |
+| Nested fan-out (recursive) | ✅ Used in production - child pipeline runs are present in production and active blueprints depend on fan-out. |
+| Conditional step execution | ✅ Used in production - production has `990` skipped `step_results`, which reflects active conditional/skip behavior. |
 | Entity deduplication (fan-out + freshness) | ⚠️ Built and active, but not fully trustworthy under current stuck-run and persistence-failure conditions. |
-| Entity state accumulation (company, person, job) | ✅ Live - production has `88` `company_entities`, `503` `person_entities`, and `1` `job_posting_entities`. |
+| Entity state accumulation (company, person, job) | ✅ Used in production - production has `88` `company_entities`, `503` `person_entities`, and `1` `job_posting_entities`. |
 | Entity snapshots + change detection | ⚠️ Snapshots are live (`93` rows), but detect-changes operations have never been called in production. |
 | Entity relationships (typed, directional, deduped) | 🔲 Never used in production - table exists but has `0` rows. |
-| Per-step entity timeline | ✅ Live - production has `4345` `entity_timeline` rows. |
+| Per-step entity timeline | ✅ Used in production - production has `4345` `entity_timeline` rows. |
 | Operation registry (77 ops) | ⚠️ Built, but production has only executed `36` operations. Most of the registry has never been used with real data. |
 | AI blueprint assembler (NL + fields) | ⚠️ Built, but production usage was not verifiable from the database audit. |
 | Coverage check endpoint | ⚠️ Built, but production usage was not verifiable from the database audit. |
 | Person entity filters (title, seniority, department) | ⚠️ Built, but production usage was not verifiable from the database audit. |
-| Job posting entity type + query endpoint | ✅ Live - production has job pipeline activity and `job_posting_entities` data, though only `1` row currently exists. |
+| Job posting entity type + query endpoint | ✅ Used in production - production has job pipeline activity and `job_posting_entities` data, though only `1` row currently exists. |
 | AlumniGTM dedicated persistence tables (`company_customers`, `gemini_icp_job_titles`) | ⚠️ Broken in prod - both tables exist but have `0` rows despite successful upstream step outputs. |
 | Adyntel ads dedicated persistence table (`company_ads`) | ⚠️ Broken in prod - the table is missing entirely from production; migration `019` never landed. |
 | Sales Navigator prospects dedicated persistence table (`salesnav_prospects`) | ⚠️ Broken in prod - table exists but has `0` rows despite successful upstream steps; context shape prevents auto-persist from firing. |
-| Bright Data cross-source job validation (via HQ) | ✅ Live - `job.validate.is_active` has been executed successfully in production. |
-| Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Live - it has completed successfully in production. |
-| Doppler secrets management | ✅ Live - production app runtime is using Doppler-injected secrets. |
+| Bright Data cross-source job validation (via HQ) | ✅ Used in production - `job.validate.is_active` has been executed successfully in production. |
+| Staffing enrichment blueprint (7-step, 2 fan-outs) | ✅ Used in production - it has completed successfully in production. |
+| Doppler secrets management | ✅ Used in production - the app runtime is using Doppler-injected secrets. |
 | Super-admin API key auth | ⚠️ Built, but production usage was not verifiable from the database audit. |
 
 ---
@@ -367,7 +383,9 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 ---
 
-## Live Blueprints
+## Defined Blueprints
+
+Production reality note as of `2026-03-10`: these are the blueprints defined in the system, not a guarantee that they are actively used, healthy, or complete successfully in production. See `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` for actual usage counts and completion rates.
 
 | Blueprint | Org | Steps | Purpose |
 |---|---|---|---|
