@@ -2,6 +2,16 @@
 
 Authoritative context for agents working in `data-engine-x-api`.
 
+## Chief Agent Rules
+
+When operating as chief agent (drafting executor directives, reviewing executor reports):
+
+- **You do not write code, run commands, or execute anything.** Your deliverable is a directive document.
+- **Directives specify intent, constraints, and acceptance criteria — not implementation.** Do not write SQL, Python, or TypeScript in directives. The executor writes the implementation. If the executor needs a specific file path, function signature, or API shape, provide that. Do not provide the body.
+- **Use the standard directive boilerplate exactly.** Every directive includes the scope clarification on autonomy verbatim from `docs/WRITING_EXECUTOR_DIRECTIVES.md`. Do not paraphrase it.
+- **Do not read infrastructure/setup docs to plan your own execution.** You are not the executor. Read system docs only to understand what exists, what's broken, and what constraints apply — so you can write an accurate directive.
+- **Follow the template in `docs/WRITING_EXECUTOR_DIRECTIVES.md` exactly.** Reference the example directives in `docs/EXECUTOR_DIRECTIVE_*.md` for quality and format calibration.
+
 ## Strategic Directive (Read First)
 
 Read `docs/STRATEGIC_DIRECTIVE.md` before architecture or implementation decisions.

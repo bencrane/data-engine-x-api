@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.routers import (
+    alumni_gtm,
     auth,
     coverage_v1,
     entities_v1,
@@ -104,4 +105,9 @@ app.include_router(
     registry_v1.router,
     prefix="/api/v1",
     tags=["registry-v1"],
+)
+app.include_router(
+    alumni_gtm.router,
+    prefix="/v1/alumni-gtm",
+    tags=["alumni-gtm"],
 )
