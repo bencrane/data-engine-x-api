@@ -36,6 +36,37 @@ test("upsertEntityStateConfirmed returns entity data when write is confirmed", a
   assert.equal(result.entity_id, "entity-123");
 });
 
+test("upsertEntityStateConfirmed supports person entity writes", async () => {
+  const client = createInternalApiClient({
+    authContext: { orgId: "org-1", companyId: "company-1" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    fetchImpl: createMockFetch([
+      {
+        body: {
+          data: {
+            entity_id: "person-123",
+            full_name: "Jane Doe",
+          },
+        },
+      },
+    ]),
+  });
+
+  const result = await upsertEntityStateConfirmed(client, {
+    pipelineRunId: "pipeline-1",
+    entityType: "person",
+    cumulativeContext: {
+      full_name: "Jane Doe",
+      linkedin_url: "https://linkedin.com/in/jane-doe",
+      work_email: "jane@acme.com",
+    },
+    lastOperationId: "person.contact.resolve_email",
+  });
+
+  assert.equal(result.entity_id, "person-123");
+});
+
 test("writeDedicatedTableConfirmed throws when response cannot be confirmed", async () => {
   const client = createInternalApiClient({
     authContext: { orgId: "org-1", companyId: "company-1" },
