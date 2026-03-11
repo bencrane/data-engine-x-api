@@ -1,6 +1,15 @@
 # Architecture
 
-## System Flow (Current)
+## Status
+
+- Status: historical architecture snapshot
+- Authority: lower than `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`
+- Use this for: older runtime-model context and broad implementation reference
+- Do not use this for: current production-truth claims or deployment verification
+
+This file predates the audited architecture documents and is retained for context. If it conflicts with the audited reports, the audited reports win.
+
+## System Flow (Historical Snapshot)
 
 The active runtime path is:
 

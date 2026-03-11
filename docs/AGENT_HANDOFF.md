@@ -5,7 +5,12 @@ Repository: `data-engine-x-api`
 Primary branch: `main`
 Current HEAD at handoff update: `26bcbf6` (local `main`)
 
-## Status Of This Document
+## Status
+
+- Status: historical handoff note
+- Authority: lower than the audited production-truth docs
+- Use this for: historical operator context and older repo-state notes
+- Do not use this for: current production truth, current roadmap priority, or deployment verification
 
 This is a historical handoff note from `2026-02-17`.
 
@@ -29,9 +34,10 @@ Core stack:
 - Supabase/Postgres
 
 Read first:
+- `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
+- `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+- `docs/DATA_ENGINE_X_ARCHITECTURE.md`
 - `CLAUDE.md`
-- `docs/STRATEGIC_DIRECTIVE.md`
-- `docs/ARCHITECTURE.md`
 
 ## 2) Current Git/State Notes
 
@@ -59,7 +65,7 @@ At that time, these were wired through `POST /api/v1/execute` and persisted to `
 
 ## 4) Provider Order / Config Defaults
 
-Defined in `app/config.py` and `.env.example` (non-prefixed env names):
+Defined in `app/config.py` and populated from Doppler-managed environment variables (non-prefixed env names):
 
 - `COMPANY_SEARCH_ORDER=prospeo,blitzapi,companyenrich`
 - `PERSON_SEARCH_ORDER=prospeo,blitzapi,companyenrich`

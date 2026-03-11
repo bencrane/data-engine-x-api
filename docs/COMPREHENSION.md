@@ -1,6 +1,11 @@
 # data-engine-x-api — Comprehension
 
-## Status Of This Document
+## Status
+
+- Status: historical comprehension and planning note
+- Authority: lower than the audited production-truth docs
+- Use this for: older architecture reasoning, schema-planning context, and design-history context
+- Do not use this for: current production truth, current schema reality, or deployment verification
 
 This is an older comprehension note, not a current production-state document.
 

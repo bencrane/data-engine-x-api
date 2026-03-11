@@ -2,6 +2,13 @@
 
 Technical reference snapshot originally written on 2026-02-22 and updated with production reality notes on 2026-03-10.
 
+## Status
+
+- Status: active technical reference
+- Authority: lower than the audited production-truth docs
+- Use this for: broad system lookup, feature/reference orientation, and codebase surface area
+- Do not use this for: proving deployment status, proving production health, or resolving contradictions with audited reports
+
 This file is useful, but it is **not** the sole source of truth for live production state.
 
 It is a broad technical reference, not a direct production audit. If you read it as if every built capability is working cleanly in production, you will be misled.
@@ -38,7 +45,7 @@ The system supports multiple product surfaces on the same infrastructure:
 | Secrets | Doppler → Docker | All secrets injected at container startup via `doppler run --` |
 | Micro-operations | Modal (Python) | Parallel.ai-backed micro-functions for fallback data resolution |
 | External providers | 21+ provider APIs | Enrichment, search, verification, research, ads, technographics, revenue, permits, court filings |
-| Signal pipelines | `ongoing-data-pulls` (separate repo) | FMCSA daily census diff feeds → stored in HQ database |
+| Signal pipelines | mixed repo history | older FMCSA signal work lived in `ongoing-data-pulls`; this repo now also contains newer FMCSA ingestion directives, mappings, and task files whose presence does not by itself prove production deployment |
 
 ---
 
@@ -299,11 +306,14 @@ Parallel.ai-backed functions for fallback data resolution. 11 company + 8 person
 
 ## Signal Pipelines (separate repo: `ongoing-data-pulls`)
 
-**FMCSA Daily Census Feeds:**
-- 6 daily diff feeds ingested: carrier, auth_hist, boc3, insurance, revocation, out-of-service
-- Stored in HQ database under `fmcsa` schema
-- API endpoints for querying changes by date/feed type
-- All 6 feeds confirmed working (6,000 test rows ingested)
+Historical note: this section originally described FMCSA work that lived in a separate repo.
+
+Current Chief Agent guidance:
+
+- treat this section as reference/history, not as a current production verification statement
+- this repo now also contains substantial FMCSA ingestion directives, mapping docs, and Trigger task files
+- the existence of those newer FMCSA docs/files does not itself prove production completion
+- use `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md` for live-truth claims
 
 ---
 
