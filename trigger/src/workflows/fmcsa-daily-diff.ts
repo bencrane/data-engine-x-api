@@ -3,8 +3,16 @@ import { Readable } from "node:stream";
 import { parse as createCsvStreamParser } from "csv-parse";
 import { parse as parseCsvSync } from "csv-parse/sync";
 
-import { createInternalApiClient, InternalApiClient } from "./internal-api.js";
-import { writeDedicatedTableConfirmed } from "./persistence.js";
+import {
+  createInternalApiClient,
+  InternalApiClient,
+  InternalApiError,
+  InternalApiTimeoutError,
+} from "./internal-api.js";
+import {
+  PersistenceConfirmationError,
+  writeDedicatedTableConfirmed,
+} from "./persistence.js";
 
 type FmcsaFeedName =
   | "AuthHist"
@@ -112,6 +120,12 @@ interface ParsedRowsResult {
   rows: FmcsaDailyDiffRow[];
 }
 
+const FMCSA_LONG_RUNNING_STREAM_TIMEOUTS = {
+  // Streaming downloads stay open for the full ingest, not just the initial HTTP handshake.
+  downloadTimeoutMs: 3_300_000,
+  persistenceTimeoutMs: 300_000,
+} as const;
+
 function shouldUseStreamingParser(feed: FmcsaDailyDiffFeedConfig): boolean {
   return (
     feed.useStreamingParser ??
@@ -125,6 +139,36 @@ function resolveDownloadTimeoutMs(feed: FmcsaDailyDiffFeedConfig): number {
 
 function resolvePersistenceTimeoutMs(feed: FmcsaDailyDiffFeedConfig): number | undefined {
   return feed.persistenceTimeoutMs ?? (shouldUseStreamingParser(feed) ? 120_000 : undefined);
+}
+
+function isAbortTimeoutError(error: unknown): error is Error {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+function formatStreamingWorkflowError(feed: FmcsaDailyDiffFeedConfig, error: unknown): Error {
+  if (error instanceof InternalApiTimeoutError) {
+    return new Error(
+      `${feed.feedName} persistence request timed out after ${resolvePersistenceTimeoutMs(feed)}ms: ${error.path}`,
+    );
+  }
+
+  if (error instanceof InternalApiError || error instanceof PersistenceConfirmationError) {
+    return error;
+  }
+
+  if (isAbortTimeoutError(error)) {
+    return new Error(
+      `${feed.feedName} download stream timed out after ${resolveDownloadTimeoutMs(feed)}ms`,
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message.startsWith(`${feed.feedName} `)
+      ? error
+      : new Error(`${feed.feedName} CSV parsing failed: ${error.message}`);
+  }
+
+  return new Error(`${feed.feedName} CSV parsing failed: ${String(error)}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -489,9 +533,7 @@ async function parseAndPersistStreamedCsv(
       }
     }
   } catch (error) {
-    throw new Error(
-      `${payload.feed.feedName} CSV parsing failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw formatStreamingWorkflowError(payload.feed, error);
   }
 
   if (payload.feed.headerRow && !headerValidated) {
@@ -1284,6 +1326,7 @@ export const FMCSA_CRASH_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_CRASH_FILE_SOURCE_FIELDS.length,
   headerRow: FMCSA_CRASH_FILE_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_CARRIER_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1296,6 +1339,7 @@ export const FMCSA_CARRIER_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_CARRIER_ALL_HISTORY_SOURCE_FIELDS.length,
   headerRow: FMCSA_CARRIER_ALL_HISTORY_HEADERS,
   expectedContentTypes: ["text/csv"],
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_INSPECTIONS_PER_UNIT_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1308,6 +1352,8 @@ export const FMCSA_INSPECTIONS_PER_UNIT_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS.length,
   headerRow: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 2500,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_SPECIAL_STUDIES_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1320,6 +1366,8 @@ export const FMCSA_SPECIAL_STUDIES_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS.length,
   headerRow: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 5000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1332,6 +1380,8 @@ export const FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_REVOCATION_ALL_HISTORY_SOURCE_FIELDS.length,
   headerRow: FMCSA_REVOCATION_ALL_HISTORY_HEADERS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 5000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_INSUR_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1344,6 +1394,8 @@ export const FMCSA_INSUR_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_INSUR_ALL_HISTORY_SOURCE_FIELDS.length,
   headerRow: FMCSA_INSUR_ALL_HISTORY_HEADERS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 2500,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_OUT_OF_SERVICE_ORDERS_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1356,6 +1408,8 @@ export const FMCSA_OUT_OF_SERVICE_ORDERS_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_OUT_OF_SERVICE_ORDER_SOURCE_FIELDS.length,
   headerRow: FMCSA_OUT_OF_SERVICE_ORDER_HEADERS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 5000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_INSPECTIONS_AND_CITATIONS_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1394,6 +1448,7 @@ export const FMCSA_COMPANY_CENSUS_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   expectedContentTypes: ["text/csv"],
   useStreamingParser: true,
   writeBatchSize: 250,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_VEHICLE_INSPECTION_FILE_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1408,6 +1463,7 @@ export const FMCSA_VEHICLE_INSPECTION_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   expectedContentTypes: ["text/csv"],
   useStreamingParser: true,
   writeBatchSize: 500,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_REMAINING_CSV_EXPORT_FEEDS = [
@@ -1703,5 +1759,7 @@ export const FMCSA_SMS_FEED_CORRECTIONS = {
 export const __testables = {
   parseDailyDiffBody,
   resolveFeedDate,
+  resolveDownloadTimeoutMs,
+  resolvePersistenceTimeoutMs,
   serializeSchedulePayload,
 };
