@@ -7,6 +7,7 @@ import { createInternalApiClient, InternalApiClient } from "./internal-api.js";
 import type { IcpJobTitlesDiscoveryWorkflowPayload } from "./icp-job-titles-discovery.js";
 import type { PersonIntelBriefingWorkflowPayload } from "./person-intel-briefing.js";
 import type { PersonSearchEnrichmentWorkflowPayload } from "./person-search-enrichment.js";
+import type { TamBuildingWorkflowPayload } from "./tam-building.js";
 import type { WorkflowStepReference } from "./lineage.js";
 
 export interface PipelineRunRouterPayload {
@@ -18,6 +19,7 @@ export interface PipelineRunRouterPayload {
 }
 
 type SupportedRouteKey =
+  | "tam-building"
   | "company-enrichment"
   | "person-search-enrichment"
   | "icp-job-titles-discovery"
@@ -77,6 +79,7 @@ type TriggerDispatcher<TPayload> = (
 ) => Promise<TriggerHandle>;
 
 export interface PipelineRunRouterDispatchers {
+  tamBuilding: TriggerDispatcher<TamBuildingWorkflowPayload>;
   companyEnrichment: TriggerDispatcher<CompanyEnrichmentWorkflowPayload>;
   personSearchEnrichment: TriggerDispatcher<PersonSearchEnrichmentWorkflowPayload>;
   icpJobTitlesDiscovery: TriggerDispatcher<IcpJobTitlesDiscoveryWorkflowPayload>;
@@ -100,6 +103,7 @@ export interface PipelineRunRouterResult {
 }
 
 type RoutePayload =
+  | TamBuildingWorkflowPayload
   | CompanyEnrichmentWorkflowPayload
   | PersonSearchEnrichmentWorkflowPayload
   | IcpJobTitlesDiscoveryWorkflowPayload
@@ -346,6 +350,42 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 const ROUTES: RouteCandidate[] = [
+  {
+    routeKey: "tam-building",
+    taskId: "tam-building",
+    operationIds: ["company.search.blitzapi"],
+    isSupportedShape: (steps) =>
+      steps.every(
+        (step) =>
+          step.fan_out !== true &&
+          conditionIsEmpty(step.condition) &&
+          configsOnlyUseAllowedKeys(step.step_config, [
+            "max_results",
+            "search_page_size",
+            "company_batch_size",
+            "poll_interval_ms",
+            "person_max_people",
+            "per_person_concurrency",
+            "include_work_history",
+          ]),
+      ),
+    buildPayload: ({ routerPayload, run, context, steps, stepResults }) => ({
+      pipeline_run_id: routerPayload.pipeline_run_id,
+      org_id: routerPayload.org_id,
+      company_id: routerPayload.company_id,
+      submission_id: run.submission_id,
+      step_results: stepResults,
+      initial_context: context,
+      search_page_size: getNumberConfig(steps[0]?.step_config, ["search_page_size", "max_results"]),
+      company_batch_size: getNumberConfig(steps[0]?.step_config, ["company_batch_size"]),
+      poll_interval_ms: getNumberConfig(steps[0]?.step_config, ["poll_interval_ms"]),
+      person_max_people: getNumberConfig(steps[0]?.step_config, ["person_max_people"]),
+      per_person_concurrency: getNumberConfig(steps[0]?.step_config, ["per_person_concurrency"]),
+      include_work_history: getBooleanConfig(steps[0]?.step_config, ["include_work_history"]),
+      api_url: routerPayload.api_url,
+      internal_api_key: routerPayload.internal_api_key,
+    }),
+  },
   {
     routeKey: "company-enrichment",
     taskId: "company-enrichment",
@@ -686,6 +726,7 @@ export async function runPipelineRouter(
   }
 
   const dispatcher = {
+    "tam-building": dependencies.dispatchers.tamBuilding,
     "company-enrichment": dependencies.dispatchers.companyEnrichment,
     "person-search-enrichment": dependencies.dispatchers.personSearchEnrichment,
     "icp-job-titles-discovery": dependencies.dispatchers.icpJobTitlesDiscovery,

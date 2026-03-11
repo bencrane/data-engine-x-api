@@ -145,6 +145,17 @@ class InternalPipelineRunFanOutRequest(BaseModel):
     provider_attempts: list[dict[str, Any]] | None = None
 
 
+class InternalPipelineRunCreateChildrenRequest(BaseModel):
+    parent_pipeline_run_id: str
+    submission_id: str
+    org_id: str
+    company_id: str
+    blueprint_snapshot: dict[str, Any]
+    child_entities: list[dict[str, Any]]
+    start_from_position: int
+    parent_cumulative_context: dict[str, Any] | None = None
+
+
 class InternalRecordStepTimelineEventRequest(BaseModel):
     org_id: str
     company_id: str | None = None
@@ -979,6 +990,60 @@ async def internal_fan_out_pipeline_runs(
             "child_run_ids": [row["pipeline_run_id"] for row in child_runs],
             "skipped_duplicates_count": fan_out_result["skipped_duplicates_count"],
             "skipped_duplicate_identifiers": fan_out_result["skipped_duplicate_identifiers"],
+        }
+    )
+
+
+@router.post(
+    "/pipeline-runs/create-children",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+async def internal_create_child_pipeline_runs(
+    payload: InternalPipelineRunCreateChildrenRequest,
+    _: None = Depends(require_internal_key),
+):
+    client = get_supabase_client()
+    parent_result = (
+        client.table("pipeline_runs")
+        .select("id, org_id, company_id, submission_id, blueprint_id")
+        .eq("id", payload.parent_pipeline_run_id)
+        .limit(1)
+        .execute()
+    )
+    if not parent_result.data:
+        return error_response("Parent pipeline run not found", 404)
+    parent_run = parent_result.data[0]
+
+    if (
+        parent_run.get("org_id") != payload.org_id
+        or parent_run.get("company_id") != payload.company_id
+        or parent_run.get("submission_id") != payload.submission_id
+    ):
+        return error_response("Parent run tenancy/submission mismatch", 400)
+
+    if payload.start_from_position <= 0:
+        return error_response("start_from_position must be greater than 0", 400)
+
+    child_creation_result = await create_fan_out_child_pipeline_runs(
+        org_id=payload.org_id,
+        company_id=payload.company_id,
+        submission_id=payload.submission_id,
+        parent_pipeline_run_id=payload.parent_pipeline_run_id,
+        blueprint_id=parent_run["blueprint_id"],
+        blueprint_snapshot=payload.blueprint_snapshot,
+        fan_out_entities=payload.child_entities,
+        start_from_position=payload.start_from_position,
+        parent_cumulative_context=payload.parent_cumulative_context,
+    )
+
+    return DataEnvelope(
+        data={
+            "parent_pipeline_run_id": payload.parent_pipeline_run_id,
+            "child_runs": child_creation_result["child_runs"],
+            "child_run_ids": [row["pipeline_run_id"] for row in child_creation_result["child_runs"]],
+            "skipped_duplicates_count": child_creation_result["skipped_duplicates_count"],
+            "skipped_duplicate_identifiers": child_creation_result["skipped_duplicate_identifiers"],
         }
     )
 

@@ -1,5 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 
+import { tamBuilding } from "./tam-building.js";
 import { companyEnrichment } from "./company-enrichment.js";
 import { companyIntelBriefing } from "./company-intel-briefing.js";
 import { icpJobTitlesDiscovery } from "./icp-job-titles-discovery.js";
@@ -14,6 +15,8 @@ export const pipelineRunRouter = task({
   run: async (payload: PipelineRunRouterPayload) => {
     return runPipelineRouter(payload, {
       dispatchers: {
+        tamBuilding: (childPayload, options) =>
+          tamBuilding.trigger(childPayload, { idempotencyKey: options.idempotencyKey }),
         companyEnrichment: (childPayload, options) =>
           companyEnrichment.trigger(childPayload, { idempotencyKey: options.idempotencyKey }),
         personSearchEnrichment: (childPayload, options) =>
