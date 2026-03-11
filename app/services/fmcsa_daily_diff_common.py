@@ -50,6 +50,20 @@ def parse_mmddyyyy_date(value: Any) -> str | None:
         return None
 
 
+def parse_fmcsa_date(value: Any) -> str | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+
+    for date_format in ("%m/%d/%Y", "%d-%b-%y", "%d-%b-%Y"):
+        try:
+            return datetime.strptime(cleaned, date_format).date().isoformat()
+        except ValueError:
+            continue
+
+    return None
+
+
 def parse_int(value: Any) -> int | None:
     cleaned = clean_text(value)
     if cleaned is None:
@@ -58,6 +72,31 @@ def parse_int(value: Any) -> int | None:
         return int(cleaned)
     except ValueError:
         return None
+
+
+def parse_float(value: Any) -> float | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+    if cleaned.endswith("%"):
+        cleaned = cleaned[:-1]
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def parse_bool(value: Any) -> bool | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+
+    normalized = cleaned.lower()
+    if normalized in {"true", "t", "yes", "y", "1"}:
+        return True
+    if normalized in {"false", "f", "no", "n", "0"}:
+        return False
+    return None
 
 
 def is_blank_or_zero(value: Any) -> bool:

@@ -11,6 +11,10 @@ from app.config import get_settings
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.carrier_registrations import upsert_carrier_registrations
+from app.services.carrier_inspections import upsert_carrier_inspections
+from app.services.carrier_inspection_violations import upsert_carrier_inspection_violations
+from app.services.carrier_safety_basic_measures import upsert_carrier_safety_basic_measures
+from app.services.carrier_safety_basic_percentiles import upsert_carrier_safety_basic_percentiles
 from app.services.company_ads import upsert_company_ads
 from app.services.company_customers import upsert_company_customers
 from app.services.insurance_filing_rejections import upsert_insurance_filing_rejections
@@ -20,6 +24,7 @@ from app.services.insurance_policy_history_events import upsert_insurance_policy
 from app.services.operating_authority_histories import upsert_operating_authority_histories
 from app.services.operating_authority_revocations import upsert_operating_authority_revocations
 from app.services.process_agent_filings import upsert_process_agent_filings
+from app.services.motor_carrier_census_records import upsert_motor_carrier_census_records
 from app.services.salesnav_prospects import upsert_salesnav_prospects
 from app.services.entity_relationships import (
     invalidate_entity_relationship,
@@ -303,7 +308,7 @@ class InternalUpsertFmcsaDailyDiffBatchRequest(BaseModel):
     feed_name: str
     feed_date: str
     download_url: str
-    source_file_variant: Literal["daily diff", "daily", "all_with_history"]
+    source_file_variant: Literal["daily diff", "daily", "all_with_history", "csv_export"]
     source_observed_at: str
     source_task_id: str
     source_schedule_id: str | None = None
@@ -816,6 +821,66 @@ async def internal_upsert_carrier_registrations(
     _: None = Depends(require_internal_key),
 ):
     result = upsert_carrier_registrations(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/carrier-safety-basic-measures/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_carrier_safety_basic_measures(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_carrier_safety_basic_measures(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/carrier-safety-basic-percentiles/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_carrier_safety_basic_percentiles(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_carrier_safety_basic_percentiles(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/carrier-inspection-violations/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_carrier_inspection_violations(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_carrier_inspection_violations(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/carrier-inspections/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_carrier_inspections(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_carrier_inspections(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/motor-carrier-census-records/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_motor_carrier_census_records(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_motor_carrier_census_records(
         source_context=_build_fmcsa_source_context(payload),
         rows=[row.model_dump() for row in payload.records],
     )

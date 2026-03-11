@@ -53,6 +53,11 @@ ENTITIES_TABLES = frozenset(
         "carrier_registrations",
         "process_agent_filings",
         "insurance_filing_rejections",
+        "carrier_safety_basic_measures",
+        "carrier_safety_basic_percentiles",
+        "carrier_inspection_violations",
+        "carrier_inspections",
+        "motor_carrier_census_records",
     }
 )
 
