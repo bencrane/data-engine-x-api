@@ -289,7 +289,7 @@ export async function runFmcsaDailyDiffWorkflow(
     rows_written: persistence.rows_written,
   };
 
-  logger.info("fmcsa daily diff workflow succeeded", result);
+  logger.info("fmcsa daily diff workflow succeeded", { ...result });
   return result;
 }
 
