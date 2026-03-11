@@ -1,0 +1,20 @@
+{
+  "name": "Revenue Activation / TAM Building v1",
+  "description": "Paginate BlitzAPI company search across the full target market, then fan each discovered company into dedicated company enrichment and person search/enrichment workflows via the TAM orchestrator.",
+  "entity_type": "company",
+  "org_id": "d319a533-356a-4592-bd7a-b79dd4d27802",
+  "steps": [
+    {
+      "position": 1,
+      "operation_id": "company.search.blitzapi",
+      "step_config": {
+        "search_page_size": 50,
+        "company_batch_size": 25,
+        "poll_interval_ms": 2000,
+        "person_max_people": 25,
+        "per_person_concurrency": 4,
+        "include_work_history": false
+      }
+    }
+  ]
+}

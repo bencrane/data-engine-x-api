@@ -111,10 +111,10 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
 ### Known Architectural Problems
 
 - See `docs/DATA_ENGINE_X_ARCHITECTURE.md`, section `7. Known Architectural Problems`, for the full list.
-- Top 3 problems:
-  - auto-persist silent failures: Trigger catches dedicated-table write failures and keeps the pipeline green, so `step_results` can be full while dedicated tables stay empty
-  - `run-pipeline.ts` monolith: the orchestration, direct-provider execution, persistence side effects, fan-out control, and failure semantics are concentrated in one oversized task file
-  - deploy-sequencing landmine: Railway must be live before Trigger.dev deploys, or new Trigger code calls internal FastAPI endpoints that do not exist yet
+- Top 3 problems (being addressed by the dedicated workflow migration):
+  - auto-persist silent failures: the legacy `run-pipeline.ts` wraps dedicated-table writes in try/catch and swallows failures. Dedicated workflows use confirmed writes that surface failures.
+  - `run-pipeline.ts` monolith: being replaced by dedicated workflow files with shared utilities. Do NOT add to `run-pipeline.ts`.
+  - deploy-sequencing landmine: Railway must be live before Trigger.dev deploys, or new Trigger code calls internal FastAPI endpoints that do not exist yet. Exception: the fan-out router deploy reverses this order (Trigger first, then Railway).
 
 ## Diagnostic Reports
 
@@ -283,8 +283,11 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 ## Trigger.dev Conventions
 
 - Tasks live in `trigger/src/tasks/`.
-- `run-pipeline` is the active orchestrator.
-- Generic `execute-step` remains legacy and is not used by the current pipeline runner.
+- Shared workflow utilities live in `trigger/src/` (internal HTTP client, confirmed writes, context merge, Parallel.ai polling).
+- Parallel.ai prompt templates are extracted into standalone files under `trigger/src/` (not hardcoded in task files).
+- `run-pipeline.ts` is the legacy generic orchestrator. It is being replaced by dedicated workflow files — one task per pipeline. Do NOT modify `run-pipeline.ts` for new work.
+- A fan-out router task sits between the DB-backed fan-out path and the dedicated workflows. It receives generic fan-out payloads, determines the target workflow, translates the payload, and triggers the correct task. Falls back to `run-pipeline` for unmigrated pipelines.
+- Generic `execute-step` remains legacy and is not used.
 
 ## Common Commands
 
@@ -384,7 +387,9 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `app/services/entity_timeline.py` — timeline event recording
   - `app/services/resolve_operations.py` — 7 CRM resolve operations
 - `trigger/`
-  - `trigger/src/tasks/run-pipeline.ts` — pipeline runner (supports company, person, job entity types + 4 Parallel.ai direct operations with direct API calls and auto-persist)
+  - `trigger/src/tasks/run-pipeline.ts` — legacy generic pipeline runner (being replaced by dedicated workflows)
+  - `trigger/src/tasks/` — dedicated workflow files: company enrichment, person search/enrichment, ICP job titles, company intel briefing, person intel briefing, fan-out router, TAM building
+  - `trigger/src/` — shared workflow utilities (internal HTTP, confirmed writes, context merge, Parallel.ai polling, prompt templates)
 - `tests/`
 - `scripts/` — backfill scripts for dedicated tables (icp_job_titles, company/person intel briefings)
 - `supabase/migrations/`

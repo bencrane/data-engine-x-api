@@ -1,0 +1,48 @@
+{
+  "blueprint_id": "REPLACE_WITH_REVENUE_ACTIVATION_TAM_BUILDING_BLUEPRINT_ID",
+  "company_id": "REPLACE_WITH_TARGET_COMPANY_ID",
+  "source": "api_v1_batch",
+  "metadata": {
+    "workflow": "tam_building",
+    "client_name": "Example GTMDirect Client",
+    "requested_by": "onboarding"
+  },
+  "entities": [
+    {
+      "entity_type": "company",
+      "input": {
+        "keywords_include": [
+          "sales engagement",
+          "revenue intelligence",
+          "conversation intelligence"
+        ],
+        "keywords_exclude": [
+          "agency",
+          "consulting"
+        ],
+        "industry_include": [
+          "Software Development",
+          "IT Services and IT Consulting"
+        ],
+        "hq_country_code": [
+          "US",
+          "CA"
+        ],
+        "hq_sales_region": [
+          "North America"
+        ],
+        "employee_range": [
+          "11-50",
+          "51-200",
+          "201-500"
+        ],
+        "founded_year_min": 2010,
+        "founded_year_max": 2024,
+        "type_include": [
+          "Privately Held"
+        ],
+        "min_linkedin_followers": 50
+      }
+    }
+  ]
+}
