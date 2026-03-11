@@ -9,10 +9,63 @@ from app.services.fmcsa_daily_diff_common import (
     parse_bool,
     parse_fmcsa_date,
     parse_int,
+    parse_float,
+    parse_x_flag,
+    parse_yyyymmdd_date,
     upsert_fmcsa_daily_diff_rows,
 )
 
 TABLE_NAME = "motor_carrier_census_records"
+
+
+def _parse_classification_flags(classdef_text: str | None) -> dict[str, Any]:
+    if classdef_text is None:
+        return {
+            "private_only": None,
+            "authorized_for_hire": None,
+            "exempt_for_hire": None,
+            "private_property": None,
+            "private_passenger_business": None,
+            "private_passenger_nonbusiness": None,
+            "migrant": None,
+            "us_mail": None,
+            "federal_government": None,
+            "state_government": None,
+            "local_government": None,
+            "indian_tribe": None,
+            "other_operation_description": None,
+        }
+
+    values = [part.strip().upper() for part in classdef_text.split(";") if part.strip()]
+    values_set = set(values)
+    other_values = [value for value in values if value.startswith("OTHER")]
+
+    has_private = bool(
+        values_set.intersection(
+            {
+                "PRIVATE PROPERTY",
+                "PRIVATE PASSENGER, BUSINESS",
+                "PRIVATE PASSENGER, NONBUSINESS",
+            }
+        )
+    )
+    has_for_hire = bool(values_set.intersection({"AUTHORIZED FOR HIRE", "EXEMPT FOR HIRE"}))
+
+    return {
+        "private_only": has_private and not has_for_hire,
+        "authorized_for_hire": "AUTHORIZED FOR HIRE" in values_set,
+        "exempt_for_hire": "EXEMPT FOR HIRE" in values_set,
+        "private_property": "PRIVATE PROPERTY" in values_set,
+        "private_passenger_business": "PRIVATE PASSENGER, BUSINESS" in values_set,
+        "private_passenger_nonbusiness": "PRIVATE PASSENGER, NONBUSINESS" in values_set,
+        "migrant": "MIGRANT" in values_set,
+        "us_mail": "U. S. MAIL" in values_set or "US MAIL" in values_set,
+        "federal_government": "FEDERAL GOVERNMENT" in values_set,
+        "state_government": "STATE GOVERNMENT" in values_set,
+        "local_government": "LOCAL GOVERNMENT" in values_set,
+        "indian_tribe": "INDIAN TRIBE" in values_set,
+        "other_operation_description": "; ".join(other_values) if other_values else None,
+    }
 
 
 def _build_motor_carrier_census_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
@@ -64,14 +117,188 @@ def _build_motor_carrier_census_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
     }
 
 
+def _build_company_census_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
+    fields = row["raw_fields"]
+    classdef_text = clean_text(fields.get("CLASSDEF"))
+    classification_flags = _parse_classification_flags(classdef_text)
+
+    return {
+        "dot_number": clean_text(fields.get("DOT_NUMBER")),
+        "legal_name": clean_text(fields.get("LEGAL_NAME")),
+        "dba_name": clean_text(fields.get("DBA_NAME")),
+        "carrier_operation_code": clean_text(fields.get("CARRIER_OPERATION")),
+        "hazmat_flag": parse_bool(fields.get("HM_Ind")),
+        "physical_street": clean_text(fields.get("PHY_STREET")),
+        "physical_city": clean_text(fields.get("PHY_CITY")),
+        "physical_state": clean_text(fields.get("PHY_STATE")),
+        "physical_zip": clean_text(fields.get("PHY_ZIP")),
+        "physical_country": clean_text(fields.get("PHY_COUNTRY")),
+        "mailing_street": clean_text(fields.get("CARRIER_MAILING_STREET")),
+        "mailing_city": clean_text(fields.get("CARRIER_MAILING_CITY")),
+        "mailing_state": clean_text(fields.get("CARRIER_MAILING_STATE")),
+        "mailing_zip": clean_text(fields.get("CARRIER_MAILING_ZIP")),
+        "mailing_country": clean_text(fields.get("CARRIER_MAILING_COUNTRY")),
+        "telephone": clean_text(fields.get("PHONE")),
+        "fax": clean_text(fields.get("FAX")),
+        "email_address": clean_text(fields.get("EMAIL_ADDRESS")),
+        "mcs150_date": parse_yyyymmdd_date(fields.get("MCS150_DATE")),
+        "mcs150_mileage": parse_int(fields.get("MCS150_MILEAGE")),
+        "mcs150_mileage_year": parse_int(fields.get("MCS150_MILEAGE_YEAR")),
+        "add_date": parse_yyyymmdd_date(fields.get("ADD_DATE")),
+        "power_unit_count": parse_int(fields.get("POWER_UNITS")),
+        "driver_total": parse_int(fields.get("TOTAL_DRIVERS")),
+        "private_only": classification_flags["private_only"],
+        "authorized_for_hire": classification_flags["authorized_for_hire"],
+        "exempt_for_hire": classification_flags["exempt_for_hire"],
+        "private_property": classification_flags["private_property"],
+        "private_passenger_business": classification_flags["private_passenger_business"],
+        "private_passenger_nonbusiness": classification_flags["private_passenger_nonbusiness"],
+        "migrant": classification_flags["migrant"],
+        "us_mail": classification_flags["us_mail"],
+        "federal_government": classification_flags["federal_government"],
+        "state_government": classification_flags["state_government"],
+        "local_government": classification_flags["local_government"],
+        "indian_tribe": classification_flags["indian_tribe"],
+        "other_operation_description": classification_flags["other_operation_description"],
+        "status_code": clean_text(fields.get("STATUS_CODE")),
+        "dun_bradstreet_number": clean_text(fields.get("DUN_BRADSTREET_NO")),
+        "physical_omc_region": parse_int(fields.get("PHY_OMC_REGION")),
+        "safety_investigator_territory_code": clean_text(fields.get("SAFETY_INV_TERR")),
+        "business_organization_id": clean_text(fields.get("BUSINESS_ORG_ID")),
+        "mcs151_mileage": parse_int(fields.get("MCS151_MILEAGE")),
+        "total_cars": parse_int(fields.get("TOTAL_CARS")),
+        "mcs150_update_code_id": clean_text(fields.get("MCS150_UPDATE_CODE_ID")),
+        "prior_revoke_flag": parse_bool(fields.get("PRIOR_REVOKE_FLAG")),
+        "prior_revoke_dot_number": clean_text(fields.get("PRIOR_REVOKE_DOT_NUMBER")),
+        "cell_phone": clean_text(fields.get("CELL_PHONE")),
+        "company_officer_1": clean_text(fields.get("COMPANY_OFFICER_1")),
+        "company_officer_2": clean_text(fields.get("COMPANY_OFFICER_2")),
+        "business_organization_description": clean_text(fields.get("BUSINESS_ORG_DESC")),
+        "truck_units": parse_int(fields.get("TRUCK_UNITS")),
+        "bus_units": parse_int(fields.get("BUS_UNITS")),
+        "fleet_size_code": clean_text(fields.get("FLEETSIZE")),
+        "review_id": clean_text(fields.get("REVIEW_ID")),
+        "recordable_crash_rate": parse_float(fields.get("RECORDABLE_CRASH_RATE")),
+        "mail_nationality_indicator": clean_text(fields.get("MAIL_NATIONALITY_INDICATOR")),
+        "physical_nationality_indicator": clean_text(fields.get("PHY_NATIONALITY_INDICATOR")),
+        "physical_barrio": clean_text(fields.get("PHY_BARRIO")),
+        "mailing_barrio": clean_text(fields.get("MAIL_BARRIO")),
+        "entity_type_code": clean_text(fields.get("CARSHIP")),
+        "docket1_prefix": clean_text(fields.get("DOCKET1PREFIX")),
+        "docket1_number": clean_text(fields.get("DOCKET1")),
+        "docket2_prefix": clean_text(fields.get("DOCKET2PREFIX")),
+        "docket2_number": clean_text(fields.get("DOCKET2")),
+        "docket3_prefix": clean_text(fields.get("DOCKET3PREFIX")),
+        "docket3_number": clean_text(fields.get("DOCKET3")),
+        "point_number": clean_text(fields.get("POINTNUM")),
+        "total_intrastate_drivers": parse_int(fields.get("TOTAL_INTRASTATE_DRIVERS")),
+        "mcsip_step": parse_int(fields.get("MCSIPSTEP")),
+        "mcsip_date": parse_yyyymmdd_date(fields.get("MCSIPDATE")),
+        "interstate_beyond_100_miles_drivers": parse_int(fields.get("INTERSTATE_BEYOND_100_MILES")),
+        "interstate_within_100_miles_drivers": parse_int(fields.get("INTERSTATE_WITHIN_100_MILES")),
+        "intrastate_beyond_100_miles_drivers": parse_int(fields.get("INTRASTATE_BEYOND_100_MILES")),
+        "intrastate_within_100_miles_drivers": parse_int(fields.get("INTRASTATE_WITHIN_100_MILES")),
+        "total_cdl_drivers": parse_int(fields.get("TOTAL_CDL")),
+        "average_trip_leased_drivers_per_month": parse_int(fields.get("AVG_DRIVERS_LEASED_PER_MONTH")),
+        "classdef_text": classdef_text,
+        "physical_county_code": clean_text(fields.get("PHY_CNTY")),
+        "mailing_county_code": clean_text(fields.get("CARRIER_MAILING_CNTY")),
+        "mailing_undeliverable_date": parse_yyyymmdd_date(fields.get("CARRIER_MAILING_UND_DATE")),
+        "driver_inter_total": parse_int(fields.get("DRIVER_INTER_TOTAL")),
+        "review_type_code": clean_text(fields.get("REVIEW_TYPE")),
+        "review_date": parse_yyyymmdd_date(fields.get("REVIEW_DATE")),
+        "safety_rating_code": clean_text(fields.get("SAFETY_RATING")),
+        "safety_rating_date": parse_yyyymmdd_date(fields.get("SAFETY_RATING_DATE")),
+        "undeliverable_physical_code": clean_text(fields.get("UNDELIV_PHY")),
+        "cargo_general_freight": parse_x_flag(fields.get("CRGO_GENFREIGHT")),
+        "cargo_household_goods": parse_x_flag(fields.get("CRGO_HOUSEHOLD")),
+        "cargo_metal_sheets_coils_rolls": parse_x_flag(fields.get("CRGO_METALSHEET")),
+        "cargo_motor_vehicles": parse_x_flag(fields.get("CRGO_MOTOVEH")),
+        "cargo_driveaway_towaway": parse_x_flag(fields.get("CRGO_DRIVETOW")),
+        "cargo_logs_poles_beams_lumber": parse_x_flag(fields.get("CRGO_LOGPOLE")),
+        "cargo_building_materials": parse_x_flag(fields.get("CRGO_BLDGMAT")),
+        "cargo_mobile_homes": parse_x_flag(fields.get("CRGO_MOBILEHOME")),
+        "cargo_machinery_large_objects": parse_x_flag(fields.get("CRGO_MACHLRG")),
+        "cargo_fresh_produce": parse_x_flag(fields.get("CRGO_PRODUCE")),
+        "cargo_liquids_gases": parse_x_flag(fields.get("CRGO_LIQGAS")),
+        "cargo_intermodal_containers": parse_x_flag(fields.get("CRGO_INTERMODAL")),
+        "cargo_passengers": parse_x_flag(fields.get("CRGO_PASSENGERS")),
+        "cargo_oilfield_equipment": parse_x_flag(fields.get("CRGO_OILFIELD")),
+        "cargo_livestock": parse_x_flag(fields.get("CRGO_LIVESTOCK")),
+        "cargo_grain_feed_hay": parse_x_flag(fields.get("CRGO_GRAINFEED")),
+        "cargo_coal_coke": parse_x_flag(fields.get("CRGO_COALCOKE")),
+        "cargo_meat": parse_x_flag(fields.get("CRGO_MEAT")),
+        "cargo_garbage_refuse_trash": parse_x_flag(fields.get("CRGO_GARBAGE")),
+        "cargo_us_mail": parse_x_flag(fields.get("CRGO_USMAIL")),
+        "cargo_chemicals": parse_x_flag(fields.get("CRGO_CHEM")),
+        "cargo_dry_bulk_commodities": parse_x_flag(fields.get("CRGO_DRYBULK")),
+        "cargo_refrigerated_food": parse_x_flag(fields.get("CRGO_COLDFOOD")),
+        "cargo_beverages": parse_x_flag(fields.get("CRGO_BEVERAGES")),
+        "cargo_paper_products": parse_x_flag(fields.get("CRGO_PAPERPROD")),
+        "cargo_utility": parse_x_flag(fields.get("CRGO_UTILITY")),
+        "cargo_farm_supplies": parse_x_flag(fields.get("CRGO_FARMSUPP")),
+        "cargo_construction": parse_x_flag(fields.get("CRGO_CONSTRUCT")),
+        "cargo_water_well": parse_x_flag(fields.get("CRGO_WATERWELL")),
+        "cargo_other": parse_x_flag(fields.get("CRGO_CARGOOTHR")),
+        "cargo_other_description": clean_text(fields.get("CRGO_CARGOOTHR_DESC")),
+        "owned_truck_units": parse_int(fields.get("OWNTRUCK")),
+        "owned_tractor_units": parse_int(fields.get("OWNTRACT")),
+        "owned_trailer_units": parse_int(fields.get("OWNTRAIL")),
+        "owned_motor_coach_units": parse_int(fields.get("OWNCOACH")),
+        "owned_school_bus_1_8_units": parse_int(fields.get("OWNSCHOOL_1_8")),
+        "owned_school_bus_9_15_units": parse_int(fields.get("OWNSCHOOL_9_15")),
+        "owned_school_bus_16_plus_units": parse_int(fields.get("OWNSCHOOL_16")),
+        "owned_minibus_van_16_plus_units": parse_int(fields.get("OWNBUS_16")),
+        "owned_minibus_van_1_8_units": parse_int(fields.get("OWNVAN_1_8")),
+        "owned_minibus_van_9_15_units": parse_int(fields.get("OWNVAN_9_15")),
+        "owned_limo_1_8_units": parse_int(fields.get("OWNLIMO_1_8")),
+        "owned_limo_9_15_units": parse_int(fields.get("OWNLIMO_9_15")),
+        "owned_limo_16_plus_units": parse_int(fields.get("OWNLIMO_16")),
+        "term_leased_truck_units": parse_int(fields.get("TRMTRUCK")),
+        "term_leased_tractor_units": parse_int(fields.get("TRMTRACT")),
+        "term_leased_trailer_units": parse_int(fields.get("TRMTRAIL")),
+        "term_leased_motor_coach_units": parse_int(fields.get("TRMCOACH")),
+        "term_leased_school_bus_1_8_units": parse_int(fields.get("TRMSCHOOL_1_8")),
+        "term_leased_school_bus_9_15_units": parse_int(fields.get("TRMSCHOOL_9_15")),
+        "term_leased_school_bus_16_plus_units": parse_int(fields.get("TRMSCHOOL_16")),
+        "term_leased_minibus_van_16_plus_units": parse_int(fields.get("TRMBUS_16")),
+        "term_leased_minibus_van_1_8_units": parse_int(fields.get("TRMVAN_1_8")),
+        "term_leased_minibus_van_9_15_units": parse_int(fields.get("TRMVAN_9_15")),
+        "term_leased_limo_1_8_units": parse_int(fields.get("TRMLIMO_1_8")),
+        "term_leased_limo_9_15_units": parse_int(fields.get("TRMLIMO_9_15")),
+        "term_leased_limo_16_plus_units": parse_int(fields.get("TRMLIMO_16")),
+        "trip_leased_truck_units": parse_int(fields.get("TRPTRUCK")),
+        "trip_leased_tractor_units": parse_int(fields.get("TRPTRACT")),
+        "trip_leased_trailer_units": parse_int(fields.get("TRPTRAIL")),
+        "trip_leased_motor_coach_units": parse_int(fields.get("TRPCOACH")),
+        "trip_leased_school_bus_1_8_units": parse_int(fields.get("TRPSCHOOL_1_8")),
+        "trip_leased_school_bus_9_15_units": parse_int(fields.get("TRPSCHOOL_9_15")),
+        "trip_leased_school_bus_16_plus_units": parse_int(fields.get("TRPSCHOOL_16")),
+        "trip_leased_minibus_van_16_plus_units": parse_int(fields.get("TRPBUS_16")),
+        "trip_leased_minibus_van_1_8_units": parse_int(fields.get("TRPVAN_1_8")),
+        "trip_leased_minibus_van_9_15_units": parse_int(fields.get("TRPVAN_9_15")),
+        "trip_leased_limo_1_8_units": parse_int(fields.get("TRPLIMO_1_8")),
+        "trip_leased_limo_9_15_units": parse_int(fields.get("TRPLIMO_9_15")),
+        "trip_leased_limo_16_plus_units": parse_int(fields.get("TRPLIMO_16")),
+        "docket1_status_code": clean_text(fields.get("DOCKET1_STATUS_CODE")),
+        "docket2_status_code": clean_text(fields.get("DOCKET2_STATUS_CODE")),
+        "docket3_status_code": clean_text(fields.get("DOCKET3_STATUS_CODE")),
+    }
+
+
 def upsert_motor_carrier_census_records(
     *,
     source_context: FmcsaSourceContext,
     rows: list[FmcsaDailyDiffRow],
 ) -> dict[str, Any]:
+    row_builder = (
+        _build_company_census_row
+        if source_context["feed_name"] == "Company Census File"
+        else _build_motor_carrier_census_row
+    )
     return upsert_fmcsa_daily_diff_rows(
         table_name=TABLE_NAME,
         source_context=source_context,
         rows=rows,
-        row_builder=_build_motor_carrier_census_row,
+        row_builder=row_builder,
     )

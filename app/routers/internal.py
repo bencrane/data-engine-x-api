@@ -15,6 +15,7 @@ from app.services.carrier_inspections import upsert_carrier_inspections
 from app.services.carrier_inspection_violations import upsert_carrier_inspection_violations
 from app.services.carrier_safety_basic_measures import upsert_carrier_safety_basic_measures
 from app.services.carrier_safety_basic_percentiles import upsert_carrier_safety_basic_percentiles
+from app.services.commercial_vehicle_crashes import upsert_commercial_vehicle_crashes
 from app.services.company_ads import upsert_company_ads
 from app.services.company_customers import upsert_company_customers
 from app.services.insurance_filing_rejections import upsert_insurance_filing_rejections
@@ -23,8 +24,12 @@ from app.services.insurance_policy_filings import upsert_insurance_policy_filing
 from app.services.insurance_policy_history_events import upsert_insurance_policy_history_events
 from app.services.operating_authority_histories import upsert_operating_authority_histories
 from app.services.operating_authority_revocations import upsert_operating_authority_revocations
+from app.services.out_of_service_orders import upsert_out_of_service_orders
 from app.services.process_agent_filings import upsert_process_agent_filings
 from app.services.motor_carrier_census_records import upsert_motor_carrier_census_records
+from app.services.vehicle_inspection_citations import upsert_vehicle_inspection_citations
+from app.services.vehicle_inspection_special_studies import upsert_vehicle_inspection_special_studies
+from app.services.vehicle_inspection_units import upsert_vehicle_inspection_units
 from app.services.salesnav_prospects import upsert_salesnav_prospects
 from app.services.entity_relationships import (
     invalidate_entity_relationship,
@@ -839,12 +844,36 @@ async def internal_upsert_carrier_safety_basic_measures(
     return DataEnvelope(data=result)
 
 
+@router.post("/commercial-vehicle-crashes/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_commercial_vehicle_crashes(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_commercial_vehicle_crashes(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
 @router.post("/carrier-safety-basic-percentiles/upsert-batch", response_model=DataEnvelope)
 async def internal_upsert_carrier_safety_basic_percentiles(
     payload: InternalUpsertFmcsaDailyDiffBatchRequest,
     _: None = Depends(require_internal_key),
 ):
     result = upsert_carrier_safety_basic_percentiles(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/vehicle-inspection-units/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_vehicle_inspection_units(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_vehicle_inspection_units(
         source_context=_build_fmcsa_source_context(payload),
         rows=[row.model_dump() for row in payload.records],
     )
@@ -863,6 +892,18 @@ async def internal_upsert_carrier_inspection_violations(
     return DataEnvelope(data=result)
 
 
+@router.post("/vehicle-inspection-special-studies/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_vehicle_inspection_special_studies(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_vehicle_inspection_special_studies(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
 @router.post("/carrier-inspections/upsert-batch", response_model=DataEnvelope)
 async def internal_upsert_carrier_inspections(
     payload: InternalUpsertFmcsaDailyDiffBatchRequest,
@@ -875,12 +916,36 @@ async def internal_upsert_carrier_inspections(
     return DataEnvelope(data=result)
 
 
+@router.post("/vehicle-inspection-citations/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_vehicle_inspection_citations(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_vehicle_inspection_citations(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
 @router.post("/motor-carrier-census-records/upsert-batch", response_model=DataEnvelope)
 async def internal_upsert_motor_carrier_census_records(
     payload: InternalUpsertFmcsaDailyDiffBatchRequest,
     _: None = Depends(require_internal_key),
 ):
     result = upsert_motor_carrier_census_records(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/out-of-service-orders/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_out_of_service_orders(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_out_of_service_orders(
         source_context=_build_fmcsa_source_context(payload),
         rows=[row.model_dump() for row in payload.records],
     )

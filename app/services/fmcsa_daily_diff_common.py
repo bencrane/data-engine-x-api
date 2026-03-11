@@ -50,6 +50,26 @@ def parse_mmddyyyy_date(value: Any) -> str | None:
         return None
 
 
+def parse_yyyymmdd_date(value: Any) -> str | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+    try:
+        return datetime.strptime(cleaned, "%Y%m%d").date().isoformat()
+    except ValueError:
+        return None
+
+
+def parse_iso_date(value: Any) -> str | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+    try:
+        return datetime.strptime(cleaned, "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        return None
+
+
 def parse_fmcsa_date(value: Any) -> str | None:
     cleaned = clean_text(value)
     if cleaned is None:
@@ -97,6 +117,13 @@ def parse_bool(value: Any) -> bool | None:
     if normalized in {"false", "f", "no", "n", "0"}:
         return False
     return None
+
+
+def parse_x_flag(value: Any) -> bool | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+    return cleaned.upper() == "X"
 
 
 def is_blank_or_zero(value: Any) -> bool:

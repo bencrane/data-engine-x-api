@@ -58,6 +58,11 @@ ENTITIES_TABLES = frozenset(
         "carrier_inspection_violations",
         "carrier_inspections",
         "motor_carrier_census_records",
+        "commercial_vehicle_crashes",
+        "vehicle_inspection_units",
+        "vehicle_inspection_special_studies",
+        "vehicle_inspection_citations",
+        "out_of_service_orders",
     }
 )
 

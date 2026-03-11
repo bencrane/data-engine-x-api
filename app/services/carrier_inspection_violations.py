@@ -35,14 +35,51 @@ def _build_carrier_inspection_violation_row(row: FmcsaDailyDiffRow) -> dict[str,
     }
 
 
+def _parse_mcmis_oos_indicator(value: Any) -> bool | None:
+    cleaned = clean_text(value)
+    if cleaned is None:
+        return None
+    normalized = cleaned.upper()
+    if normalized in {"Y", "Z"}:
+        return True
+    if normalized == "N":
+        return False
+    return None
+
+
+def _build_vehicle_inspection_violation_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
+    fields = row["raw_fields"]
+
+    return {
+        "inspection_unique_id": clean_text(fields.get("INSPECTION_ID")),
+        "change_date_text": clean_text(fields.get("CHANGE_DATE")),
+        "inspection_violation_id": clean_text(fields.get("INSP_VIOLATION_ID")),
+        "violation_sequence_number": parse_int(fields.get("SEQ_NO")),
+        "part_number": clean_text(fields.get("PART_NO")),
+        "part_number_section": clean_text(fields.get("PART_NO_SECTION")),
+        "violation_unit": clean_text(fields.get("INSP_VIOL_UNIT")),
+        "inspection_unit_id": clean_text(fields.get("INSP_UNIT_ID")),
+        "violation_category_id": parse_int(fields.get("INSP_VIOLATION_CATEGORY_ID")),
+        "oos_indicator": _parse_mcmis_oos_indicator(fields.get("OUT_OF_SERVICE_INDICATOR")),
+        "out_of_service_indicator_code": clean_text(fields.get("OUT_OF_SERVICE_INDICATOR")),
+        "defect_verification_id": parse_int(fields.get("DEFECT_VERIFICATION_ID")),
+        "citation_number": clean_text(fields.get("CITATION_NUMBER")),
+    }
+
+
 def upsert_carrier_inspection_violations(
     *,
     source_context: FmcsaSourceContext,
     rows: list[FmcsaDailyDiffRow],
 ) -> dict[str, Any]:
+    row_builder = (
+        _build_vehicle_inspection_violation_row
+        if source_context["feed_name"] == "Vehicle Inspections and Violations"
+        else _build_carrier_inspection_violation_row
+    )
     return upsert_fmcsa_daily_diff_rows(
         table_name=TABLE_NAME,
         source_context=source_context,
         rows=rows,
-        row_builder=_build_carrier_inspection_violation_row,
+        row_builder=row_builder,
     )
