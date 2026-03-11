@@ -79,6 +79,7 @@ function createDispatchers(calls: DispatchCall[]): PipelineRunRouterDispatchers 
     };
 
   return {
+    tamBuilding: createDispatcher("tamBuilding"),
     companyEnrichment: createDispatcher("companyEnrichment"),
     personSearchEnrichment: createDispatcher("personSearchEnrichment"),
     icpJobTitlesDiscovery: createDispatcher("icpJobTitlesDiscovery"),
@@ -160,6 +161,60 @@ test("pipeline router routes person search enrichment and maps supported step co
     { step_result_id: "step-8", step_position: 1 },
     { step_result_id: "step-9", step_position: 2 },
     { step_result_id: "step-10", step_position: 3 },
+  ]);
+});
+
+test("pipeline router routes TAM building and maps orchestration config into payload", async () => {
+  const requests: CapturedRequest[] = [];
+  const dispatchCalls: DispatchCall[] = [];
+  const run = createBaseRun({
+    blueprint_snapshot: {
+      entity: {
+        entity_type: "company",
+        input: {
+          keywords_include: ["sales intelligence"],
+          hq_country_code: ["US"],
+        },
+      },
+      steps: [
+        {
+          position: 4,
+          operation_id: "company.search.blitzapi",
+          step_config: {
+            search_page_size: 50,
+            company_batch_size: 12,
+            poll_interval_ms: 500,
+            person_max_people: 6,
+            per_person_concurrency: 2,
+            include_work_history: true,
+          },
+        },
+      ],
+    },
+    step_results: [{ id: "step-4", step_position: 4, status: "queued" }],
+  });
+
+  const result = await runPipelineRouter(baseRouterPayload(), {
+    client: createClient(run, requests),
+    dispatchers: createDispatchers(dispatchCalls),
+  });
+
+  assert.equal(result.route_key, "tam-building");
+  assert.equal(dispatchCalls[0]?.route, "tamBuilding");
+  assert.equal((dispatchCalls[0]?.payload as { search_page_size: number }).search_page_size, 50);
+  assert.equal((dispatchCalls[0]?.payload as { company_batch_size: number }).company_batch_size, 12);
+  assert.equal((dispatchCalls[0]?.payload as { poll_interval_ms: number }).poll_interval_ms, 500);
+  assert.equal((dispatchCalls[0]?.payload as { person_max_people: number }).person_max_people, 6);
+  assert.equal(
+    (dispatchCalls[0]?.payload as { per_person_concurrency: number }).per_person_concurrency,
+    2,
+  );
+  assert.equal(
+    (dispatchCalls[0]?.payload as { include_work_history: boolean }).include_work_history,
+    true,
+  );
+  assert.deepEqual((dispatchCalls[0]?.payload as { step_results: unknown }).step_results, [
+    { step_result_id: "step-4", step_position: 1 },
   ]);
 });
 

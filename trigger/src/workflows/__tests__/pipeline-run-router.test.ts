@@ -78,6 +78,7 @@ function createDispatchers(calls: DispatchCall[]): PipelineRunRouterDispatchers 
     };
 
   return {
+    tamBuilding: createDispatcher("tamBuilding"),
     companyEnrichment: createDispatcher("companyEnrichment"),
     personSearchEnrichment: createDispatcher("personSearchEnrichment"),
     icpJobTitlesDiscovery: createDispatcher("icpJobTitlesDiscovery"),
@@ -167,6 +168,57 @@ test("pipeline router routes company enrichment and normalizes child step positi
     requests[1]?.body?.trigger_run_id,
     "companyEnrichment-trigger-run",
   );
+});
+
+test("pipeline router routes TAM building workflow from company search blitzapi", async () => {
+  const requests: CapturedRequest[] = [];
+  const dispatchCalls: DispatchCall[] = [];
+  const run = createBaseRun({
+    blueprint_snapshot: {
+      entity: {
+        entity_type: "company",
+        input: {
+          industry_include: ["IT Services and IT Consulting"],
+          hq_country_code: ["US"],
+        },
+      },
+      steps: [
+        {
+          position: 1,
+          operation_id: "company.search.blitzapi",
+          step_config: {
+            max_results: 50,
+            company_batch_size: 10,
+            person_max_people: 8,
+            per_person_concurrency: 3,
+            include_work_history: true,
+          },
+        },
+      ],
+    },
+    step_results: [{ id: "step-1", step_position: 1, status: "queued" }],
+  });
+
+  const result = await runPipelineRouter(baseRouterPayload(), {
+    client: createClient(run, requests),
+    dispatchers: createDispatchers(dispatchCalls),
+  });
+
+  assert.equal(result.route_key, "tam-building");
+  assert.equal(dispatchCalls[0]?.route, "tamBuilding");
+  assert.equal((dispatchCalls[0]?.payload as { submission_id: string }).submission_id, "submission-1");
+  assert.equal((dispatchCalls[0]?.payload as { search_page_size: number }).search_page_size, 50);
+  assert.equal((dispatchCalls[0]?.payload as { company_batch_size: number }).company_batch_size, 10);
+  assert.equal((dispatchCalls[0]?.payload as { person_max_people: number }).person_max_people, 8);
+  assert.equal(
+    (dispatchCalls[0]?.payload as { per_person_concurrency: number }).per_person_concurrency,
+    3,
+  );
+  assert.equal(
+    (dispatchCalls[0]?.payload as { include_work_history: boolean }).include_work_history,
+    true,
+  );
+  assert.equal(requests[1]?.body?.trigger_run_id, "tamBuilding-trigger-run");
 });
 
 test("pipeline router falls back to run-pipeline for unsupported nested fan-out suffixes", async () => {

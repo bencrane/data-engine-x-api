@@ -137,6 +137,68 @@ async def test_internal_fan_out_accepts_child_parent_and_returns_grandchildren(m
 
 
 @pytest.mark.asyncio
+async def test_internal_create_children_reuses_child_creation_without_timeline_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    supabase = _InMemorySupabase(
+        tables={
+            "pipeline_runs": [
+                {
+                    "id": "root-run-1",
+                    "org_id": "11111111-1111-1111-1111-111111111111",
+                    "company_id": "22222222-2222-2222-2222-222222222222",
+                    "submission_id": "submission-1",
+                    "blueprint_id": "blueprint-1",
+                }
+            ]
+        }
+    )
+    mocked_child_creation = AsyncMock(
+        return_value={
+            "child_runs": [
+                {
+                    "pipeline_run_id": "child-run-1",
+                    "pipeline_run_status": "queued",
+                    "trigger_run_id": "trigger-child-1",
+                    "entity_type": "company",
+                    "entity_input": {"company_domain": "acme.com"},
+                }
+            ],
+            "skipped_duplicates_count": 0,
+            "skipped_duplicate_identifiers": [],
+        }
+    )
+    record_event_mock = AsyncMock()
+
+    monkeypatch.setattr(internal, "get_supabase_client", lambda: supabase)
+    monkeypatch.setattr(internal, "create_fan_out_child_pipeline_runs", mocked_child_creation)
+    monkeypatch.setattr(internal, "record_entity_event", record_event_mock)
+
+    payload = internal.InternalPipelineRunCreateChildrenRequest(
+        parent_pipeline_run_id="root-run-1",
+        submission_id="submission-1",
+        org_id="11111111-1111-1111-1111-111111111111",
+        company_id="22222222-2222-2222-2222-222222222222",
+        blueprint_snapshot={
+            "blueprint": {"id": "blueprint-1"},
+            "steps": [
+                {"id": "bs-1", "position": 1, "operation_id": "company.enrich.profile"},
+                {"id": "bs-2", "position": 2, "operation_id": "company.research.infer_linkedin_url"},
+            ],
+        },
+        child_entities=[{"entity_type": "company", "company_domain": "acme.com"}],
+        start_from_position=1,
+        parent_cumulative_context={"search_id": "tam-1"},
+    )
+    result = await internal.internal_create_child_pipeline_runs(payload, None)
+
+    assert mocked_child_creation.await_count == 1
+    assert result.data["parent_pipeline_run_id"] == "root-run-1"
+    assert result.data["child_run_ids"] == ["child-run-1"]
+    assert record_event_mock.await_count == 0
+
+
+@pytest.mark.asyncio
 async def test_batch_status_nests_grandchildren_recursively(monkeypatch: pytest.MonkeyPatch):
     org_id = "11111111-1111-1111-1111-111111111111"
     submission_id = "submission-1"
