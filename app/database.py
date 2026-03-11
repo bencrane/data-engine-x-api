@@ -45,6 +45,11 @@ ENTITIES_TABLES = frozenset(
         "company_customers",
         "company_ads",
         "salesnav_prospects",
+        "operating_authority_histories",
+        "operating_authority_revocations",
+        "insurance_policies",
+        "insurance_policy_filings",
+        "insurance_policy_history_events",
     }
 )
 

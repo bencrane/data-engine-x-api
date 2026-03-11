@@ -13,6 +13,11 @@ from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.company_ads import upsert_company_ads
 from app.services.company_customers import upsert_company_customers
 from app.services.salesnav_prospects import upsert_salesnav_prospects
+from app.services.insurance_policies import upsert_insurance_policies
+from app.services.insurance_policy_filings import upsert_insurance_policy_filings
+from app.services.insurance_policy_history_events import upsert_insurance_policy_history_events
+from app.services.operating_authority_histories import upsert_operating_authority_histories
+from app.services.operating_authority_revocations import upsert_operating_authority_revocations
 from app.services.entity_relationships import (
     invalidate_entity_relationship,
     record_entity_relationship,
@@ -285,6 +290,23 @@ class InternalUpsertPersonIntelBriefingsRequest(BaseModel):
     source_pipeline_run_id: str | None = None
 
 
+class InternalFmcsaDailyDiffRow(BaseModel):
+    row_number: int
+    raw_values: list[str]
+    raw_fields: dict[str, str]
+
+
+class InternalUpsertFmcsaDailyDiffBatchRequest(BaseModel):
+    feed_name: str
+    download_url: str
+    source_file_variant: Literal["daily diff"]
+    source_observed_at: str
+    source_task_id: str
+    source_schedule_id: str | None = None
+    source_run_metadata: dict[str, Any]
+    records: list[InternalFmcsaDailyDiffRow]
+
+
 def _normalize_timeline_status(status_value: str | None) -> str:
     if status_value in {"found", "not_found", "failed", "skipped"}:
         return status_value
@@ -394,6 +416,20 @@ def _require_internal_org_id(request: Request) -> str:
             detail="Missing x-internal-org-id for internal authorization",
         )
     return org_id
+
+
+def _build_fmcsa_source_context(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+) -> dict[str, Any]:
+    return {
+        "feed_name": payload.feed_name,
+        "download_url": payload.download_url,
+        "source_file_variant": payload.source_file_variant,
+        "source_observed_at": payload.source_observed_at,
+        "source_task_id": payload.source_task_id,
+        "source_schedule_id": payload.source_schedule_id,
+        "source_run_metadata": payload.source_run_metadata,
+    }
 
 
 @router.post("/entity-timeline/record-step-event", response_model=DataEnvelope)
@@ -705,6 +741,66 @@ async def internal_upsert_person_intel_briefings(
         processor=payload.processor,
         source_submission_id=payload.source_submission_id,
         source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/operating-authority-histories/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_operating_authority_histories(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_operating_authority_histories(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/operating-authority-revocations/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_operating_authority_revocations(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_operating_authority_revocations(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/insurance-policies/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_insurance_policies(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_insurance_policies(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/insurance-policy-filings/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_insurance_policy_filings(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_insurance_policy_filings(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/insurance-policy-history-events/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_insurance_policy_history_events(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_insurance_policy_history_events(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
     )
     return DataEnvelope(data=result)
 
