@@ -10,14 +10,17 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.database import get_supabase_client
 from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
+from app.services.carrier_registrations import upsert_carrier_registrations
 from app.services.company_ads import upsert_company_ads
 from app.services.company_customers import upsert_company_customers
-from app.services.salesnav_prospects import upsert_salesnav_prospects
+from app.services.insurance_filing_rejections import upsert_insurance_filing_rejections
 from app.services.insurance_policies import upsert_insurance_policies
 from app.services.insurance_policy_filings import upsert_insurance_policy_filings
 from app.services.insurance_policy_history_events import upsert_insurance_policy_history_events
 from app.services.operating_authority_histories import upsert_operating_authority_histories
 from app.services.operating_authority_revocations import upsert_operating_authority_revocations
+from app.services.process_agent_filings import upsert_process_agent_filings
+from app.services.salesnav_prospects import upsert_salesnav_prospects
 from app.services.entity_relationships import (
     invalidate_entity_relationship,
     record_entity_relationship,
@@ -298,8 +301,9 @@ class InternalFmcsaDailyDiffRow(BaseModel):
 
 class InternalUpsertFmcsaDailyDiffBatchRequest(BaseModel):
     feed_name: str
+    feed_date: str
     download_url: str
-    source_file_variant: Literal["daily diff"]
+    source_file_variant: Literal["daily diff", "daily", "all_with_history"]
     source_observed_at: str
     source_task_id: str
     source_schedule_id: str | None = None
@@ -423,6 +427,7 @@ def _build_fmcsa_source_context(
 ) -> dict[str, Any]:
     return {
         "feed_name": payload.feed_name,
+        "feed_date": payload.feed_date,
         "download_url": payload.download_url,
         "source_file_variant": payload.source_file_variant,
         "source_observed_at": payload.source_observed_at,
@@ -799,6 +804,42 @@ async def internal_upsert_insurance_policy_history_events(
     _: None = Depends(require_internal_key),
 ):
     result = upsert_insurance_policy_history_events(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/carrier-registrations/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_carrier_registrations(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_carrier_registrations(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/process-agent-filings/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_process_agent_filings(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_process_agent_filings(
+        source_context=_build_fmcsa_source_context(payload),
+        rows=[row.model_dump() for row in payload.records],
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/insurance-filing-rejections/upsert-batch", response_model=DataEnvelope)
+async def internal_upsert_insurance_filing_rejections(
+    payload: InternalUpsertFmcsaDailyDiffBatchRequest,
+    _: None = Depends(require_internal_key),
+):
+    result = upsert_insurance_filing_rejections(
         source_context=_build_fmcsa_source_context(payload),
         rows=[row.model_dump() for row in payload.records],
     )

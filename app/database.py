@@ -50,6 +50,9 @@ ENTITIES_TABLES = frozenset(
         "insurance_policies",
         "insurance_policy_filings",
         "insurance_policy_history_events",
+        "carrier_registrations",
+        "process_agent_filings",
+        "insurance_filing_rejections",
     }
 )
 
