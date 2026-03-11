@@ -18,6 +18,14 @@ import {
   FMCSA_REJECTED_ALL_HISTORY_FEED,
   FMCSA_REJECTED_DAILY_FEED,
   FMCSA_REVOCATION_DAILY_FEED,
+  FMCSA_SMS_AB_PASS_FEED,
+  FMCSA_SMS_AB_PASSPROPERTY_FEED,
+  FMCSA_SMS_C_PASS_FEED,
+  FMCSA_SMS_C_PASSPROPERTY_FEED,
+  FMCSA_SMS_FEEDS,
+  FMCSA_SMS_INPUT_INSPECTION_FEED,
+  FMCSA_SMS_INPUT_VIOLATION_FEED,
+  FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED,
   FMCSA_TOP5_DAILY_DIFF_FEEDS,
 } from "../../workflows/fmcsa-daily-diff.js";
 
@@ -123,6 +131,63 @@ test("FMCSA next-batch feed configs expose the expected feed-to-URL mapping", ()
   );
 });
 
+test("FMCSA SMS feed configs expose the expected feed-to-URL mapping", () => {
+  assert.equal(FMCSA_SMS_FEEDS.length, 7);
+
+  assert.deepEqual(
+    FMCSA_SMS_FEEDS.map((feed) => ({
+      feedName: feed.feedName,
+      taskId: feed.taskId,
+      downloadUrl: feed.downloadUrl,
+      sourceFileVariant: feed.sourceFileVariant,
+    })),
+    [
+      {
+        feedName: "SMS AB PassProperty",
+        taskId: "fmcsa-sms-ab-passproperty-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/4y6x-dmck/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS C PassProperty",
+        taskId: "fmcsa-sms-c-passproperty-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/h9zy-gjn8/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS Input - Violation",
+        taskId: "fmcsa-sms-input-violation-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/8mt8-2mdr/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS Input - Inspection",
+        taskId: "fmcsa-sms-input-inspection-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/rbkj-cgst/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS Input - Motor Carrier Census",
+        taskId: "fmcsa-sms-motor-carrier-census-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/kjg3-diqy/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS AB Pass",
+        taskId: "fmcsa-sms-ab-pass-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/m3ry-qcip/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS C Pass",
+        taskId: "fmcsa-sms-c-pass-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/h3zn-uid9/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+    ],
+  );
+});
+
 test("all FMCSA scheduled task files exist with staggered cron definitions", () => {
   const taskExpectations = [
     {
@@ -189,6 +254,41 @@ test("all FMCSA scheduled task files exist with staggered cron definitions", () 
       filename: "../fmcsa-authhist-all-history.ts",
       taskIdExpression: "id: FMCSA_AUTHHIST_ALL_HISTORY_FEED.taskId",
       cronPattern: 'pattern: "29 11 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-ab-passproperty-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_AB_PASSPROPERTY_FEED.taskId",
+      cronPattern: 'pattern: "36 11 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-c-passproperty-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_C_PASSPROPERTY_FEED.taskId",
+      cronPattern: 'pattern: "43 11 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-input-violation-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_INPUT_VIOLATION_FEED.taskId",
+      cronPattern: 'pattern: "50 11 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-input-inspection-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_INPUT_INSPECTION_FEED.taskId",
+      cronPattern: 'pattern: "57 11 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-motor-carrier-census-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED.taskId",
+      cronPattern: 'pattern: "4 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-ab-pass-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_AB_PASS_FEED.taskId",
+      cronPattern: 'pattern: "11 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-sms-c-pass-daily.ts",
+      taskIdExpression: "id: FMCSA_SMS_C_PASS_FEED.taskId",
+      cronPattern: 'pattern: "18 12 * * *"',
     },
   ];
 

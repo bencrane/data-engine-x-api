@@ -4,6 +4,16 @@ import test from "node:test";
 import { createInternalApiClient } from "../internal-api.js";
 import {
   __testables,
+  FMCSA_SMS_AB_PASS_FEED,
+  FMCSA_SMS_AB_PASSPROPERTY_FEED,
+  FMCSA_SMS_C_PASS_FEED,
+  FMCSA_SMS_C_PASSPROPERTY_FEED,
+  FMCSA_SMS_FEEDS,
+  FMCSA_SMS_FEED_CORRECTIONS,
+  FMCSA_SMS_INPUT_INSPECTION_FEED,
+  FMCSA_SMS_INPUT_VIOLATION_FEED,
+  FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED,
+  FMCSA_SMS_SKIPPED_FEEDS,
   FMCSA_AUTHHIST_ALL_HISTORY_FEED,
   FMCSA_BOC3_DAILY_FEED,
   FMCSA_CARRIER_DAILY_FEED,
@@ -24,7 +34,9 @@ type MockResponse =
       error: Error;
     };
 
-function createDownloadFetch(response: { status?: number; text: string } | { error: Error }): typeof fetch {
+function createDownloadFetch(
+  response: { status?: number; text: string; contentType?: string } | { error: Error },
+): typeof fetch {
   return (async () => {
     if ("error" in response) {
       throw response.error;
@@ -32,7 +44,7 @@ function createDownloadFetch(response: { status?: number; text: string } | { err
 
     return new Response(response.text, {
       status: response.status ?? 200,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: { "Content-Type": response.contentType ?? "text/plain; charset=utf-8" },
     });
   }) as typeof fetch;
 }
@@ -246,6 +258,182 @@ test("shared-table variants remain distinct by source feed metadata", async () =
   assert.equal(request?.path, "/api/internal/insurance-filing-rejections/upsert-batch");
   assert.equal(request?.body?.feed_name, "Rejected - All With History");
   assert.equal(request?.body?.source_file_variant, "all_with_history");
+});
+
+test("SMS feed configs lock corrected dataset ids and crash skip metadata", () => {
+  assert.deepEqual(
+    FMCSA_SMS_FEEDS.map((feed) => ({
+      feedName: feed.feedName,
+      taskId: feed.taskId,
+      downloadUrl: feed.downloadUrl,
+      expectedFieldCount: feed.expectedFieldCount,
+      sourceFileVariant: feed.sourceFileVariant,
+    })),
+    [
+      {
+        feedName: "SMS AB PassProperty",
+        taskId: "fmcsa-sms-ab-passproperty-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/4y6x-dmck/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 21,
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS C PassProperty",
+        taskId: "fmcsa-sms-c-passproperty-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/h9zy-gjn8/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 21,
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS Input - Violation",
+        taskId: "fmcsa-sms-input-violation-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/8mt8-2mdr/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 13,
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS Input - Inspection",
+        taskId: "fmcsa-sms-input-inspection-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/rbkj-cgst/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 39,
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS Input - Motor Carrier Census",
+        taskId: "fmcsa-sms-motor-carrier-census-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/kjg3-diqy/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 42,
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS AB Pass",
+        taskId: "fmcsa-sms-ab-pass-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/m3ry-qcip/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 36,
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "SMS C Pass",
+        taskId: "fmcsa-sms-c-pass-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/h3zn-uid9/rows.csv?accessType=DOWNLOAD",
+        expectedFieldCount: 36,
+        sourceFileVariant: "csv_export",
+      },
+    ],
+  );
+
+  assert.deepEqual(FMCSA_SMS_FEED_CORRECTIONS.smsCPass, {
+    originalCandidateDatasetId: "h9zy-gjn8",
+    correctedDatasetId: "h3zn-uid9",
+  });
+  assert.deepEqual(FMCSA_SMS_SKIPPED_FEEDS, [
+    {
+      feedName: "SMS Input - Crash",
+      candidateDatasetId: "gwak-5bwn",
+      candidateDownloadUrl: "https://data.transportation.gov/download/gwak-5bwn/text%2Fplain",
+      reason: "skipped_by_user_after_ambiguous_dataset_verification",
+    },
+  ]);
+});
+
+test("SMS workflow parses headered CSV exports and confirms persistence", async () => {
+  const internalRequests: Array<{ path: string; body: Record<string, unknown> | null }> = [];
+  const client = createInternalApiClient({
+    authContext: { orgId: "system" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    fetchImpl: createInternalFetch({
+      requests: internalRequests,
+      responses: [
+        {
+          body: {
+            data: {
+              feed_name: "SMS Input - Violation",
+              feed_date: "2026-03-10",
+              rows_received: 1,
+              rows_written: 1,
+            },
+          },
+        },
+      ],
+    }),
+  });
+
+  const result = await runFmcsaDailyDiffWorkflow(
+    {
+      feed: FMCSA_SMS_INPUT_VIOLATION_FEED,
+      schedule: {
+        timestamp: "2026-03-10T16:00:00.000Z",
+        scheduleId: "schedule-sms-violations",
+        timezone: "America/New_York",
+      },
+    },
+    {
+      client,
+      fetchImpl: createDownloadFetch({
+        contentType: "text/csv; charset=utf-8",
+        text: [
+          "Unique_ID,Insp_Date,DOT_Number,Viol_Code,BASIC_Desc,OOS_Indicator,OOS_Weight,Severity_Weight,Time_Weight,Total_Severity_Wght,Section_Desc,Group_Desc,Viol_Unit",
+          '726403509,30-JAN-24,1926619,3922SLLS4,Unsafe Driving,false,0,10,1,10,"Failing to obey traffic control device","Traffic Control",D',
+        ].join("\n"),
+      }),
+    },
+  );
+
+  assert.equal(result.feed_name, "SMS Input - Violation");
+  assert.equal(result.source_file_variant, "csv_export");
+  assert.equal(result.rows_downloaded, 1);
+  assert.equal(result.rows_written, 1);
+
+  const request = internalRequests[0];
+  assert.equal(request?.path, "/api/internal/carrier-inspection-violations/upsert-batch");
+  assert.equal(request?.body?.feed_name, "SMS Input - Violation");
+  assert.equal(request?.body?.source_file_variant, "csv_export");
+  assert.equal((request?.body?.records as unknown[])?.length, 1);
+});
+
+test("SMS workflow fails on header mismatch", async () => {
+  await assert.rejects(
+    runFmcsaDailyDiffWorkflow(
+      { feed: FMCSA_SMS_INPUT_INSPECTION_FEED },
+      {
+        client: createUnusedClient(),
+        fetchImpl: createDownloadFetch({
+          contentType: "text/csv; charset=utf-8",
+          text: [
+            "wrong_header",
+            "value",
+          ].join("\n"),
+        }),
+      },
+    ),
+    /header validation failed/i,
+  );
+});
+
+test("SMS workflow fails on invalid non-CSV content type", async () => {
+  await assert.rejects(
+    runFmcsaDailyDiffWorkflow(
+      { feed: FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED },
+      {
+        client: createUnusedClient(),
+        fetchImpl: (async () =>
+          new Response("<html>not csv</html>", {
+            status: 200,
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          })) as typeof fetch,
+      },
+    ),
+    /unexpected content type|HTML instead of CSV/i,
+  );
+});
+
+test("SMS pass and passproperty feeds remain distinct after candidate-id correction", () => {
+  assert.equal(FMCSA_SMS_C_PASSPROPERTY_FEED.downloadUrl.includes("h9zy-gjn8"), true);
+  assert.equal(FMCSA_SMS_C_PASS_FEED.downloadUrl.includes("h3zn-uid9"), true);
+  assert.notEqual(FMCSA_SMS_C_PASSPROPERTY_FEED.expectedFieldCount, FMCSA_SMS_C_PASS_FEED.expectedFieldCount);
+  assert.equal(FMCSA_SMS_AB_PASSPROPERTY_FEED.expectedFieldCount, 21);
+  assert.equal(FMCSA_SMS_AB_PASS_FEED.expectedFieldCount, 36);
 });
 
 test("FMCSA daily diff feed_date follows the schedule timezone", () => {
