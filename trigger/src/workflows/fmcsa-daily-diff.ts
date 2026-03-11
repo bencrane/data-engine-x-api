@@ -4,12 +4,22 @@ import { parse as parseCsv } from "csv-parse/sync";
 import { createInternalApiClient, InternalApiClient } from "./internal-api.js";
 import { writeDedicatedTableConfirmed } from "./persistence.js";
 
-type FmcsaTop5FeedName =
+type FmcsaFeedName =
   | "AuthHist"
   | "Revocation"
   | "Insurance"
   | "ActPendInsur"
-  | "InsHist";
+  | "InsHist"
+  | "Carrier"
+  | "Rejected"
+  | "BOC3"
+  | "InsHist - All With History"
+  | "BOC3 - All With History"
+  | "ActPendInsur - All With History"
+  | "Rejected - All With History"
+  | "AuthHist - All With History";
+
+export type FmcsaSourceFileVariant = "daily diff" | "daily" | "all_with_history";
 
 export interface FmcsaScheduledPayload {
   timestamp?: Date | string;
@@ -27,10 +37,11 @@ export interface FmcsaDailyDiffRow {
 }
 
 export interface FmcsaDailyDiffFeedConfig {
-  feedName: FmcsaTop5FeedName;
+  feedName: FmcsaFeedName;
   downloadUrl: string;
   taskId: string;
   internalUpsertPath: string;
+  sourceFileVariant: FmcsaSourceFileVariant;
   sourceFields: readonly string[];
   expectedFieldCount: number;
 }
@@ -48,8 +59,10 @@ export interface FmcsaDailyDiffWorkflowDependencies {
 }
 
 export interface FmcsaDailyDiffWorkflowResult {
-  feed_name: FmcsaTop5FeedName;
+  feed_name: FmcsaFeedName;
+  feed_date: string;
   download_url: string;
+  source_file_variant: FmcsaSourceFileVariant;
   observed_at: string;
   rows_downloaded: number;
   rows_parsed: number;
@@ -60,6 +73,7 @@ export interface FmcsaDailyDiffWorkflowResult {
 
 interface FmcsaDailyDiffPersistenceResponse {
   feed_name: string;
+  feed_date: string;
   rows_received: number;
   rows_written: number;
 }
@@ -91,13 +105,41 @@ function normalizeObservedAt(schedule?: FmcsaScheduledPayload): string {
   return normalizeTimestamp(schedule?.timestamp) ?? new Date().toISOString();
 }
 
+function resolveFeedDate(
+  observedAt: string,
+  schedule?: FmcsaScheduledPayload,
+): string {
+  const date = new Date(observedAt);
+  const timezone = schedule?.timezone ?? "UTC";
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error(`Unable to resolve feed_date for ${observedAt}`);
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
 function serializeSchedulePayload(
   schedule: FmcsaScheduledPayload | undefined,
   feed: FmcsaDailyDiffFeedConfig,
+  feedDate: string,
   observedAt: string,
 ): Record<string, unknown> {
   return {
     feed_name: feed.feedName,
+    feed_date: feedDate,
     task_id: feed.taskId,
     observed_at: observedAt,
     schedule_timestamp: normalizeTimestamp(schedule?.timestamp),
@@ -230,16 +272,18 @@ async function persistDailyDiffRows(
   client: InternalApiClient,
   payload: FmcsaDailyDiffWorkflowPayload,
   rows: FmcsaDailyDiffRow[],
+  feedDate: string,
   observedAt: string,
 ): Promise<FmcsaDailyDiffPersistenceResponse> {
-  const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, observedAt);
+  const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, feedDate, observedAt);
 
   return writeDedicatedTableConfirmed<FmcsaDailyDiffPersistenceResponse>(client, {
     path: payload.feed.internalUpsertPath,
     payload: {
       feed_name: payload.feed.feedName,
+      feed_date: feedDate,
       download_url: payload.feed.downloadUrl,
-      source_file_variant: "daily diff",
+      source_file_variant: payload.feed.sourceFileVariant,
       source_observed_at: observedAt,
       source_task_id: payload.feed.taskId,
       source_schedule_id: payload.schedule?.scheduleId ?? null,
@@ -249,6 +293,7 @@ async function persistDailyDiffRows(
     validate: (response) =>
       isRecord(response) &&
       response.feed_name === payload.feed.feedName &&
+      response.feed_date === feedDate &&
       typeof response.rows_received === "number" &&
       typeof response.rows_written === "number" &&
       response.rows_received === rows.length &&
@@ -264,10 +309,13 @@ export async function runFmcsaDailyDiffWorkflow(
   const client = createClient(payload, dependencies);
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const observedAt = normalizeObservedAt(payload.schedule);
+  const feedDate = resolveFeedDate(observedAt, payload.schedule);
 
-  logger.info("fmcsa daily diff workflow start", {
+  logger.info("fmcsa snapshot workflow start", {
     feed_name: payload.feed.feedName,
+    feed_date: feedDate,
     download_url: payload.feed.downloadUrl,
+    source_file_variant: payload.feed.sourceFileVariant,
     expected_field_count: payload.feed.expectedFieldCount,
     source_observed_at: observedAt,
     task_id: payload.feed.taskId,
@@ -276,11 +324,13 @@ export async function runFmcsaDailyDiffWorkflow(
 
   const rawBody = await downloadDailyDiffText(fetchImpl, payload.feed);
   const parsed = parseDailyDiffBody(payload.feed, rawBody);
-  const persistence = await persistDailyDiffRows(client, payload, parsed.rows, observedAt);
+  const persistence = await persistDailyDiffRows(client, payload, parsed.rows, feedDate, observedAt);
 
   const result: FmcsaDailyDiffWorkflowResult = {
     feed_name: payload.feed.feedName,
+    feed_date: feedDate,
     download_url: payload.feed.downloadUrl,
+    source_file_variant: payload.feed.sourceFileVariant,
     observed_at: observedAt,
     rows_downloaded: parsed.rowsDownloaded,
     rows_parsed: parsed.rowsParsed,
@@ -289,7 +339,7 @@ export async function runFmcsaDailyDiffWorkflow(
     rows_written: persistence.rows_written,
   };
 
-  logger.info("fmcsa daily diff workflow succeeded", { ...result });
+  logger.info("fmcsa snapshot workflow succeeded", { ...result });
   return result;
 }
 
@@ -298,6 +348,7 @@ export const FMCSA_AUTHHIST_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
   downloadUrl: "https://data.transportation.gov/download/sn3k-dnx7/text%2Fplain",
   taskId: "fmcsa-authhist-daily",
   internalUpsertPath: "/api/internal/operating-authority-histories/upsert-batch",
+  sourceFileVariant: "daily diff",
   sourceFields: [
     "Docket Number",
     "USDOT Number",
@@ -317,6 +368,7 @@ export const FMCSA_REVOCATION_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
   downloadUrl: "https://data.transportation.gov/download/pivg-szje/text%2Fplain",
   taskId: "fmcsa-revocation-daily",
   internalUpsertPath: "/api/internal/operating-authority-revocations/upsert-batch",
+  sourceFileVariant: "daily diff",
   sourceFields: [
     "Docket Number",
     "USDOT Number",
@@ -333,6 +385,7 @@ export const FMCSA_INSURANCE_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
   downloadUrl: "https://data.transportation.gov/download/mzmm-6xep/text%2Fplain",
   taskId: "fmcsa-insurance-daily",
   internalUpsertPath: "/api/internal/insurance-policies/upsert-batch",
+  sourceFileVariant: "daily diff",
   sourceFields: [
     "Docket Number",
     "Insurance Type",
@@ -352,6 +405,7 @@ export const FMCSA_ACTPENDINSUR_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
   downloadUrl: "https://data.transportation.gov/download/chgs-tx6x/text%2Fplain",
   taskId: "fmcsa-actpendinsur-daily",
   internalUpsertPath: "/api/internal/insurance-policy-filings/upsert-batch",
+  sourceFileVariant: "daily diff",
   sourceFields: [
     "Docket Number",
     "USDOT Number",
@@ -373,6 +427,7 @@ export const FMCSA_INSHIST_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
   downloadUrl: "https://data.transportation.gov/download/xkmg-ff2t/text%2Fplain",
   taskId: "fmcsa-inshist-daily",
   internalUpsertPath: "/api/internal/insurance-policy-history-events/upsert-batch",
+  sourceFileVariant: "daily diff",
   sourceFields: [
     "Docket Number",
     "USDOT Number",
@@ -403,7 +458,169 @@ export const FMCSA_TOP5_DAILY_DIFF_FEEDS = [
   FMCSA_INSHIST_DAILY_FEED,
 ] as const;
 
+export const FMCSA_CARRIER_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Carrier",
+  downloadUrl: "https://data.transportation.gov/download/6qg9-x4f8/text%2Fplain",
+  taskId: "fmcsa-carrier-daily",
+  internalUpsertPath: "/api/internal/carrier-registrations/upsert-batch",
+  sourceFileVariant: "daily",
+  sourceFields: [
+    "Docket Number",
+    "USDOT Number",
+    "MX Type",
+    "RFC Number",
+    "Common Authority",
+    "Contract Authority",
+    "Broker Authority",
+    "Pending Common Authority",
+    "Pending Contract Authority",
+    "Pending Broker Authority",
+    "Common Authority Revocation",
+    "Contract Authority Revocation",
+    "Broker Authority Revocation",
+    "Property",
+    "Passenger",
+    "Household Goods",
+    "Private Check",
+    "Enterprise Check",
+    "BIPD Required",
+    "Cargo Required",
+    "Bond/Surety Required",
+    "BIPD on File",
+    "Cargo on File",
+    "Bond/Surety on File",
+    "Address Status",
+    "DBA Name",
+    "Legal Name",
+    "Business Address - PO Box/Street",
+    "Business Address - Colonia",
+    "Business Address - City",
+    "Business Address - State Code",
+    "Business Address - Country Code",
+    "Business Address - Zip Code",
+    "Business Address - Telephone Number",
+    "Business Address - Fax Number",
+    "Mailing Address - PO Box/Street",
+    "Mailing Address - Colonia",
+    "Mailing Address - City",
+    "Mailing Address - State Code",
+    "Mailing Address - Country Code",
+    "Mailing Address - Zip Code",
+    "Mailing Address - Telephone Number",
+    "Mailing Address - Fax Number",
+  ],
+  expectedFieldCount: 43,
+};
+
+export const FMCSA_REJECTED_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Rejected",
+  downloadUrl: "https://data.transportation.gov/download/t3zq-c6n3/text%2Fplain",
+  taskId: "fmcsa-rejected-daily",
+  internalUpsertPath: "/api/internal/insurance-filing-rejections/upsert-batch",
+  sourceFileVariant: "daily",
+  sourceFields: [
+    "Docket Number",
+    "USDOT Number",
+    "Form Code (Insurance or Cancel)",
+    "Insurance Type Description",
+    "Policy Number",
+    "Received Date",
+    "Insurance Class Code",
+    "Insurance Type Code",
+    "Underlying Limit Amount",
+    "Maximum Coverage Amount",
+    "Rejected Date",
+    "Insurance Branch",
+    "Company Name",
+    "Rejected Reason",
+    "Minimum Coverage Amount",
+  ],
+  expectedFieldCount: 15,
+};
+
+export const FMCSA_BOC3_DAILY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "BOC3",
+  downloadUrl: "https://data.transportation.gov/download/fb8g-ngam/text%2Fplain",
+  taskId: "fmcsa-boc3-daily",
+  internalUpsertPath: "/api/internal/process-agent-filings/upsert-batch",
+  sourceFileVariant: "daily",
+  sourceFields: [
+    "Docket Number",
+    "USDOT Number",
+    "Company Name",
+    "Attention to or Title",
+    "Street or PO Box",
+    "City",
+    "State",
+    "Country",
+    "Zip Code",
+  ],
+  expectedFieldCount: 9,
+};
+
+export const FMCSA_INSHIST_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "InsHist - All With History",
+  downloadUrl: "https://data.transportation.gov/download/nzpz-e5xn/text%2Fplain",
+  taskId: "fmcsa-inshist-all-history",
+  internalUpsertPath: "/api/internal/insurance-policy-history-events/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: [...FMCSA_INSHIST_DAILY_FEED.sourceFields],
+  expectedFieldCount: 17,
+};
+
+export const FMCSA_BOC3_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "BOC3 - All With History",
+  downloadUrl: "https://data.transportation.gov/download/gmxu-awv7/text%2Fplain",
+  taskId: "fmcsa-boc3-all-history",
+  internalUpsertPath: "/api/internal/process-agent-filings/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: [...FMCSA_BOC3_DAILY_FEED.sourceFields],
+  expectedFieldCount: 9,
+};
+
+export const FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "ActPendInsur - All With History",
+  downloadUrl: "https://data.transportation.gov/download/y77m-3nfx/text%2Fplain",
+  taskId: "fmcsa-actpendinsur-all-history",
+  internalUpsertPath: "/api/internal/insurance-policy-filings/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: [...FMCSA_ACTPENDINSUR_DAILY_FEED.sourceFields],
+  expectedFieldCount: 11,
+};
+
+export const FMCSA_REJECTED_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Rejected - All With History",
+  downloadUrl: "https://data.transportation.gov/download/9m5y-imtw/text%2Fplain",
+  taskId: "fmcsa-rejected-all-history",
+  internalUpsertPath: "/api/internal/insurance-filing-rejections/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: [...FMCSA_REJECTED_DAILY_FEED.sourceFields],
+  expectedFieldCount: 15,
+};
+
+export const FMCSA_AUTHHIST_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "AuthHist - All With History",
+  downloadUrl: "https://data.transportation.gov/download/wahn-z3rq/text%2Fplain",
+  taskId: "fmcsa-authhist-all-history",
+  internalUpsertPath: "/api/internal/operating-authority-histories/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: [...FMCSA_AUTHHIST_DAILY_FEED.sourceFields],
+  expectedFieldCount: 9,
+};
+
+export const FMCSA_NEXT_BATCH_SNAPSHOT_HISTORY_FEEDS = [
+  FMCSA_CARRIER_DAILY_FEED,
+  FMCSA_REJECTED_DAILY_FEED,
+  FMCSA_BOC3_DAILY_FEED,
+  FMCSA_INSHIST_ALL_HISTORY_FEED,
+  FMCSA_BOC3_ALL_HISTORY_FEED,
+  FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED,
+  FMCSA_REJECTED_ALL_HISTORY_FEED,
+  FMCSA_AUTHHIST_ALL_HISTORY_FEED,
+] as const;
+
 export const __testables = {
   parseDailyDiffBody,
+  resolveFeedDate,
   serializeSchedulePayload,
 };
