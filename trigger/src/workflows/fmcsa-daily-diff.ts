@@ -439,26 +439,31 @@ async function parseAndPersistStreamedCsv(
   const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
-  const batchSize = payload.feed.writeBatchSize ?? 200;
+  const batchSize = payload.feed.writeBatchSize ?? 1000;
   let headerValidated = false;
   let rowNumber = 0;
   let rowsDownloaded = 0;
   let rowsParsed = 0;
   let rowsAccepted = 0;
   let rowsWritten = 0;
+  let flushCount = 0;
   let batch: FmcsaDailyDiffRow[] = [];
 
   const flushBatch = async () => {
     if (batch.length === 0) {
       return;
     }
-    logger.info("fmcsa streaming batch persist", {
-      feed_name: payload.feed.feedName,
-      feed_date: feedDate,
-      batch_size: batch.length,
-      rows_downloaded: rowsDownloaded,
-      rows_written_so_far: rowsWritten,
-    });
+    flushCount += 1;
+    if (flushCount === 1 || flushCount % 25 === 0) {
+      logger.info("fmcsa streaming batch persist", {
+        feed_name: payload.feed.feedName,
+        feed_date: feedDate,
+        batch_size: batch.length,
+        rows_downloaded: rowsDownloaded,
+        rows_written_so_far: rowsWritten,
+        flush_count: flushCount,
+      });
+    }
     const persistence = await persistDailyDiffRows(client, payload, batch, feedDate, observedAt);
     rowsWritten += persistence.rows_written;
     batch = [];
