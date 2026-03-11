@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { createInternalApiClient } from "../internal-api.js";
 import {
@@ -90,6 +91,22 @@ function createInternalFetch(params: {
 
     return new Response(JSON.stringify(next.body ?? { data: null }), {
       status: next.status ?? 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+}
+
+function createDelayedInternalFetch(params: {
+  delayMs: number;
+  response: Record<string, unknown>;
+}): typeof fetch {
+  return (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    await delay(params.delayMs, undefined, {
+      signal: init?.signal as AbortSignal | undefined,
+    });
+
+    return new Response(JSON.stringify(params.response), {
+      status: 200,
       headers: { "Content-Type": "application/json" },
     });
   }) as typeof fetch;
@@ -272,14 +289,16 @@ test("shared-table variants remain distinct by source feed metadata", async () =
   assert.equal(request?.body?.source_file_variant, "all_with_history");
 });
 
-test("remaining CSV export feed configs lock widths and endpoint paths", () => {
+test("remaining CSV export feed configs lock widths, timeout overrides, and batch sizes", () => {
   assert.deepEqual(
     FMCSA_REMAINING_CSV_EXPORT_FEEDS.map((feed) => ({
       feedName: feed.feedName,
       sourceFileVariant: feed.sourceFileVariant,
       expectedFieldCount: feed.expectedFieldCount,
       internalUpsertPath: feed.internalUpsertPath,
-      useStreamingParser: feed.useStreamingParser ?? false,
+      downloadTimeoutMs: __testables.resolveDownloadTimeoutMs(feed),
+      persistenceTimeoutMs: __testables.resolvePersistenceTimeoutMs(feed) ?? null,
+      writeBatchSize: feed.writeBatchSize ?? 1000,
     })),
     [
       {
@@ -287,77 +306,99 @@ test("remaining CSV export feed configs lock widths and endpoint paths", () => {
         sourceFileVariant: "csv_export",
         expectedFieldCount: 59,
         internalUpsertPath: "/api/internal/commercial-vehicle-crashes/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 1000,
       },
       {
         feedName: "Carrier - All With History",
         sourceFileVariant: "all_with_history",
         expectedFieldCount: 43,
         internalUpsertPath: "/api/internal/carrier-registrations/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 1000,
       },
       {
         feedName: "Inspections Per Unit",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 12,
         internalUpsertPath: "/api/internal/vehicle-inspection-units/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 2500,
       },
       {
         feedName: "Special Studies",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 5,
         internalUpsertPath: "/api/internal/vehicle-inspection-special-studies/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Revocation - All With History",
         sourceFileVariant: "all_with_history",
         expectedFieldCount: 6,
         internalUpsertPath: "/api/internal/operating-authority-revocations/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Insur - All With History",
         sourceFileVariant: "all_with_history",
         expectedFieldCount: 9,
         internalUpsertPath: "/api/internal/insurance-policies/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 2500,
       },
       {
         feedName: "OUT OF SERVICE ORDERS",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 7,
         internalUpsertPath: "/api/internal/out-of-service-orders/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Inspections and Citations",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 6,
         internalUpsertPath: "/api/internal/vehicle-inspection-citations/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 300_000,
+        persistenceTimeoutMs: 120_000,
+        writeBatchSize: 1000,
       },
       {
         feedName: "Vehicle Inspections and Violations",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 12,
         internalUpsertPath: "/api/internal/carrier-inspection-violations/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 300_000,
+        persistenceTimeoutMs: 120_000,
+        writeBatchSize: 1000,
       },
       {
         feedName: "Company Census File",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 147,
         internalUpsertPath: "/api/internal/motor-carrier-census-records/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 250,
       },
       {
         feedName: "Vehicle Inspection File",
         sourceFileVariant: "csv_export",
         expectedFieldCount: 63,
         internalUpsertPath: "/api/internal/carrier-inspections/upsert-batch",
-        useStreamingParser: true,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+        writeBatchSize: 500,
       },
     ],
   );
@@ -509,6 +550,66 @@ test("remaining CSV export workflow streams large files in multiple confirmed ba
   );
 });
 
+test("streaming workflow honors a feed-specific persistence timeout override", async () => {
+  const client = createInternalApiClient({
+    authContext: { orgId: "system" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    defaultTimeoutMs: 10,
+    fetchImpl: createDelayedInternalFetch({
+      delayMs: 30,
+      response: {
+        data: {
+          feed_name: "OUT OF SERVICE ORDERS",
+          feed_date: "2026-03-10",
+          rows_received: 1,
+          rows_written: 1,
+        },
+      },
+    }),
+  });
+
+  const result = await runFmcsaDailyDiffWorkflow(
+    {
+      feed: {
+        ...FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
+        downloadTimeoutMs: 1_000,
+        persistenceTimeoutMs: 100,
+        writeBatchSize: 1,
+      },
+      schedule: {
+        timestamp: "2026-03-10T16:00:00.000Z",
+        scheduleId: "schedule-persist-timeout-override",
+        timezone: "America/New_York",
+      },
+    },
+    {
+      client,
+      fetchImpl: createDownloadFetch({
+        contentType: "text/csv; charset=utf-8",
+        text: [
+          "DOT_NUMBER,LEGAL_NAME,DBA_NAME,OOS_DATE,OOS_REASON,STATUS,RESCIND_DATE",
+          "1438,AUSTIN URETHANE INC,,2022-07-09,Unsatisfactory = Unfit,ACTIVE,2022-08-01",
+        ].join("\n"),
+      }),
+    },
+  );
+
+  assert.equal(result.rows_written, 1);
+});
+
+test("streaming workflow formats download stream timeouts distinctly", () => {
+  const formatted = __testables.formatStreamingWorkflowError(
+    {
+      ...FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
+      downloadTimeoutMs: 40,
+    },
+    new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+  );
+
+  assert.match(formatted.message, /download stream timed out after 40ms/i);
+});
+
 test("SMS feed configs lock corrected dataset ids and crash skip metadata", () => {
   assert.deepEqual(
     FMCSA_SMS_FEEDS.map((feed) => ({
@@ -656,7 +757,7 @@ test("SMS workflow fails on header mismatch", async () => {
         }),
       },
     ),
-    /header validation failed/i,
+    /header (row width )?validation failed/i,
   );
 });
 
