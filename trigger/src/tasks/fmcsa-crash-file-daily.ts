@@ -7,6 +7,8 @@ import {
 
 export const fmcsaCrashFileDaily = schedules.task({
   id: FMCSA_CRASH_FILE_FEED.taskId,
+  machine: "small-2x",
+  maxDuration: 1800,
   cron: {
     pattern: "25 12 * * *",
     timezone: "America/New_York",

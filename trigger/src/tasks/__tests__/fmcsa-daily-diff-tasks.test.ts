@@ -387,56 +387,78 @@ test("all FMCSA scheduled task files exist with staggered cron definitions", () 
       filename: "../fmcsa-crash-file-daily.ts",
       taskIdExpression: "id: FMCSA_CRASH_FILE_FEED.taskId",
       cronPattern: 'pattern: "25 12 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-carrier-all-history-daily.ts",
       taskIdExpression: "id: FMCSA_CARRIER_ALL_HISTORY_CSV_FEED.taskId",
       cronPattern: 'pattern: "32 12 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-inspections-per-unit-daily.ts",
       taskIdExpression: "id: FMCSA_INSPECTIONS_PER_UNIT_FEED.taskId",
       cronPattern: 'pattern: "39 12 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-special-studies-daily.ts",
       taskIdExpression: "id: FMCSA_SPECIAL_STUDIES_FEED.taskId",
       cronPattern: 'pattern: "46 12 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-revocation-all-history-daily.ts",
       taskIdExpression: "id: FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED.taskId",
       cronPattern: 'pattern: "53 12 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-insur-all-history-daily.ts",
       taskIdExpression: "id: FMCSA_INSUR_ALL_HISTORY_CSV_FEED.taskId",
       cronPattern: 'pattern: "0 13 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-out-of-service-orders-daily.ts",
       taskIdExpression: "id: FMCSA_OUT_OF_SERVICE_ORDERS_FEED.taskId",
       cronPattern: 'pattern: "7 13 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-inspections-citations-daily.ts",
       taskIdExpression: "id: FMCSA_INSPECTIONS_AND_CITATIONS_FEED.taskId",
       cronPattern: 'pattern: "14 13 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-vehicle-inspections-violations-daily.ts",
       taskIdExpression: "id: FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED.taskId",
       cronPattern: 'pattern: "21 13 * * *"',
+      machinePattern: 'machine: "small-2x"',
+      maxDurationPattern: "maxDuration: 1800",
     },
     {
       filename: "../fmcsa-company-census-file-daily.ts",
       taskIdExpression: "id: FMCSA_COMPANY_CENSUS_FILE_FEED.taskId",
       cronPattern: 'pattern: "28 13 * * *"',
+      machinePattern: 'machine: "medium-2x"',
+      maxDurationPattern: "maxDuration: 3600",
     },
     {
       filename: "../fmcsa-vehicle-inspection-file-daily.ts",
       taskIdExpression: "id: FMCSA_VEHICLE_INSPECTION_FILE_FEED.taskId",
       cronPattern: 'pattern: "35 13 * * *"',
+      machinePattern: 'machine: "medium-2x"',
+      maxDurationPattern: "maxDuration: 3600",
     },
   ];
 
@@ -451,5 +473,19 @@ test("all FMCSA scheduled task files exist with staggered cron definitions", () 
     );
     assert.match(source, /timezone: "America\/New_York"/);
     assert.match(source, new RegExp(taskExpectation.cronPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    if (taskExpectation.machinePattern != null) {
+      const machinePattern = taskExpectation.machinePattern;
+      assert.match(
+        source,
+        new RegExp(machinePattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
+    if (taskExpectation.maxDurationPattern != null) {
+      const maxDurationPattern = taskExpectation.maxDurationPattern;
+      assert.match(
+        source,
+        new RegExp(maxDurationPattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
   }
 });

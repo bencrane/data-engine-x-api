@@ -7,6 +7,8 @@ import {
 
 export const fmcsaOutOfServiceOrdersDaily = schedules.task({
   id: FMCSA_OUT_OF_SERVICE_ORDERS_FEED.taskId,
+  machine: "small-2x",
+  maxDuration: 1800,
   cron: {
     pattern: "7 13 * * *",
     timezone: "America/New_York",
