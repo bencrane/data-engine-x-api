@@ -68,6 +68,8 @@ export interface FmcsaDailyDiffFeedConfig {
   expectedContentTypes?: readonly string[];
   useStreamingParser?: boolean;
   writeBatchSize?: number;
+  downloadTimeoutMs?: number;
+  persistenceTimeoutMs?: number;
 }
 
 export interface FmcsaDailyDiffWorkflowPayload {
@@ -108,6 +110,21 @@ interface ParsedRowsResult {
   rowsAccepted: number;
   rowsRejected: number;
   rows: FmcsaDailyDiffRow[];
+}
+
+function shouldUseStreamingParser(feed: FmcsaDailyDiffFeedConfig): boolean {
+  return (
+    feed.useStreamingParser ??
+    Boolean(feed.headerRow && feed.expectedContentTypes?.some((value) => value.includes("text/csv")))
+  );
+}
+
+function resolveDownloadTimeoutMs(feed: FmcsaDailyDiffFeedConfig): number {
+  return feed.downloadTimeoutMs ?? (shouldUseStreamingParser(feed) ? 300_000 : 60_000);
+}
+
+function resolvePersistenceTimeoutMs(feed: FmcsaDailyDiffFeedConfig): number | undefined {
+  return feed.persistenceTimeoutMs ?? (shouldUseStreamingParser(feed) ? 120_000 : undefined);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -326,10 +343,11 @@ async function downloadDailyDiffResponse(
   feed: FmcsaDailyDiffFeedConfig,
 ): Promise<Response> {
   let response: Response;
+  const timeoutMs = resolveDownloadTimeoutMs(feed);
   try {
     response = await fetchImpl(feed.downloadUrl, {
       method: "GET",
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     throw new Error(
@@ -387,6 +405,7 @@ async function persistDailyDiffRows(
       source_run_metadata: sourceRunMetadata,
       records: rows,
     },
+    timeoutMs: resolvePersistenceTimeoutMs(payload.feed),
     validate: (response) =>
       isRecord(response) &&
       response.feed_name === payload.feed.feedName &&
@@ -420,7 +439,7 @@ async function parseAndPersistStreamedCsv(
   const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
-  const batchSize = payload.feed.writeBatchSize ?? 500;
+  const batchSize = payload.feed.writeBatchSize ?? 200;
   let headerValidated = false;
   let rowNumber = 0;
   let rowsDownloaded = 0;
@@ -433,6 +452,13 @@ async function parseAndPersistStreamedCsv(
     if (batch.length === 0) {
       return;
     }
+    logger.info("fmcsa streaming batch persist", {
+      feed_name: payload.feed.feedName,
+      feed_date: feedDate,
+      batch_size: batch.length,
+      rows_downloaded: rowsDownloaded,
+      rows_written_so_far: rowsWritten,
+    });
     const persistence = await persistDailyDiffRows(client, payload, batch, feedDate, observedAt);
     rowsWritten += persistence.rows_written;
     batch = [];
@@ -509,7 +535,7 @@ export async function runFmcsaDailyDiffWorkflow(
     schedule_id: payload.schedule?.scheduleId ?? null,
   });
 
-  if (payload.feed.useStreamingParser) {
+  if (shouldUseStreamingParser(payload.feed)) {
     const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
     const result = await parseAndPersistStreamedCsv(
       client,
