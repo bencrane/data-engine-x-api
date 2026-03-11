@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     theirstack_api_key: str | None = None
     enigma_api_key: str | None = None
     fmcsa_api_key: str | None = None
+    socrata_api_key_id: str | None = None
+    socrata_api_key_secret: str | None = None
     courtlistener_api_key: str | None = None
     shovels_api_key: str | None = None
     adyntel_api_key: str | None = None
@@ -66,11 +68,7 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     openai_api_key: str | None = None
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(extra="ignore")
 
     @field_validator("internal_api_key")
     @classmethod
