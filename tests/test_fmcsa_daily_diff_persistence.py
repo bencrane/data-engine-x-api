@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 import pytest
 
@@ -27,63 +28,89 @@ from app.services.vehicle_inspection_units import upsert_vehicle_inspection_unit
 
 
 @dataclass
-class _Result:
-    data: list[dict]
+class _FakeDirectPostgresDatabase:
+    tables: dict[str, dict[tuple[object, ...], dict]]
+
+    def __init__(self):
+        self.tables = {}
 
 
-class _FakeTableQuery:
-    def __init__(self, client: "_FakeSupabaseClient", table_name: str):
-        self.client = client
-        self.table_name = table_name
-        self.mode: str | None = None
-        self.upsert_rows: list[dict] = []
+def _unwrap_postgres_value(value):
+    return getattr(value, "obj", value)
 
-    def upsert(self, rows: list[dict], on_conflict: str):
-        assert on_conflict == "feed_date,source_feed_name,row_position"
-        self.mode = "upsert"
-        self.upsert_rows = rows
+
+class _FakeDirectPostgresCursor:
+    def __init__(self, database: _FakeDirectPostgresDatabase):
+        self.database = database
+        self.rowcount = 0
+
+    def __enter__(self):
         return self
 
-    def execute(self):
-        table = self.client.tables.setdefault(self.table_name, {})
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
-        if self.mode == "upsert":
-            persisted_rows = []
-            for row in self.upsert_rows:
-                identity = (row["feed_date"], row["source_feed_name"], row["row_position"])
-                existing = table.get(identity)
-                if existing is None:
-                    stored = {
-                        "id": f"{self.table_name}-{len(table) + 1}",
-                        "created_at": row["updated_at"],
-                        **row,
-                    }
-                else:
-                    stored = {
-                        **existing,
-                        **row,
-                        "created_at": existing["created_at"],
-                    }
-                table[identity] = stored
-                persisted_rows.append(stored)
-            return _Result(data=persisted_rows)
+    def executemany(self, query: str, params_seq: list[dict]):
+        table_match = re.search(r'INSERT INTO "entities"\."([^"]+)"', query)
+        if table_match is None:
+            raise AssertionError(f"Could not parse target table from query: {query}")
+        table_name = table_match.group(1)
+        table = self.database.tables.setdefault(table_name, {})
+        self.rowcount = 0
 
-        raise AssertionError(f"Unsupported mode for fake table query: {self.mode}")
+        for params in params_seq:
+            normalized = {key: _unwrap_postgres_value(value) for key, value in params.items()}
+            identity = tuple(
+                normalized[column_name]
+                for column_name in fmcsa_daily_diff_common.FMCSA_CONFLICT_COLUMNS
+            )
+            existing = table.get(identity)
+            if existing is None:
+                stored = {
+                    "id": f"{table_name}-{len(table) + 1}",
+                    "created_at": normalized.get("updated_at"),
+                    **normalized,
+                }
+            else:
+                stored = {
+                    **existing,
+                    **{
+                        key: value
+                        for key, value in normalized.items()
+                        if key not in fmcsa_daily_diff_common.FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS
+                    },
+                    "created_at": existing["created_at"],
+                }
+                for key in fmcsa_daily_diff_common.FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS:
+                    if key in existing:
+                        stored[key] = existing[key]
+            table[identity] = stored
+            self.rowcount += 1
 
 
-class _FakeSupabaseClient:
-    def __init__(self):
-        self.tables: dict[str, dict[str, dict]] = {}
+class _FakeDirectPostgresConnection:
+    def __init__(self, database: _FakeDirectPostgresDatabase):
+        self.database = database
 
-    def table(self, table_name: str):
-        return _FakeTableQuery(self, table_name)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def cursor(self):
+        return _FakeDirectPostgresCursor(self.database)
 
 
 @pytest.fixture
-def fake_client(monkeypatch: pytest.MonkeyPatch) -> _FakeSupabaseClient:
-    client = _FakeSupabaseClient()
-    monkeypatch.setattr(fmcsa_daily_diff_common, "get_supabase_client", lambda: client)
-    return client
+def fake_client(monkeypatch: pytest.MonkeyPatch) -> _FakeDirectPostgresDatabase:
+    database = _FakeDirectPostgresDatabase()
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "get_fmcsa_direct_postgres_connection",
+        lambda: _FakeDirectPostgresConnection(database),
+    )
+    return database
 
 
 def _source_context(
@@ -104,7 +131,29 @@ def _source_context(
     }
 
 
-def test_upsert_carrier_registrations_preserves_snapshot_row(fake_client: _FakeSupabaseClient):
+def test_get_fmcsa_direct_postgres_connection_uses_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    def _connect(database_url: str):
+        captured["database_url"] = database_url
+        return object()
+
+    monkeypatch.setattr(fmcsa_daily_diff_common, "connect", _connect)
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "get_settings",
+        lambda: type("Settings", (), {"database_url": "postgresql://fmcsa:test@localhost:5432/app"})(),
+    )
+
+    connection = fmcsa_daily_diff_common.get_fmcsa_direct_postgres_connection()
+
+    assert connection is not None
+    assert captured["database_url"] == "postgresql://fmcsa:test@localhost:5432/app"
+
+
+def test_upsert_carrier_registrations_preserves_snapshot_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_carrier_registrations(
         source_context=_source_context(feed_name="Carrier", observed_at="2026-03-10T15:00:00Z"),
         rows=[
@@ -212,7 +261,7 @@ def test_upsert_carrier_registrations_preserves_snapshot_row(fake_client: _FakeS
     assert stored["raw_source_row"]["row_number"] == 4
 
 
-def test_upsert_commercial_vehicle_crashes_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_commercial_vehicle_crashes_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_commercial_vehicle_crashes(
         source_context=_source_context(feed_name="Crash File", observed_at="2026-03-10T14:00:00Z"),
         rows=[
@@ -352,7 +401,7 @@ def test_upsert_commercial_vehicle_crashes_persists_typed_row(fake_client: _Fake
 
 
 def test_shared_carrier_registration_table_keeps_daily_and_all_history_rows_separate(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     row = {
         "row_number": 1,
@@ -469,7 +518,7 @@ def test_shared_carrier_registration_table_keeps_daily_and_all_history_rows_sepa
 
 
 def test_upsert_process_agent_filings_same_day_rerun_updates_same_feed_slot(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     first_row = {
         "row_number": 1,
@@ -506,6 +555,7 @@ def test_upsert_process_agent_filings_same_day_rerun_updates_same_feed_slot(
         source_context=_source_context(feed_name="BOC3", observed_at="2026-03-10T15:05:00Z"),
         rows=[first_row],
     )
+    first_created_at = next(iter(fake_client.tables["process_agent_filings"].values()))["created_at"]
     upsert_process_agent_filings(
         source_context=_source_context(feed_name="BOC3", observed_at="2026-03-10T15:06:00Z"),
         rows=[second_row],
@@ -515,10 +565,13 @@ def test_upsert_process_agent_filings_same_day_rerun_updates_same_feed_slot(
     stored = next(iter(fake_client.tables["process_agent_filings"].values()))
     assert stored["process_agent_company_name"] == "AGENT TWO"
     assert stored["source_feed_name"] == "BOC3"
+    assert stored["created_at"] == first_created_at
+    assert stored["source_observed_at"] == "2026-03-10T15:06:00Z"
+    assert stored["raw_source_row"]["raw_fields"]["Company Name"] == "AGENT TWO"
 
 
 def test_upsert_carrier_safety_basic_measures_keeps_ab_and_c_rows_distinct(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     row = {
         "row_number": 1,
@@ -595,7 +648,7 @@ def test_upsert_carrier_safety_basic_measures_keeps_ab_and_c_rows_distinct(
     }
 
 
-def test_upsert_carrier_safety_basic_percentiles_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_carrier_safety_basic_percentiles_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_carrier_safety_basic_percentiles(
         source_context=_source_context(
             feed_name="SMS AB Pass",
@@ -694,7 +747,7 @@ def test_upsert_carrier_safety_basic_percentiles_persists_typed_row(fake_client:
 
 
 def test_upsert_carrier_inspection_violations_preserves_feed_date_snapshots(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     row = {
         "row_number": 1,
@@ -754,7 +807,7 @@ def test_upsert_carrier_inspection_violations_preserves_feed_date_snapshots(
 
 
 def test_upsert_carrier_inspection_violations_supports_vehicle_inspection_feed(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     result = upsert_carrier_inspection_violations(
         source_context=_source_context(
@@ -805,7 +858,7 @@ def test_upsert_carrier_inspection_violations_supports_vehicle_inspection_feed(
     assert stored["oos_indicator"] is True
 
 
-def test_upsert_carrier_inspections_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_carrier_inspections_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_carrier_inspections(
         source_context=_source_context(
             feed_name="SMS Input - Inspection",
@@ -910,7 +963,7 @@ def test_upsert_carrier_inspections_persists_typed_row(fake_client: _FakeSupabas
 
 
 def test_upsert_carrier_inspections_supports_vehicle_inspection_file_feed(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     result = upsert_carrier_inspections(
         source_context=_source_context(
@@ -1064,7 +1117,7 @@ def test_upsert_carrier_inspections_supports_vehicle_inspection_file_feed(
 
 
 def test_upsert_motor_carrier_census_records_same_day_rerun_updates_same_feed_slot(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     first_row = {
         "row_number": 1,
@@ -1188,7 +1241,7 @@ def test_upsert_motor_carrier_census_records_same_day_rerun_updates_same_feed_sl
 
 
 def test_upsert_motor_carrier_census_records_supports_company_census_file(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     result = upsert_motor_carrier_census_records(
         source_context=_source_context(
@@ -1363,7 +1416,7 @@ def test_upsert_motor_carrier_census_records_supports_company_census_file(
 
 
 def test_shared_table_keeps_daily_and_all_history_rows_separate_on_same_feed_date(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     row = {
         "row_number": 1,
@@ -1428,7 +1481,7 @@ def test_shared_table_keeps_daily_and_all_history_rows_separate_on_same_feed_dat
 
 
 def test_upsert_vehicle_inspection_units_preserves_multiple_rows_for_same_inspection(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     row_one = {
         "row_number": 1,
@@ -1463,7 +1516,7 @@ def test_upsert_vehicle_inspection_units_preserves_multiple_rows_for_same_inspec
     assert len(fake_client.tables["vehicle_inspection_units"]) == 2
 
 
-def test_upsert_vehicle_inspection_special_studies_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_vehicle_inspection_special_studies_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_vehicle_inspection_special_studies(
         source_context=_source_context(feed_name="Special Studies", observed_at="2026-03-10T12:55:00Z", source_file_variant="csv_export"),
         rows=[
@@ -1487,7 +1540,7 @@ def test_upsert_vehicle_inspection_special_studies_persists_typed_row(fake_clien
     assert stored["sequence_number"] == 4
 
 
-def test_upsert_vehicle_inspection_citations_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_vehicle_inspection_citations_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_vehicle_inspection_citations(
         source_context=_source_context(feed_name="Inspections and Citations", observed_at="2026-03-10T12:56:00Z", source_file_variant="csv_export"),
         rows=[
@@ -1512,7 +1565,7 @@ def test_upsert_vehicle_inspection_citations_persists_typed_row(fake_client: _Fa
     assert stored["citation_result"] == "Paid"
 
 
-def test_upsert_out_of_service_orders_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_out_of_service_orders_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_out_of_service_orders(
         source_context=_source_context(feed_name="OUT OF SERVICE ORDERS", observed_at="2026-03-10T13:05:00Z", source_file_variant="csv_export"),
         rows=[
@@ -1538,7 +1591,7 @@ def test_upsert_out_of_service_orders_persists_typed_row(fake_client: _FakeSupab
     assert stored["oos_rescind_date"] == "2022-08-01"
 
 
-def test_upsert_insurance_filing_rejections_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_insurance_filing_rejections_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_insurance_filing_rejections(
         source_context=_source_context(feed_name="Rejected", observed_at="2026-03-10T15:25:00Z"),
         rows=[
@@ -1589,7 +1642,7 @@ def test_upsert_insurance_filing_rejections_persists_typed_row(fake_client: _Fak
     assert stored["rejected_reason"] == "Policy is already cancelled"
 
 
-def test_upsert_operating_authority_histories_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_operating_authority_histories_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_operating_authority_histories(
         source_context=_source_context(feed_name="AuthHist", observed_at="2026-03-10T15:00:00Z"),
         rows=[
@@ -1629,7 +1682,7 @@ def test_upsert_operating_authority_histories_persists_typed_row(fake_client: _F
 
 
 def test_upsert_operating_authority_revocations_stores_one_row_per_feed_date(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     row = {
         "row_number": 1,
@@ -1670,7 +1723,7 @@ def test_upsert_operating_authority_revocations_stores_one_row_per_feed_date(
 
 
 def test_upsert_operating_authority_revocations_same_day_rerun_updates_same_position(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     first_row = {
         "row_number": 1,
@@ -1701,6 +1754,7 @@ def test_upsert_operating_authority_revocations_same_day_rerun_updates_same_posi
         source_context=_source_context(feed_name="Revocation", observed_at="2026-03-10T15:05:00Z"),
         rows=[first_row],
     )
+    first_stored = next(iter(fake_client.tables["operating_authority_revocations"].values()))
     upsert_operating_authority_revocations(
         source_context=_source_context(feed_name="Revocation", observed_at="2026-03-10T15:06:00Z"),
         rows=[second_row],
@@ -1711,10 +1765,14 @@ def test_upsert_operating_authority_revocations_same_day_rerun_updates_same_posi
     assert stored["feed_date"] == "2026-03-10"
     assert stored["row_position"] == 1
     assert stored["revocation_type"] == "Safety"
+    assert stored["record_fingerprint"] == first_stored["record_fingerprint"]
+    assert stored["first_observed_at"] == "2026-03-10T15:05:00Z"
+    assert stored["last_observed_at"] == "2026-03-10T15:06:00Z"
+    assert stored["created_at"] == first_stored["created_at"]
 
 
 def test_upsert_insurance_policies_preserves_blank_row_removal_signal(
-    fake_client: _FakeSupabaseClient,
+    fake_client: _FakeDirectPostgresDatabase,
 ):
     result = upsert_insurance_policies(
         source_context=_source_context(feed_name="Insurance", observed_at="2026-03-10T15:10:00Z"),
@@ -1745,7 +1803,7 @@ def test_upsert_insurance_policies_preserves_blank_row_removal_signal(
     assert stored["policy_number"] is None
 
 
-def test_upsert_insurance_policy_filings_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_insurance_policy_filings_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_insurance_policy_filings(
         source_context=_source_context(feed_name="ActPendInsur", observed_at="2026-03-10T15:15:00Z"),
         rows=[
@@ -1787,7 +1845,7 @@ def test_upsert_insurance_policy_filings_persists_typed_row(fake_client: _FakeSu
     assert stored["bipd_maximum_limit_thousands_usd"] == 1000
 
 
-def test_upsert_insurance_policy_history_events_persists_typed_row(fake_client: _FakeSupabaseClient):
+def test_upsert_insurance_policy_history_events_persists_typed_row(fake_client: _FakeDirectPostgresDatabase):
     result = upsert_insurance_policy_history_events(
         source_context=_source_context(feed_name="InsHist", observed_at="2026-03-10T15:20:00Z"),
         rows=[
@@ -1839,6 +1897,68 @@ def test_upsert_insurance_policy_history_events_persists_typed_row(fake_client: 
     stored = next(iter(fake_client.tables["insurance_policy_history_events"].values()))
     assert stored["minimum_coverage_amount_thousands_usd"] == 750
     assert stored["cancel_effective_date"] == "1995-09-01"
+
+
+def test_direct_postgres_failures_surface_without_fake_success(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _FailingCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def executemany(self, query: str, params_seq: list[dict]):
+            raise RuntimeError("direct postgres write failed")
+
+    class _FailingConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return _FailingCursor()
+
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "get_fmcsa_direct_postgres_connection",
+        lambda: _FailingConnection(),
+    )
+
+    with pytest.raises(RuntimeError, match="direct postgres write failed"):
+        upsert_process_agent_filings(
+            source_context=_source_context(feed_name="BOC3", observed_at="2026-03-10T15:05:00Z"),
+            rows=[
+                {
+                    "row_number": 1,
+                    "raw_values": [
+                        "MC555555",
+                        "55556666",
+                        "AGENT ONE",
+                        "LEGAL",
+                        "1 MAIN",
+                        "AUSTIN",
+                        "TX",
+                        "USA",
+                        "78701",
+                    ],
+                    "raw_fields": {
+                        "Docket Number": "MC555555",
+                        "USDOT Number": "55556666",
+                        "Company Name": "AGENT ONE",
+                        "Attention to or Title": "LEGAL",
+                        "Street or PO Box": "1 MAIN",
+                        "City": "AUSTIN",
+                        "State": "TX",
+                        "Country": "USA",
+                        "Zip Code": "78701",
+                    },
+                }
+            ],
+        )
 
 
 @pytest.mark.asyncio
