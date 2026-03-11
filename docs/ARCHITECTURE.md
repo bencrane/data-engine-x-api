@@ -9,6 +9,8 @@
 
 This file predates the audited architecture documents and is retained for context. If it conflicts with the audited reports, the audited reports win.
 
+For reading order across the Chief Agent docs, start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
+
 ## System Flow (Historical Snapshot)
 
 The active runtime path is:

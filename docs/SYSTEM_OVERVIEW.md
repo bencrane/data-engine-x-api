@@ -13,6 +13,8 @@ This file is useful, but it is **not** the sole source of truth for live product
 
 It is a broad technical reference, not a direct production audit. If you read it as if every built capability is working cleanly in production, you will be misled.
 
+For reading order across the Chief Agent docs, start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
+
 For factual, current, production-state truth, use:
 
 1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`

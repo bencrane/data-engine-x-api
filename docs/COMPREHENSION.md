@@ -11,6 +11,8 @@ This is an older comprehension note, not a current production-state document.
 
 It should be treated as historical architecture thinking and schema planning context, not as a factual description of what is true in production right now.
 
+For reading order across the Chief Agent docs, start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
+
 For current factual state, use:
 
 1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
