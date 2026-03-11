@@ -126,6 +126,11 @@ const FMCSA_LONG_RUNNING_STREAM_TIMEOUTS = {
   persistenceTimeoutMs: 300_000,
 } as const;
 
+const FMCSA_PLAIN_TEXT_ALL_HISTORY_STREAMING = {
+  useStreamingParser: true,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
+} as const;
+
 function shouldUseStreamingParser(feed: FmcsaDailyDiffFeedConfig): boolean {
   return (
     feed.useStreamingParser ??
@@ -483,7 +488,7 @@ async function parseAndPersistStreamedCsv(
   const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
-  const batchSize = payload.feed.writeBatchSize ?? 1000;
+  const batchSize = payload.feed.writeBatchSize ?? 500;
   let headerValidated = false;
   let rowNumber = 0;
   let rowsDownloaded = 0;
@@ -839,6 +844,7 @@ export const FMCSA_INSHIST_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
   sourceFileVariant: "all_with_history",
   sourceFields: [...FMCSA_INSHIST_DAILY_FEED.sourceFields],
   expectedFieldCount: 17,
+  ...FMCSA_PLAIN_TEXT_ALL_HISTORY_STREAMING,
 };
 
 export const FMCSA_BOC3_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
@@ -849,6 +855,7 @@ export const FMCSA_BOC3_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
   sourceFileVariant: "all_with_history",
   sourceFields: [...FMCSA_BOC3_DAILY_FEED.sourceFields],
   expectedFieldCount: 9,
+  ...FMCSA_PLAIN_TEXT_ALL_HISTORY_STREAMING,
 };
 
 export const FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
@@ -859,6 +866,7 @@ export const FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
   sourceFileVariant: "all_with_history",
   sourceFields: [...FMCSA_ACTPENDINSUR_DAILY_FEED.sourceFields],
   expectedFieldCount: 11,
+  ...FMCSA_PLAIN_TEXT_ALL_HISTORY_STREAMING,
 };
 
 export const FMCSA_REJECTED_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
@@ -879,6 +887,7 @@ export const FMCSA_AUTHHIST_ALL_HISTORY_FEED: FmcsaDailyDiffFeedConfig = {
   sourceFileVariant: "all_with_history",
   sourceFields: [...FMCSA_AUTHHIST_DAILY_FEED.sourceFields],
   expectedFieldCount: 9,
+  ...FMCSA_PLAIN_TEXT_ALL_HISTORY_STREAMING,
 };
 
 export const FMCSA_NEXT_BATCH_SNAPSHOT_HISTORY_FEEDS = [
@@ -1352,7 +1361,7 @@ export const FMCSA_INSPECTIONS_PER_UNIT_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS.length,
   headerRow: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
-  writeBatchSize: 2500,
+  writeBatchSize: 1250,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1366,7 +1375,7 @@ export const FMCSA_SPECIAL_STUDIES_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS.length,
   headerRow: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
-  writeBatchSize: 5000,
+  writeBatchSize: 2500,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1380,7 +1389,7 @@ export const FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_REVOCATION_ALL_HISTORY_SOURCE_FIELDS.length,
   headerRow: FMCSA_REVOCATION_ALL_HISTORY_HEADERS,
   expectedContentTypes: ["text/csv"],
-  writeBatchSize: 5000,
+  writeBatchSize: 2500,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1394,7 +1403,7 @@ export const FMCSA_INSUR_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_INSUR_ALL_HISTORY_SOURCE_FIELDS.length,
   headerRow: FMCSA_INSUR_ALL_HISTORY_HEADERS,
   expectedContentTypes: ["text/csv"],
-  writeBatchSize: 2500,
+  writeBatchSize: 1250,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1408,7 +1417,7 @@ export const FMCSA_OUT_OF_SERVICE_ORDERS_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_OUT_OF_SERVICE_ORDER_SOURCE_FIELDS.length,
   headerRow: FMCSA_OUT_OF_SERVICE_ORDER_HEADERS,
   expectedContentTypes: ["text/csv"],
-  writeBatchSize: 5000,
+  writeBatchSize: 2500,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1447,7 +1456,7 @@ export const FMCSA_COMPANY_CENSUS_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   headerRow: FMCSA_COMPANY_CENSUS_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
   useStreamingParser: true,
-  writeBatchSize: 250,
+  writeBatchSize: 125,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1462,7 +1471,7 @@ export const FMCSA_VEHICLE_INSPECTION_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   headerRow: FMCSA_VEHICLE_INSPECTION_FILE_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
   useStreamingParser: true,
-  writeBatchSize: 500,
+  writeBatchSize: 250,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
