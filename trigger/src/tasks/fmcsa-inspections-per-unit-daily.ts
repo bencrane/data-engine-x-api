@@ -7,8 +7,8 @@ import {
 
 export const fmcsaInspectionsPerUnitDaily = schedules.task({
   id: FMCSA_INSPECTIONS_PER_UNIT_FEED.taskId,
-  machine: "small-2x",
-  maxDuration: 1800,
+  machine: "medium-2x",
+  maxDuration: 3600,
   cron: {
     pattern: "39 12 * * *",
     timezone: "America/New_York",

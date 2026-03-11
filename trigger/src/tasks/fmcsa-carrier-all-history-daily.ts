@@ -7,8 +7,8 @@ import {
 
 export const fmcsaCarrierAllHistoryDaily = schedules.task({
   id: FMCSA_CARRIER_ALL_HISTORY_CSV_FEED.taskId,
-  machine: "small-2x",
-  maxDuration: 1800,
+  machine: "medium-2x",
+  maxDuration: 3600,
   cron: {
     pattern: "32 12 * * *",
     timezone: "America/New_York",
