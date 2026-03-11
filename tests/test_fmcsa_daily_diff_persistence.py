@@ -30,9 +30,15 @@ from app.services.vehicle_inspection_units import upsert_vehicle_inspection_unit
 @dataclass
 class _FakeDirectPostgresDatabase:
     tables: dict[str, dict[tuple[object, ...], dict]]
+    table_columns: dict[str, tuple[str, ...]]
 
     def __init__(self):
         self.tables = {}
+        self.table_columns = {}
+
+
+def _default_table_columns(table_name: str) -> tuple[str, ...]:
+    return ()
 
 
 def _unwrap_postgres_value(value):
@@ -50,20 +56,40 @@ class _FakeDirectPostgresCursor:
     def __exit__(self, exc_type, exc, tb):
         return False
 
+    def execute(self, query: str, params: tuple[str, str]):
+        if "information_schema.columns" not in query:
+            raise AssertionError(f"Unsupported execute query in fake cursor: {query}")
+        schema_name, table_name = params
+        assert schema_name == "entities"
+        self._last_fetchall = [
+            (column_name,)
+            for column_name in self.database.table_columns.get(
+                table_name, _default_table_columns(table_name)
+            )
+        ]
+        return self
+
+    def fetchall(self):
+        return getattr(self, "_last_fetchall", [])
+
     def executemany(self, query: str, params_seq: list[dict]):
         table_match = re.search(r'INSERT INTO "entities"\."([^"]+)"', query)
         if table_match is None:
             raise AssertionError(f"Could not parse target table from query: {query}")
         table_name = table_match.group(1)
+        conflict_match = re.search(r"ON CONFLICT \(([^)]+)\)", query)
+        if conflict_match is None:
+            raise AssertionError(f"Could not parse conflict target from query: {query}")
+        conflict_columns = tuple(
+            column_name.strip().strip('"')
+            for column_name in conflict_match.group(1).split(",")
+        )
         table = self.database.tables.setdefault(table_name, {})
         self.rowcount = 0
 
         for params in params_seq:
             normalized = {key: _unwrap_postgres_value(value) for key, value in params.items()}
-            identity = tuple(
-                normalized[column_name]
-                for column_name in fmcsa_daily_diff_common.FMCSA_CONFLICT_COLUMNS
-            )
+            identity = tuple(normalized[column_name] for column_name in conflict_columns)
             existing = table.get(identity)
             if existing is None:
                 stored = {
@@ -105,6 +131,7 @@ class _FakeDirectPostgresConnection:
 @pytest.fixture
 def fake_client(monkeypatch: pytest.MonkeyPatch) -> _FakeDirectPostgresDatabase:
     database = _FakeDirectPostgresDatabase()
+    fmcsa_daily_diff_common._get_table_columns.cache_clear()
     monkeypatch.setattr(
         fmcsa_daily_diff_common,
         "get_fmcsa_direct_postgres_connection",
@@ -151,6 +178,175 @@ def test_get_fmcsa_direct_postgres_connection_uses_database_url(
 
     assert connection is not None
     assert captured["database_url"] == "postgresql://fmcsa:test@localhost:5432/app"
+
+
+def test_top5_tables_fall_back_to_live_legacy_columns_when_snapshot_columns_absent(
+    fake_client: _FakeDirectPostgresDatabase,
+):
+    fake_client.table_columns["operating_authority_histories"] = (
+        "record_fingerprint",
+        "docket_number",
+        "usdot_number",
+        "sub_number",
+        "operating_authority_type",
+        "original_authority_action_description",
+        "original_authority_action_served_date",
+        "final_authority_action_description",
+        "final_authority_decision_date",
+        "final_authority_served_date",
+        "source_provider",
+        "source_feed_name",
+        "source_download_url",
+        "source_file_variant",
+        "source_observed_at",
+        "source_task_id",
+        "source_schedule_id",
+        "source_run_metadata",
+        "raw_source_row",
+        "first_observed_at",
+        "last_observed_at",
+        "updated_at",
+    )
+
+    result = upsert_operating_authority_histories(
+        source_context=_source_context(feed_name="AuthHist", observed_at="2026-03-10T15:00:00Z"),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [
+                    "MC123456",
+                    "12345678",
+                    "0001",
+                    "Common",
+                    "Granted",
+                    "03/10/2024",
+                    "Revoked",
+                    "03/09/2026",
+                    "03/10/2026",
+                ],
+                "raw_fields": {
+                    "Docket Number": "MC123456",
+                    "USDOT Number": "12345678",
+                    "Sub Number": "0001",
+                    "Operating Authority Type": "Common",
+                    "Original Authority Action Description": "Granted",
+                    "Original Authority Action Served Date": "03/10/2024",
+                    "Final Authority Action Description": "Revoked",
+                    "Final Authority Decision Date": "03/09/2026",
+                    "Final Authority Served Date": "03/10/2026",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["operating_authority_histories"].values()))
+    assert "feed_date" not in stored
+    assert "row_position" not in stored
+    assert stored["record_fingerprint"]
+    assert stored["first_observed_at"] == "2026-03-10T15:00:00Z"
+    assert stored["last_observed_at"] == "2026-03-10T15:00:00Z"
+
+
+def test_top5_tables_use_record_fingerprint_conflict_when_live_schema_is_legacy(
+    fake_client: _FakeDirectPostgresDatabase,
+):
+    fake_client.table_columns["insurance_policy_history_events"] = (
+        "record_fingerprint",
+        "docket_number",
+        "usdot_number",
+        "form_code",
+        "cancellation_method",
+        "cancellation_form_code",
+        "insurance_type_indicator",
+        "insurance_type_description",
+        "policy_number",
+        "minimum_coverage_amount_thousands_usd",
+        "insurance_class_code",
+        "effective_date",
+        "bipd_underlying_limit_amount_thousands_usd",
+        "bipd_max_coverage_amount_thousands_usd",
+        "cancel_effective_date",
+        "specific_cancellation_method",
+        "insurance_company_branch",
+        "insurance_company_name",
+        "source_provider",
+        "source_feed_name",
+        "source_download_url",
+        "source_file_variant",
+        "source_observed_at",
+        "source_task_id",
+        "source_schedule_id",
+        "source_run_metadata",
+        "raw_source_row",
+        "first_observed_at",
+        "last_observed_at",
+        "updated_at",
+    )
+
+    first_row = {
+        "row_number": 3,
+        "raw_values": [
+            "MC333333",
+            "33334444",
+            "91X",
+            "Cancelled",
+            "35",
+            " ",
+            "BIPD/Primary",
+            "TP404896",
+            "750",
+            "P",
+            "09/01/1991",
+            "0",
+            "1000",
+            "09/01/1995",
+            "CANCEL",
+            "00",
+            "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
+        ],
+        "raw_fields": {
+            "Docket Number": "MC333333",
+            "USDOT Number": "33334444",
+            "Form Code": "91X",
+            "Cancellation Method": "Cancelled",
+            "Cancel/Replace/Name Change/Transfer Form": "35",
+            "Insurance Type Indicator": " ",
+            "Insurance Type Description": "BIPD/Primary",
+            "Policy Number": "TP404896",
+            "Minimum Coverage Amount": "750",
+            "Insurance Class Code": "P",
+            "Effective Date": "09/01/1991",
+            "BI&PD Underlying Limit Amount": "0",
+            "BI&PD Max Coverage Amount": "1000",
+            "Cancel Effective Date": "09/01/1995",
+            "Specific Cancellation Method": "CANCEL",
+            "Insurance Company Branch": "00",
+            "Insurance Company Name": "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
+        },
+    }
+    second_row = {
+        **first_row,
+        "raw_fields": {
+            **first_row["raw_fields"],
+            "Cancellation Method": "Reinstated",
+        },
+    }
+
+    upsert_insurance_policy_history_events(
+        source_context=_source_context(feed_name="InsHist", observed_at="2026-03-10T15:20:00Z"),
+        rows=[first_row],
+    )
+    upsert_insurance_policy_history_events(
+        source_context=_source_context(feed_name="InsHist", observed_at="2026-03-10T15:21:00Z"),
+        rows=[second_row],
+    )
+
+    assert len(fake_client.tables["insurance_policy_history_events"]) == 1
+    stored = next(iter(fake_client.tables["insurance_policy_history_events"].values()))
+    assert stored["cancellation_method"] == "Reinstated"
+    assert stored["first_observed_at"] == "2026-03-10T15:20:00Z"
+    assert stored["last_observed_at"] == "2026-03-10T15:21:00Z"
 
 
 def test_upsert_carrier_registrations_preserves_snapshot_row(fake_client: _FakeDirectPostgresDatabase):
@@ -1908,6 +2104,12 @@ def test_direct_postgres_failures_surface_without_fake_success(
 
         def __exit__(self, exc_type, exc, tb):
             return False
+
+        def execute(self, query: str, params: tuple[str, str]):
+            return self
+
+        def fetchall(self):
+            return []
 
         def executemany(self, query: str, params_seq: list[dict]):
             raise RuntimeError("direct postgres write failed")

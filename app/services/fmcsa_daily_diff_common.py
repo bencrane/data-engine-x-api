@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from hashlib import sha256
 import re
 from collections.abc import Callable
@@ -14,6 +15,7 @@ from app.config import get_settings
 FMCSA_SOURCE_PROVIDER = "fmcsa_open_data"
 FMCSA_ENTITIES_SCHEMA = "entities"
 FMCSA_CONFLICT_COLUMNS = ("feed_date", "source_feed_name", "row_position")
+FMCSA_LEGACY_CONFLICT_COLUMNS = ("record_fingerprint",)
 FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS = frozenset(
     {
         "created_at",
@@ -183,6 +185,33 @@ def _build_record_fingerprint(
     return sha256(identity.encode("utf-8")).hexdigest()
 
 
+@lru_cache(maxsize=None)
+def _get_table_columns(table_name: str) -> tuple[str, ...]:
+    with get_fmcsa_direct_postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = %s
+                  AND table_name = %s
+                ORDER BY ordinal_position
+                """,
+                (FMCSA_ENTITIES_SCHEMA, table_name),
+            )
+            return tuple(str(row[0]) for row in cursor.fetchall())
+
+
+def _get_conflict_columns(*, available_columns: set[str]) -> tuple[str, ...]:
+    if set(FMCSA_CONFLICT_COLUMNS).issubset(available_columns):
+        return FMCSA_CONFLICT_COLUMNS
+    if set(FMCSA_LEGACY_CONFLICT_COLUMNS).issubset(available_columns):
+        return FMCSA_LEGACY_CONFLICT_COLUMNS
+    raise ValueError(
+        "FMCSA bulk upsert could not determine a valid conflict target for the live table schema"
+    )
+
+
 def _collect_insert_columns(rows: list[dict[str, Any]]) -> list[str]:
     columns: list[str] = []
     seen: set[str] = set()
@@ -216,17 +245,20 @@ def _normalize_postgres_rows(
     return normalized_rows
 
 
-def _build_fmcsa_bulk_upsert_sql(*, table_name: str, columns: list[str]) -> str:
+def _build_fmcsa_bulk_upsert_sql(
+    *,
+    table_name: str,
+    columns: list[str],
+    conflict_columns: tuple[str, ...],
+) -> str:
     quoted_columns = ", ".join(_quote_identifier(column_name) for column_name in columns)
     placeholders = ", ".join(f"%({column_name})s" for column_name in columns)
-    quoted_conflict_columns = ", ".join(
-        _quote_identifier(column_name) for column_name in FMCSA_CONFLICT_COLUMNS
-    )
+    quoted_conflict_columns = ", ".join(_quote_identifier(column_name) for column_name in conflict_columns)
 
     update_assignments = [
         f'{_quote_identifier(column_name)} = EXCLUDED.{_quote_identifier(column_name)}'
         for column_name in columns
-        if column_name not in FMCSA_CONFLICT_COLUMNS
+        if column_name not in conflict_columns
         and column_name not in FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS
     ]
     if not update_assignments:
@@ -249,6 +281,7 @@ def upsert_fmcsa_daily_diff_rows(
 ) -> dict[str, Any]:
     now = utc_now_iso()
     source_observed_at = source_context["source_observed_at"]
+    live_table_columns = set(_get_table_columns(table_name))
     upsert_rows: list[dict[str, Any]] = []
     for row in rows:
         typed_row = row_builder(row)
@@ -271,14 +304,22 @@ def upsert_fmcsa_daily_diff_rows(
             },
             "updated_at": now,
         }
-        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES:
+        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
+            not live_table_columns or "record_fingerprint" in live_table_columns
+        ):
             insert_row["record_fingerprint"] = _build_record_fingerprint(
                 table_name=table_name,
                 feed_date=source_context["feed_date"],
                 feed_name=source_context["feed_name"],
                 row_position=row["row_number"],
             )
+        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
+            not live_table_columns or "first_observed_at" in live_table_columns
+        ):
             insert_row["first_observed_at"] = source_observed_at
+        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
+            not live_table_columns or "last_observed_at" in live_table_columns
+        ):
             insert_row["last_observed_at"] = source_observed_at
         upsert_rows.append(insert_row)
 
@@ -291,9 +332,27 @@ def upsert_fmcsa_daily_diff_rows(
             "rows_written": 0,
         }
 
+    if live_table_columns:
+        upsert_rows = [
+            {
+                column_name: row_value
+                for column_name, row_value in row.items()
+                if column_name in live_table_columns
+            }
+            for row in upsert_rows
+        ]
     columns = _collect_insert_columns(upsert_rows)
+    conflict_columns = (
+        _get_conflict_columns(available_columns=set(columns))
+        if live_table_columns
+        else FMCSA_CONFLICT_COLUMNS
+    )
     postgres_rows = _normalize_postgres_rows(rows=upsert_rows, columns=columns)
-    upsert_sql = _build_fmcsa_bulk_upsert_sql(table_name=table_name, columns=columns)
+    upsert_sql = _build_fmcsa_bulk_upsert_sql(
+        table_name=table_name,
+        columns=columns,
+        conflict_columns=conflict_columns,
+    )
 
     with get_fmcsa_direct_postgres_connection() as connection:
         with connection.cursor() as cursor:
