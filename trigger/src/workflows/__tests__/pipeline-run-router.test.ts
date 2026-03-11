@@ -79,6 +79,7 @@ function createDispatchers(calls: DispatchCall[]): PipelineRunRouterDispatchers 
 
   return {
     tamBuilding: createDispatcher("tamBuilding"),
+    jobPostingDiscovery: createDispatcher("jobPostingDiscovery"),
     companyEnrichment: createDispatcher("companyEnrichment"),
     personSearchEnrichment: createDispatcher("personSearchEnrichment"),
     icpJobTitlesDiscovery: createDispatcher("icpJobTitlesDiscovery"),

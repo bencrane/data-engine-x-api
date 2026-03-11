@@ -80,6 +80,7 @@ function createDispatchers(calls: DispatchCall[]): PipelineRunRouterDispatchers 
 
   return {
     tamBuilding: createDispatcher("tamBuilding"),
+    jobPostingDiscovery: createDispatcher("jobPostingDiscovery"),
     companyEnrichment: createDispatcher("companyEnrichment"),
     personSearchEnrichment: createDispatcher("personSearchEnrichment"),
     icpJobTitlesDiscovery: createDispatcher("icpJobTitlesDiscovery"),
@@ -216,6 +217,78 @@ test("pipeline router routes TAM building and maps orchestration config into pay
   assert.deepEqual((dispatchCalls[0]?.payload as { step_results: unknown }).step_results, [
     { step_result_id: "step-4", step_position: 1 },
   ]);
+});
+
+test("pipeline router routes job posting discovery and merges step config into the search context", async () => {
+  const requests: CapturedRequest[] = [];
+  const dispatchCalls: DispatchCall[] = [];
+  const run = createBaseRun({
+    blueprint_snapshot: {
+      entity: {
+        entity_type: "job",
+        input: {
+          posted_at_max_age_days: 7,
+          job_title_or: ["sales engineer"],
+          company_name_or: ["Acme"],
+        },
+      },
+      steps: [
+        {
+          position: 2,
+          operation_id: "job.search",
+          step_config: {
+            search_page_size: 100,
+            company_batch_size: 12,
+            poll_interval_ms: 750,
+            per_person_concurrency: 3,
+            discovered_at_gte: "2026-03-01T00:00:00Z",
+            job_id_not: [111, 222],
+          },
+        },
+      ],
+    },
+    step_results: [{ id: "step-2", step_position: 2, status: "queued" }],
+  });
+
+  const result = await runPipelineRouter(baseRouterPayload(), {
+    client: createClient(run, requests),
+    dispatchers: createDispatchers(dispatchCalls),
+  });
+
+  assert.equal(result.route_key, "job-posting-discovery");
+  assert.equal(dispatchCalls[0]?.route, "jobPostingDiscovery");
+  assert.equal(
+    (dispatchCalls[0]?.payload as { search_page_size: number }).search_page_size,
+    100,
+  );
+  assert.equal(
+    (dispatchCalls[0]?.payload as { company_batch_size: number }).company_batch_size,
+    12,
+  );
+  assert.equal(
+    (dispatchCalls[0]?.payload as { poll_interval_ms: number }).poll_interval_ms,
+    750,
+  );
+  assert.equal(
+    (dispatchCalls[0]?.payload as { per_person_concurrency: number }).per_person_concurrency,
+    3,
+  );
+  assert.equal(
+    ((dispatchCalls[0]?.payload as { initial_context: Record<string, unknown> }).initial_context ?? {})
+      .posted_at_max_age_days,
+    7,
+  );
+  assert.deepEqual(
+    ((dispatchCalls[0]?.payload as { initial_context: Record<string, unknown> }).initial_context ?? {})
+      .job_title_or,
+    ["sales engineer"],
+  );
+  assert.deepEqual(
+    ((dispatchCalls[0]?.payload as { initial_context: Record<string, unknown> }).initial_context ?? {})
+      .job_id_not,
+    [111, 222],
+  );
+  assert.equal(requests[1]?.body?.trigger_run_id, "jobPostingDiscovery-trigger-run");
 });
 
 test("pipeline router routes ICP job titles discovery", async () => {
