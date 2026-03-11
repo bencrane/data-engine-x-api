@@ -5,6 +5,7 @@ import { normalizeCompanyDomain, WorkflowContext } from "./context.js";
 import type { CompanyIntelBriefingWorkflowPayload } from "./company-intel-briefing.js";
 import { createInternalApiClient, InternalApiClient } from "./internal-api.js";
 import type { IcpJobTitlesDiscoveryWorkflowPayload } from "./icp-job-titles-discovery.js";
+import type { JobPostingDiscoveryWorkflowPayload } from "./job-posting-discovery.js";
 import type { PersonIntelBriefingWorkflowPayload } from "./person-intel-briefing.js";
 import type { PersonSearchEnrichmentWorkflowPayload } from "./person-search-enrichment.js";
 import type { TamBuildingWorkflowPayload } from "./tam-building.js";
@@ -20,6 +21,7 @@ export interface PipelineRunRouterPayload {
 
 type SupportedRouteKey =
   | "tam-building"
+  | "job-posting-discovery"
   | "company-enrichment"
   | "person-search-enrichment"
   | "icp-job-titles-discovery"
@@ -80,6 +82,7 @@ type TriggerDispatcher<TPayload> = (
 
 export interface PipelineRunRouterDispatchers {
   tamBuilding: TriggerDispatcher<TamBuildingWorkflowPayload>;
+  jobPostingDiscovery: TriggerDispatcher<JobPostingDiscoveryWorkflowPayload>;
   companyEnrichment: TriggerDispatcher<CompanyEnrichmentWorkflowPayload>;
   personSearchEnrichment: TriggerDispatcher<PersonSearchEnrichmentWorkflowPayload>;
   icpJobTitlesDiscovery: TriggerDispatcher<IcpJobTitlesDiscoveryWorkflowPayload>;
@@ -104,6 +107,7 @@ export interface PipelineRunRouterResult {
 
 type RoutePayload =
   | TamBuildingWorkflowPayload
+  | JobPostingDiscoveryWorkflowPayload
   | CompanyEnrichmentWorkflowPayload
   | PersonSearchEnrichmentWorkflowPayload
   | IcpJobTitlesDiscoveryWorkflowPayload
@@ -382,6 +386,29 @@ const ROUTES: RouteCandidate[] = [
       person_max_people: getNumberConfig(steps[0]?.step_config, ["person_max_people"]),
       per_person_concurrency: getNumberConfig(steps[0]?.step_config, ["per_person_concurrency"]),
       include_work_history: getBooleanConfig(steps[0]?.step_config, ["include_work_history"]),
+      api_url: routerPayload.api_url,
+      internal_api_key: routerPayload.internal_api_key,
+    }),
+  },
+  {
+    routeKey: "job-posting-discovery",
+    taskId: "job-posting-discovery",
+    operationIds: ["job.search"],
+    isSupportedShape: (steps) => steps.every((step) => step.fan_out !== true && conditionIsEmpty(step.condition)),
+    buildPayload: ({ routerPayload, run, context, steps, stepResults }) => ({
+      pipeline_run_id: routerPayload.pipeline_run_id,
+      org_id: routerPayload.org_id,
+      company_id: routerPayload.company_id,
+      submission_id: run.submission_id,
+      step_results: stepResults,
+      initial_context: {
+        ...(isRecord(steps[0]?.step_config) ? (steps[0]?.step_config as WorkflowContext) : {}),
+        ...context,
+      },
+      search_page_size: getNumberConfig(steps[0]?.step_config, ["search_page_size", "limit"]),
+      company_batch_size: getNumberConfig(steps[0]?.step_config, ["company_batch_size"]),
+      poll_interval_ms: getNumberConfig(steps[0]?.step_config, ["poll_interval_ms"]),
+      per_person_concurrency: getNumberConfig(steps[0]?.step_config, ["per_person_concurrency"]),
       api_url: routerPayload.api_url,
       internal_api_key: routerPayload.internal_api_key,
     }),
@@ -727,6 +754,7 @@ export async function runPipelineRouter(
 
   const dispatcher = {
     "tam-building": dependencies.dispatchers.tamBuilding,
+    "job-posting-discovery": dependencies.dispatchers.jobPostingDiscovery,
     "company-enrichment": dependencies.dispatchers.companyEnrichment,
     "person-search-enrichment": dependencies.dispatchers.personSearchEnrichment,
     "icp-job-titles-discovery": dependencies.dispatchers.icpJobTitlesDiscovery,
