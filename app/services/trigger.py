@@ -14,10 +14,10 @@ async def trigger_pipeline_run(
     company_id: str,
 ) -> str:
     """
-    Trigger the run-pipeline task in Trigger.dev and return Trigger run ID.
+    Trigger the pipeline-run-router task in Trigger.dev and return Trigger run ID.
     """
     settings = get_settings()
-    task_id = "run-pipeline"
+    task_id = "pipeline-run-router"
     if not settings.api_url:
         raise RuntimeError("DATA_ENGINE_API_URL must be configured")
 
