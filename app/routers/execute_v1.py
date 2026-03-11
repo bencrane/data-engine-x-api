@@ -23,6 +23,12 @@ from app.services.company_operations import (
     execute_company_enrich_profile_blitzapi,
     execute_company_enrich_technographics,
 )
+from app.services.fmcsa_socrata_operations import (
+    execute_company_enrich_fmcsa_carrier_all_history,
+    execute_company_enrich_fmcsa_company_census,
+    execute_company_enrich_fmcsa_insur_all_history,
+    execute_company_enrich_fmcsa_revocation_all_history,
+)
 from app.services.person_enrich_operations import execute_person_enrich_profile
 from app.services.search_operations import (
     execute_company_search,
@@ -139,6 +145,10 @@ SUPPORTED_OPERATION_IDS = {
     "company.enrich.profile",
     "company.enrich.profile_blitzapi",
     "company.enrich.fmcsa",
+    "company.enrich.fmcsa.company_census",
+    "company.enrich.fmcsa.carrier_all_history",
+    "company.enrich.fmcsa.revocation_all_history",
+    "company.enrich.fmcsa.insur_all_history",
     "company.enrich.card_revenue",
     "company.enrich.locations",
     "company.enrich.ecommerce",
@@ -519,6 +529,50 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.fmcsa":
         result = await execute_company_enrich_fmcsa(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.fmcsa.company_census":
+        result = await execute_company_enrich_fmcsa_company_census(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.fmcsa.carrier_all_history":
+        result = await execute_company_enrich_fmcsa_carrier_all_history(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.fmcsa.revocation_all_history":
+        result = await execute_company_enrich_fmcsa_revocation_all_history(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.fmcsa.insur_all_history":
+        result = await execute_company_enrich_fmcsa_insur_all_history(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
