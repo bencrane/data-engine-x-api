@@ -5,7 +5,6 @@ from typing import Any
 from app.services.fmcsa_daily_diff_common import (
     FmcsaDailyDiffRow,
     FmcsaSourceContext,
-    build_record_fingerprint,
     clean_text,
     parse_mmddyyyy_date,
     upsert_fmcsa_daily_diff_rows,
@@ -33,17 +32,6 @@ def _build_history_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
     final_authority_served_date = parse_mmddyyyy_date(fields.get("Final Authority Served Date"))
 
     return {
-        "record_fingerprint": build_record_fingerprint(
-            docket_number=docket_number,
-            usdot_number=usdot_number,
-            sub_number=sub_number,
-            operating_authority_type=operating_authority_type,
-            original_authority_action_description=original_authority_action_description,
-            original_authority_action_served_date=original_authority_action_served_date,
-            final_authority_action_description=final_authority_action_description,
-            final_authority_decision_date=final_authority_decision_date,
-            final_authority_served_date=final_authority_served_date,
-        ),
         "docket_number": docket_number,
         "usdot_number": usdot_number,
         "sub_number": sub_number,

@@ -5,7 +5,6 @@ from typing import Any
 from app.services.fmcsa_daily_diff_common import (
     FmcsaDailyDiffRow,
     FmcsaSourceContext,
-    build_record_fingerprint,
     clean_text,
     is_blank_or_zero,
     parse_int,
@@ -53,18 +52,6 @@ def _build_insurance_policy_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
     insurance_company_name = clean_text(fields.get("Insurance Company Name"))
 
     return {
-        "record_fingerprint": build_record_fingerprint(
-            docket_number=docket_number,
-            insurance_type_code=insurance_type_code,
-            bipd_class_code=bipd_class_code,
-            bipd_maximum_dollar_limit_thousands_usd=bipd_maximum_dollar_limit_thousands_usd,
-            bipd_underlying_dollar_limit_thousands_usd=bipd_underlying_dollar_limit_thousands_usd,
-            policy_number=policy_number,
-            effective_date=effective_date,
-            form_code=form_code,
-            insurance_company_name=insurance_company_name,
-            is_removal_signal=is_removal_signal,
-        ),
         "docket_number": docket_number,
         "insurance_type_code": insurance_type_code,
         "insurance_type_description": INSURANCE_TYPE_DESCRIPTIONS.get(insurance_type_code or ""),

@@ -5,7 +5,6 @@ from typing import Any
 from app.services.fmcsa_daily_diff_common import (
     FmcsaDailyDiffRow,
     FmcsaSourceContext,
-    build_record_fingerprint,
     clean_text,
     parse_mmddyyyy_date,
     upsert_fmcsa_daily_diff_rows,
@@ -26,14 +25,6 @@ def _build_revocation_row(row: FmcsaDailyDiffRow) -> dict[str, Any]:
     effective_date = parse_mmddyyyy_date(fields.get("Effective Date"))
 
     return {
-        "record_fingerprint": build_record_fingerprint(
-            docket_number=docket_number,
-            usdot_number=usdot_number,
-            operating_authority_registration_type=operating_authority_registration_type,
-            serve_date=serve_date,
-            revocation_type=revocation_type,
-            effective_date=effective_date,
-        ),
         "docket_number": docket_number,
         "usdot_number": usdot_number,
         "operating_authority_registration_type": operating_authority_registration_type,

@@ -5,7 +5,6 @@ from typing import Any
 from app.services.fmcsa_daily_diff_common import (
     FmcsaDailyDiffRow,
     FmcsaSourceContext,
-    build_record_fingerprint,
     clean_text,
     parse_int,
     parse_mmddyyyy_date,
@@ -30,19 +29,6 @@ def _build_insurance_policy_filing_row(row: FmcsaDailyDiffRow) -> dict[str, Any]
     cancel_effective_date = parse_mmddyyyy_date(fields.get("Cancel Effective Date"))
 
     return {
-        "record_fingerprint": build_record_fingerprint(
-            docket_number=docket_number,
-            usdot_number=usdot_number,
-            form_code=form_code,
-            insurance_type_description=insurance_type_description,
-            insurance_company_name=insurance_company_name,
-            policy_number=policy_number,
-            posted_date=posted_date,
-            bipd_underlying_limit_thousands_usd=bipd_underlying_limit_thousands_usd,
-            bipd_maximum_limit_thousands_usd=bipd_maximum_limit_thousands_usd,
-            effective_date=effective_date,
-            cancel_effective_date=cancel_effective_date,
-        ),
         "docket_number": docket_number,
         "usdot_number": usdot_number,
         "form_code": form_code,
