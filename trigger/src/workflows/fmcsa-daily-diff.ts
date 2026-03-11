@@ -17,9 +17,16 @@ type FmcsaFeedName =
   | "BOC3 - All With History"
   | "ActPendInsur - All With History"
   | "Rejected - All With History"
-  | "AuthHist - All With History";
+  | "AuthHist - All With History"
+  | "SMS AB PassProperty"
+  | "SMS C PassProperty"
+  | "SMS Input - Violation"
+  | "SMS Input - Inspection"
+  | "SMS Input - Motor Carrier Census"
+  | "SMS AB Pass"
+  | "SMS C Pass";
 
-export type FmcsaSourceFileVariant = "daily diff" | "daily" | "all_with_history";
+export type FmcsaSourceFileVariant = "daily diff" | "daily" | "all_with_history" | "csv_export";
 
 export interface FmcsaScheduledPayload {
   timestamp?: Date | string;
@@ -44,6 +51,8 @@ export interface FmcsaDailyDiffFeedConfig {
   sourceFileVariant: FmcsaSourceFileVariant;
   sourceFields: readonly string[];
   expectedFieldCount: number;
+  headerRow?: readonly string[];
+  expectedContentTypes?: readonly string[];
 }
 
 export interface FmcsaDailyDiffWorkflowPayload {
@@ -166,6 +175,9 @@ function parseDailyDiffBody(
   if (rawBody.trim().length === 0) {
     throw new Error(`${feed.feedName} download returned an empty body`);
   }
+  if (rawBody.trimStart().toLowerCase().startsWith("<!doctype html") || rawBody.includes("<html")) {
+    throw new Error(`${feed.feedName} download returned HTML instead of CSV data`);
+  }
 
   let parsedRecords: unknown;
   try {
@@ -186,10 +198,38 @@ function parseDailyDiffBody(
     throw new Error(`${feed.feedName} download contained no parseable rows`);
   }
 
+  let dataRecords = parsedRecords;
+  if (feed.headerRow) {
+    const headerRow = ensureStringArray(
+      parsedRecords[0],
+      `${feed.feedName} header row is not a CSV value array`,
+    );
+
+    if (headerRow.length !== feed.headerRow.length) {
+      throw new Error(
+        `${feed.feedName} header row width validation failed: expected ${feed.headerRow.length} columns but received ${headerRow.length}`,
+      );
+    }
+
+    const mismatchedHeaderIndex = feed.headerRow.findIndex(
+      (expectedHeader, index) => headerRow[index] !== expectedHeader,
+    );
+    if (mismatchedHeaderIndex >= 0) {
+      throw new Error(
+        `${feed.feedName} header validation failed at column ${mismatchedHeaderIndex + 1}: expected "${feed.headerRow[mismatchedHeaderIndex]}" but received "${headerRow[mismatchedHeaderIndex]}"`,
+      );
+    }
+
+    dataRecords = parsedRecords.slice(1);
+    if (dataRecords.length === 0) {
+      throw new Error(`${feed.feedName} download contained a header row but no data rows`);
+    }
+  }
+
   const rejectedRows: Array<{ rowNumber: number; width: number }> = [];
   const normalizedRows: FmcsaDailyDiffRow[] = [];
 
-  parsedRecords.forEach((record, index) => {
+  dataRecords.forEach((record, index) => {
     const rowNumber = index + 1;
     const values = ensureStringArray(record, `${feed.feedName} row ${rowNumber} is not a CSV value array`);
 
@@ -221,8 +261,8 @@ function parseDailyDiffBody(
   }
 
   return {
-    rowsDownloaded: parsedRecords.length,
-    rowsParsed: parsedRecords.length,
+    rowsDownloaded: dataRecords.length,
+    rowsParsed: dataRecords.length,
     rowsAccepted: normalizedRows.length,
     rowsRejected: rejectedRows.length,
     rows: normalizedRows,
@@ -247,6 +287,16 @@ async function downloadDailyDiffText(
 
   if (!response.ok) {
     throw new Error(`${feed.feedName} download failed with HTTP ${response.status}`);
+  }
+
+  const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? "";
+  if (feed.expectedContentTypes && !feed.expectedContentTypes.some((value) => contentType.includes(value))) {
+    throw new Error(
+      `${feed.feedName} download returned unexpected content type "${response.headers.get("Content-Type") ?? "unknown"}"`,
+    );
+  }
+  if (contentType.includes("text/html")) {
+    throw new Error(`${feed.feedName} download returned HTML instead of CSV data`);
   }
 
   return response.text();
@@ -618,6 +668,282 @@ export const FMCSA_NEXT_BATCH_SNAPSHOT_HISTORY_FEEDS = [
   FMCSA_REJECTED_ALL_HISTORY_FEED,
   FMCSA_AUTHHIST_ALL_HISTORY_FEED,
 ] as const;
+
+const SMS_PASSPROPERTY_SOURCE_FIELDS = [
+  "DOT_NUMBER",
+  "INSP_TOTAL",
+  "DRIVER_INSP_TOTAL",
+  "DRIVER_OOS_INSP_TOTAL",
+  "VEHICLE_INSP_TOTAL",
+  "VEHICLE_OOS_INSP_TOTAL",
+  "UNSAFE_DRIV_INSP_W_VIOL",
+  "UNSAFE_DRIV_MEASURE",
+  "UNSAFE_DRIV_AC",
+  "HOS_DRIV_INSP_W_VIOL",
+  "HOS_DRIV_MEASURE",
+  "HOS_DRIV_AC",
+  "DRIV_FIT_INSP_W_VIOL",
+  "DRIV_FIT_MEASURE",
+  "DRIV_FIT_AC",
+  "CONTR_SUBST_INSP_W_VIOL",
+  "CONTR_SUBST_MEASURE",
+  "CONTR_SUBST_AC",
+  "VEH_MAINT_INSP_W_VIOL",
+  "VEH_MAINT_MEASURE",
+  "VEH_MAINT_AC",
+] as const;
+
+const SMS_PASS_SOURCE_FIELDS = [
+  "DOT_NUMBER",
+  "INSP_TOTAL",
+  "DRIVER_INSP_TOTAL",
+  "DRIVER_OOS_INSP_TOTAL",
+  "VEHICLE_INSP_TOTAL",
+  "VEHICLE_OOS_INSP_TOTAL",
+  "UNSAFE_DRIV_INSP_W_VIOL",
+  "UNSAFE_DRIV_MEASURE",
+  "UNSAFE_DRIV_PCT",
+  "UNSAFE_DRIV_RD_ALERT",
+  "UNSAFE_DRIV_AC",
+  "UNSAFE_DRIV_BASIC_ALERT",
+  "HOS_DRIV_INSP_W_VIOL",
+  "HOS_DRIV_MEASURE",
+  "HOS_DRIV_PCT",
+  "HOS_DRIV_RD_ALERT",
+  "HOS_DRIV_AC",
+  "HOS_DRIV_BASIC_ALERT",
+  "DRIV_FIT_INSP_W_VIOL",
+  "DRIV_FIT_MEASURE",
+  "DRIV_FIT_PCT",
+  "DRIV_FIT_RD_ALERT",
+  "DRIV_FIT_AC",
+  "DRIV_FIT_BASIC_ALERT",
+  "CONTR_SUBST_INSP_W_VIOL",
+  "CONTR_SUBST_MEASURE",
+  "CONTR_SUBST_PCT",
+  "CONTR_SUBST_RD_ALERT",
+  "CONTR_SUBST_AC",
+  "CONTR_SUBST_BASIC_ALERT",
+  "VEH_MAINT_INSP_W_VIOL",
+  "VEH_MAINT_MEASURE",
+  "VEH_MAINT_PCT",
+  "VEH_MAINT_RD_ALERT",
+  "VEH_MAINT_AC",
+  "VEH_MAINT_BASIC_ALERT",
+] as const;
+
+const SMS_INPUT_VIOLATION_SOURCE_FIELDS = [
+  "Unique_ID",
+  "Insp_Date",
+  "DOT_Number",
+  "Viol_Code",
+  "BASIC_Desc",
+  "OOS_Indicator",
+  "OOS_Weight",
+  "Severity_Weight",
+  "Time_Weight",
+  "Total_Severity_Wght",
+  "Section_Desc",
+  "Group_Desc",
+  "Viol_Unit",
+] as const;
+
+const SMS_INPUT_INSPECTION_SOURCE_FIELDS = [
+  "Unique_ID",
+  "Report_Number",
+  "Report_State",
+  "DOT_Number",
+  "Insp_Date",
+  "Insp_level_ID",
+  "County_code_State",
+  "Time_Weight",
+  "Driver_OOS_Total",
+  "Vehicle_OOS_Total",
+  "Total_Hazmat_Sent",
+  "OOS_Total",
+  "Hazmat_OOS_Total",
+  "Hazmat_Placard_req",
+  "Unit_Type_Desc",
+  "Unit_Make",
+  "Unit_License",
+  "Unit_License_State",
+  "VIN",
+  "Unit_Decal_Number",
+  "Unit_Type_Desc2",
+  "Unit_Make2",
+  "Unit_License2",
+  "Unit_License_State2",
+  "VIN2",
+  "Unit_Decal_Number2",
+  "Unsafe_Insp",
+  "Fatigued_Insp",
+  "Dr_Fitness_Insp",
+  "Subt_Alcohol_Insp",
+  "Vh_Maint_Insp",
+  "HM_Insp",
+  "BASIC_Viol",
+  "Unsafe_Viol",
+  "Fatigued_Viol",
+  "Dr_Fitness_Viol",
+  "Subt_Alcohol_Viol",
+  "Vh_Maint_Viol",
+  "HM_Viol",
+] as const;
+
+const SMS_MOTOR_CARRIER_CENSUS_SOURCE_FIELDS = [
+  "DOT_NUMBER",
+  "LEGAL_NAME",
+  "DBA_NAME",
+  "CARRIER_OPERATION",
+  "HM_FLAG",
+  "PC_FLAG",
+  "PHY_STREET",
+  "PHY_CITY",
+  "PHY_STATE",
+  "PHY_ZIP",
+  "PHY_COUNTRY",
+  "MAILING_STREET",
+  "MAILING_CITY",
+  "MAILING_STATE",
+  "MAILING_ZIP",
+  "MAILING_COUNTRY",
+  "TELEPHONE",
+  "FAX",
+  "EMAIL_ADDRESS",
+  "MCS150_DATE",
+  "MCS150_MILEAGE",
+  "MCS150_MILEAGE_YEAR",
+  "ADD_DATE",
+  "OIC_STATE",
+  "NBR_POWER_UNIT",
+  "DRIVER_TOTAL",
+  "RECENT_MILEAGE",
+  "RECENT_MILEAGE_YEAR",
+  "VMT_SOURCE_ID",
+  "PRIVATE_ONLY",
+  "AUTHORIZED_FOR_HIRE",
+  "EXEMPT_FOR_HIRE",
+  "PRIVATE_PROPERTY",
+  "PRIVATE_PASSENGER_BUSINESS",
+  "PRIVATE_PASSENGER_NONBUSINESS",
+  "MIGRANT",
+  "US_MAIL",
+  "FEDERAL_GOVERNMENT",
+  "STATE_GOVERNMENT",
+  "LOCAL_GOVERNMENT",
+  "INDIAN_TRIBE",
+  "OP_OTHER",
+] as const;
+
+export const FMCSA_SMS_AB_PASSPROPERTY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS AB PassProperty",
+  downloadUrl: "https://data.transportation.gov/api/views/4y6x-dmck/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-ab-passproperty-daily",
+  internalUpsertPath: "/api/internal/carrier-safety-basic-measures/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_PASSPROPERTY_SOURCE_FIELDS,
+  expectedFieldCount: SMS_PASSPROPERTY_SOURCE_FIELDS.length,
+  headerRow: SMS_PASSPROPERTY_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_C_PASSPROPERTY_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS C PassProperty",
+  downloadUrl: "https://data.transportation.gov/api/views/h9zy-gjn8/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-c-passproperty-daily",
+  internalUpsertPath: "/api/internal/carrier-safety-basic-measures/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_PASSPROPERTY_SOURCE_FIELDS,
+  expectedFieldCount: SMS_PASSPROPERTY_SOURCE_FIELDS.length,
+  headerRow: SMS_PASSPROPERTY_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_INPUT_VIOLATION_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS Input - Violation",
+  downloadUrl: "https://data.transportation.gov/api/views/8mt8-2mdr/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-input-violation-daily",
+  internalUpsertPath: "/api/internal/carrier-inspection-violations/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_INPUT_VIOLATION_SOURCE_FIELDS,
+  expectedFieldCount: SMS_INPUT_VIOLATION_SOURCE_FIELDS.length,
+  headerRow: SMS_INPUT_VIOLATION_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_INPUT_INSPECTION_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS Input - Inspection",
+  downloadUrl: "https://data.transportation.gov/api/views/rbkj-cgst/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-input-inspection-daily",
+  internalUpsertPath: "/api/internal/carrier-inspections/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_INPUT_INSPECTION_SOURCE_FIELDS,
+  expectedFieldCount: SMS_INPUT_INSPECTION_SOURCE_FIELDS.length,
+  headerRow: SMS_INPUT_INSPECTION_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS Input - Motor Carrier Census",
+  downloadUrl: "https://data.transportation.gov/api/views/kjg3-diqy/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-motor-carrier-census-daily",
+  internalUpsertPath: "/api/internal/motor-carrier-census-records/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_MOTOR_CARRIER_CENSUS_SOURCE_FIELDS,
+  expectedFieldCount: SMS_MOTOR_CARRIER_CENSUS_SOURCE_FIELDS.length,
+  headerRow: SMS_MOTOR_CARRIER_CENSUS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_AB_PASS_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS AB Pass",
+  downloadUrl: "https://data.transportation.gov/api/views/m3ry-qcip/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-ab-pass-daily",
+  internalUpsertPath: "/api/internal/carrier-safety-basic-percentiles/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_PASS_SOURCE_FIELDS,
+  expectedFieldCount: SMS_PASS_SOURCE_FIELDS.length,
+  headerRow: SMS_PASS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_C_PASS_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "SMS C Pass",
+  downloadUrl: "https://data.transportation.gov/api/views/h3zn-uid9/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-sms-c-pass-daily",
+  internalUpsertPath: "/api/internal/carrier-safety-basic-percentiles/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: SMS_PASS_SOURCE_FIELDS,
+  expectedFieldCount: SMS_PASS_SOURCE_FIELDS.length,
+  headerRow: SMS_PASS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SMS_FEEDS = [
+  FMCSA_SMS_AB_PASSPROPERTY_FEED,
+  FMCSA_SMS_C_PASSPROPERTY_FEED,
+  FMCSA_SMS_INPUT_VIOLATION_FEED,
+  FMCSA_SMS_INPUT_INSPECTION_FEED,
+  FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED,
+  FMCSA_SMS_AB_PASS_FEED,
+  FMCSA_SMS_C_PASS_FEED,
+] as const;
+
+export const FMCSA_SMS_SKIPPED_FEEDS = [
+  {
+    feedName: "SMS Input - Crash",
+    candidateDatasetId: "gwak-5bwn",
+    candidateDownloadUrl: "https://data.transportation.gov/download/gwak-5bwn/text%2Fplain",
+    reason: "skipped_by_user_after_ambiguous_dataset_verification",
+  },
+] as const;
+
+export const FMCSA_SMS_FEED_CORRECTIONS = {
+  smsCPass: {
+    originalCandidateDatasetId: "h9zy-gjn8",
+    correctedDatasetId: "h3zn-uid9",
+  },
+} as const;
 
 export const __testables = {
   parseDailyDiffBody,
