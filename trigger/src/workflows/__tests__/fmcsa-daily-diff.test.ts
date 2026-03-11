@@ -28,8 +28,11 @@ import {
   FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED,
   FMCSA_SMS_SKIPPED_FEEDS,
   FMCSA_AUTHHIST_ALL_HISTORY_FEED,
+  FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED,
+  FMCSA_BOC3_ALL_HISTORY_FEED,
   FMCSA_BOC3_DAILY_FEED,
   FMCSA_CARRIER_DAILY_FEED,
+  FMCSA_INSHIST_ALL_HISTORY_FEED,
   FMCSA_NEXT_BATCH_SNAPSHOT_HISTORY_FEEDS,
   FMCSA_REJECTED_ALL_HISTORY_FEED,
   FMCSA_REJECTED_DAILY_FEED,
@@ -59,6 +62,34 @@ function createDownloadFetch(
       status: response.status ?? 200,
       headers: { "Content-Type": response.contentType ?? "text/plain; charset=utf-8" },
     });
+  }) as typeof fetch;
+}
+
+function createStreamingOnlyDownloadFetch(response: {
+  status?: number;
+  text: string;
+  contentType?: string;
+}): typeof fetch {
+  return (async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(response.text));
+        controller.close();
+      },
+    });
+
+    return {
+      ok: (response.status ?? 200) >= 200 && (response.status ?? 200) < 300,
+      status: response.status ?? 200,
+      headers: new Headers({
+        "Content-Type": response.contentType ?? "text/plain; charset=utf-8",
+      }),
+      body: stream,
+      text: async () => {
+        throw new Error("response.text() should not be called for streamed FMCSA feeds");
+      },
+    } as unknown as Response;
   }) as typeof fetch;
 }
 
@@ -289,6 +320,147 @@ test("shared-table variants remain distinct by source feed metadata", async () =
   assert.equal(request?.body?.source_file_variant, "all_with_history");
 });
 
+test("plain-text all-history feeds stream from response.body instead of response.text", async () => {
+  const feeds = [
+    FMCSA_AUTHHIST_ALL_HISTORY_FEED,
+    FMCSA_BOC3_ALL_HISTORY_FEED,
+    FMCSA_INSHIST_ALL_HISTORY_FEED,
+    FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED,
+  ];
+
+  for (const feed of feeds) {
+    const internalRequests: Array<{ path: string; body: Record<string, unknown> | null }> = [];
+    const client = createInternalApiClient({
+      authContext: { orgId: "system" },
+      apiUrl: "https://example.com",
+      internalApiKey: "secret",
+      fetchImpl: createInternalFetch({
+        requests: internalRequests,
+        responses: [
+          {
+            body: {
+              data: {
+                feed_name: feed.feedName,
+                feed_date: "2026-03-10",
+                rows_received: 1,
+                rows_written: 1,
+              },
+            },
+          },
+        ],
+      }),
+    });
+
+    const row = new Array(feed.expectedFieldCount)
+      .fill("")
+      .map((_, index) => `"value-${index + 1}"`)
+      .join(",");
+
+    const result = await runFmcsaDailyDiffWorkflow(
+      {
+        feed,
+        schedule: {
+          timestamp: "2026-03-10T16:00:00.000Z",
+          scheduleId: `${feed.taskId}-schedule`,
+          timezone: "America/New_York",
+        },
+      },
+      {
+        client,
+        fetchImpl: createStreamingOnlyDownloadFetch({
+          text: row,
+        }),
+      },
+    );
+
+    assert.equal(result.feed_name, feed.feedName);
+    assert.equal(result.rows_downloaded, 1);
+    assert.equal(result.rows_written, 1);
+    assert.equal(internalRequests.length, 1);
+  }
+});
+
+test("plain-text all-history streaming parser batches writes for no-header rows", async () => {
+  const internalRequests: Array<{ path: string; body: Record<string, unknown> | null }> = [];
+  const client = createInternalApiClient({
+    authContext: { orgId: "system" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    fetchImpl: createInternalFetch({
+      requests: internalRequests,
+      responses: [
+        {
+          body: {
+            data: {
+              feed_name: "AuthHist - All With History",
+              feed_date: "2026-03-10",
+              rows_received: 2,
+              rows_written: 2,
+            },
+          },
+        },
+        {
+          body: {
+            data: {
+              feed_name: "AuthHist - All With History",
+              feed_date: "2026-03-10",
+              rows_received: 1,
+              rows_written: 1,
+            },
+          },
+        },
+      ],
+    }),
+  });
+
+  const makeRow = (label: string) =>
+    new Array(FMCSA_AUTHHIST_ALL_HISTORY_FEED.expectedFieldCount)
+      .fill("")
+      .map((_, index) => `"${label}-${index + 1}"`)
+      .join(",");
+
+  const result = await runFmcsaDailyDiffWorkflow(
+    {
+      feed: {
+        ...FMCSA_AUTHHIST_ALL_HISTORY_FEED,
+        writeBatchSize: 2,
+      },
+      schedule: {
+        timestamp: "2026-03-10T16:00:00.000Z",
+        scheduleId: "schedule-authhist-history-stream-batches",
+        timezone: "America/New_York",
+      },
+    },
+    {
+      client,
+      fetchImpl: createStreamingOnlyDownloadFetch({
+        text: [makeRow("row1"), makeRow("row2"), makeRow("row3")].join("\n"),
+      }),
+    },
+  );
+
+  assert.equal(result.rows_downloaded, 3);
+  assert.equal(result.rows_written, 3);
+  assert.equal(internalRequests.length, 2);
+  assert.equal(((internalRequests[0]?.body?.records as Array<unknown>) ?? []).length, 2);
+  assert.equal(((internalRequests[1]?.body?.records as Array<unknown>) ?? []).length, 1);
+});
+
+test("plain-text all-history streaming parser still validates malformed row widths", async () => {
+  await assert.rejects(
+    runFmcsaDailyDiffWorkflow(
+      { feed: FMCSA_BOC3_ALL_HISTORY_FEED },
+      {
+        client: createUnusedClient(),
+        fetchImpl: createStreamingOnlyDownloadFetch({
+          text: '"too","few","columns"',
+        }),
+      },
+    ),
+    /expected 9 columns/i,
+  );
+});
+
 test("remaining CSV export feed configs lock widths, timeout overrides, and batch sizes", () => {
   assert.deepEqual(
     FMCSA_REMAINING_CSV_EXPORT_FEEDS.map((feed) => ({
@@ -298,7 +470,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
       internalUpsertPath: feed.internalUpsertPath,
       downloadTimeoutMs: __testables.resolveDownloadTimeoutMs(feed),
       persistenceTimeoutMs: __testables.resolvePersistenceTimeoutMs(feed) ?? null,
-      writeBatchSize: feed.writeBatchSize ?? 1000,
+      writeBatchSize: feed.writeBatchSize ?? 500,
     })),
     [
       {
@@ -308,7 +480,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/commercial-vehicle-crashes/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 1000,
+        writeBatchSize: 500,
       },
       {
         feedName: "Carrier - All With History",
@@ -317,7 +489,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/carrier-registrations/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 1000,
+        writeBatchSize: 500,
       },
       {
         feedName: "Inspections Per Unit",
@@ -326,7 +498,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/vehicle-inspection-units/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 2500,
+        writeBatchSize: 1250,
       },
       {
         feedName: "Special Studies",
@@ -335,7 +507,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/vehicle-inspection-special-studies/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 5000,
+        writeBatchSize: 2500,
       },
       {
         feedName: "Revocation - All With History",
@@ -344,7 +516,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/operating-authority-revocations/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 5000,
+        writeBatchSize: 2500,
       },
       {
         feedName: "Insur - All With History",
@@ -353,7 +525,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/insurance-policies/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 2500,
+        writeBatchSize: 1250,
       },
       {
         feedName: "OUT OF SERVICE ORDERS",
@@ -362,7 +534,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/out-of-service-orders/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 5000,
+        writeBatchSize: 2500,
       },
       {
         feedName: "Inspections and Citations",
@@ -371,7 +543,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/vehicle-inspection-citations/upsert-batch",
         downloadTimeoutMs: 300_000,
         persistenceTimeoutMs: 120_000,
-        writeBatchSize: 1000,
+        writeBatchSize: 500,
       },
       {
         feedName: "Vehicle Inspections and Violations",
@@ -380,7 +552,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/carrier-inspection-violations/upsert-batch",
         downloadTimeoutMs: 300_000,
         persistenceTimeoutMs: 120_000,
-        writeBatchSize: 1000,
+        writeBatchSize: 500,
       },
       {
         feedName: "Company Census File",
@@ -389,7 +561,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/motor-carrier-census-records/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 250,
+        writeBatchSize: 125,
       },
       {
         feedName: "Vehicle Inspection File",
@@ -398,7 +570,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/carrier-inspections/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 500,
+        writeBatchSize: 250,
       },
     ],
   );
@@ -548,6 +720,61 @@ test("remaining CSV export workflow streams large files in multiple confirmed ba
     ((internalRequests[1]?.body?.records as Array<unknown>) ?? []).length,
     1,
   );
+});
+
+test("header-row CSV streaming feeds still avoid response.text()", async () => {
+  const internalRequests: Array<{ path: string; body: Record<string, unknown> | null }> = [];
+  const client = createInternalApiClient({
+    authContext: { orgId: "system" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    fetchImpl: createInternalFetch({
+      requests: internalRequests,
+      responses: [
+        {
+          body: {
+            data: {
+              feed_name: "Company Census File",
+              feed_date: "2026-03-10",
+              rows_received: 1,
+              rows_written: 1,
+            },
+          },
+        },
+      ],
+    }),
+  });
+
+  const header = FMCSA_COMPANY_CENSUS_FILE_FEED.headerRow?.join(",") ?? "";
+  const row = new Array(FMCSA_COMPANY_CENSUS_FILE_FEED.expectedFieldCount)
+    .fill("")
+    .map((_, index) => (index === 3 ? "123456" : `value-${index + 1}`))
+    .join(",");
+
+  const result = await runFmcsaDailyDiffWorkflow(
+    {
+      feed: {
+        ...FMCSA_COMPANY_CENSUS_FILE_FEED,
+        writeBatchSize: 1,
+      },
+      schedule: {
+        timestamp: "2026-03-10T16:00:00.000Z",
+        scheduleId: "schedule-company-census-streaming-only",
+        timezone: "America/New_York",
+      },
+    },
+    {
+      client,
+      fetchImpl: createStreamingOnlyDownloadFetch({
+        contentType: "text/csv; charset=utf-8",
+        text: [header, row].join("\n"),
+      }),
+    },
+  );
+
+  assert.equal(result.rows_downloaded, 1);
+  assert.equal(result.rows_written, 1);
+  assert.equal(internalRequests.length, 1);
 });
 
 test("streaming workflow honors a feed-specific persistence timeout override", async () => {

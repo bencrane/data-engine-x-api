@@ -143,6 +143,58 @@ test("FMCSA next-batch feed configs expose the expected feed-to-URL mapping", ()
   );
 });
 
+test("plain-text all-history feed configs are explicitly locked onto streaming ingest", () => {
+  assert.deepEqual(
+    [
+      FMCSA_INSHIST_ALL_HISTORY_FEED,
+      FMCSA_BOC3_ALL_HISTORY_FEED,
+      FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED,
+      FMCSA_AUTHHIST_ALL_HISTORY_FEED,
+    ].map((feed) => ({
+      feedName: feed.feedName,
+      taskId: feed.taskId,
+      useStreamingParser: feed.useStreamingParser ?? false,
+      writeBatchSize: feed.writeBatchSize ?? 500,
+      downloadTimeoutMs: feed.downloadTimeoutMs ?? null,
+      persistenceTimeoutMs: feed.persistenceTimeoutMs ?? null,
+    })),
+    [
+      {
+        feedName: "InsHist - All With History",
+        taskId: "fmcsa-inshist-all-history",
+        useStreamingParser: true,
+        writeBatchSize: 500,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+      },
+      {
+        feedName: "BOC3 - All With History",
+        taskId: "fmcsa-boc3-all-history",
+        useStreamingParser: true,
+        writeBatchSize: 500,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+      },
+      {
+        feedName: "ActPendInsur - All With History",
+        taskId: "fmcsa-actpendinsur-all-history",
+        useStreamingParser: true,
+        writeBatchSize: 500,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+      },
+      {
+        feedName: "AuthHist - All With History",
+        taskId: "fmcsa-authhist-all-history",
+        useStreamingParser: true,
+        writeBatchSize: 500,
+        downloadTimeoutMs: 3_300_000,
+        persistenceTimeoutMs: 300_000,
+      },
+    ],
+  );
+});
+
 test("FMCSA SMS feed configs expose the expected feed-to-URL mapping", () => {
   assert.equal(FMCSA_SMS_FEEDS.length, 7);
 
@@ -388,63 +440,63 @@ test("all FMCSA scheduled task files exist with staggered cron definitions", () 
       taskIdExpression: "id: FMCSA_CRASH_FILE_FEED.taskId",
       cronPattern: 'pattern: "25 12 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-carrier-all-history-daily.ts",
       taskIdExpression: "id: FMCSA_CARRIER_ALL_HISTORY_CSV_FEED.taskId",
       cronPattern: 'pattern: "32 12 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-inspections-per-unit-daily.ts",
       taskIdExpression: "id: FMCSA_INSPECTIONS_PER_UNIT_FEED.taskId",
       cronPattern: 'pattern: "39 12 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-special-studies-daily.ts",
       taskIdExpression: "id: FMCSA_SPECIAL_STUDIES_FEED.taskId",
       cronPattern: 'pattern: "46 12 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-revocation-all-history-daily.ts",
       taskIdExpression: "id: FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED.taskId",
       cronPattern: 'pattern: "53 12 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-insur-all-history-daily.ts",
       taskIdExpression: "id: FMCSA_INSUR_ALL_HISTORY_CSV_FEED.taskId",
       cronPattern: 'pattern: "0 13 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-out-of-service-orders-daily.ts",
       taskIdExpression: "id: FMCSA_OUT_OF_SERVICE_ORDERS_FEED.taskId",
       cronPattern: 'pattern: "7 13 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-inspections-citations-daily.ts",
       taskIdExpression: "id: FMCSA_INSPECTIONS_AND_CITATIONS_FEED.taskId",
       cronPattern: 'pattern: "14 13 * * *"',
       machinePattern: 'machine: "small-2x"',
-      maxDurationPattern: "maxDuration: 1800",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-vehicle-inspections-violations-daily.ts",
       taskIdExpression: "id: FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED.taskId",
       cronPattern: 'pattern: "21 13 * * *"',
       machinePattern: 'machine: "small-2x"',
-      maxDurationPattern: "maxDuration: 1800",
+      maxDurationPattern: "maxDuration: 43200",
     },
     {
       filename: "../fmcsa-company-census-file-daily.ts",
