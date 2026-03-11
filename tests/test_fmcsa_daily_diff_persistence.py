@@ -10,6 +10,7 @@ from app.services.carrier_inspections import upsert_carrier_inspections
 from app.services.carrier_inspection_violations import upsert_carrier_inspection_violations
 from app.services.carrier_safety_basic_measures import upsert_carrier_safety_basic_measures
 from app.services.carrier_safety_basic_percentiles import upsert_carrier_safety_basic_percentiles
+from app.services.commercial_vehicle_crashes import upsert_commercial_vehicle_crashes
 from app.services import fmcsa_daily_diff_common
 from app.services.insurance_filing_rejections import upsert_insurance_filing_rejections
 from app.services.insurance_policies import upsert_insurance_policies
@@ -18,7 +19,11 @@ from app.services.insurance_policy_history_events import upsert_insurance_policy
 from app.services.motor_carrier_census_records import upsert_motor_carrier_census_records
 from app.services.operating_authority_histories import upsert_operating_authority_histories
 from app.services.operating_authority_revocations import upsert_operating_authority_revocations
+from app.services.out_of_service_orders import upsert_out_of_service_orders
 from app.services.process_agent_filings import upsert_process_agent_filings
+from app.services.vehicle_inspection_citations import upsert_vehicle_inspection_citations
+from app.services.vehicle_inspection_special_studies import upsert_vehicle_inspection_special_studies
+from app.services.vehicle_inspection_units import upsert_vehicle_inspection_units
 
 
 @dataclass
@@ -205,6 +210,262 @@ def test_upsert_carrier_registrations_preserves_snapshot_row(fake_client: _FakeS
     assert stored["bipd_required_thousands_usd"] == 750
     assert stored["business_address_city"] == "AUSTIN"
     assert stored["raw_source_row"]["row_number"] == 4
+
+
+def test_upsert_commercial_vehicle_crashes_persists_typed_row(fake_client: _FakeSupabaseClient):
+    result = upsert_commercial_vehicle_crashes(
+        source_context=_source_context(feed_name="Crash File", observed_at="2026-03-10T14:00:00Z"),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [
+                    "19901102 0000",
+                    "195291",
+                    "VA",
+                    "VA00000875",
+                    "19900118",
+                    "0900",
+                    "1",
+                    "12345678",
+                    "C",
+                    "19900120",
+                    "I-95",
+                    "00000",
+                    "RICHMOND",
+                    "VA",
+                    "001",
+                    "T",
+                    "1",
+                    "1",
+                    "1",
+                    "3",
+                    "3",
+                    "VIN12345678901234",
+                    "ABC1234",
+                    "VA",
+                    "Y",
+                    "1",
+                    "9",
+                    "1",
+                    "N",
+                    "STATE POLICE",
+                    "2",
+                    "0",
+                    "1",
+                    "Y",
+                    "Y",
+                    "Y",
+                    "1.0",
+                    "1234",
+                    "A",
+                    "19900119 1015",
+                    "0",
+                    "12345678",
+                    "Y",
+                    "19900119 1100",
+                    "19900119 1115",
+                    "999",
+                    "ACME CARRIER",
+                    "1 MAIN ST",
+                    "RICHMOND",
+                    "00000",
+                    "VA",
+                    "23219",
+                    "",
+                    "MC123456",
+                    "Y",
+                    "",
+                    "",
+                    "",
+                    "1:13:Collision involving motor vehicle in transport",
+                ],
+                "raw_fields": {
+                    "CHANGE_DATE": "19901102 0000",
+                    "CRASH_ID": "195291",
+                    "REPORT_STATE": "VA",
+                    "REPORT_NUMBER": "VA00000875",
+                    "REPORT_DATE": "19900118",
+                    "REPORT_TIME": "0900",
+                    "REPORT_SEQ_NO": "1",
+                    "DOT_NUMBER": "12345678",
+                    "CI_STATUS_CODE": "C",
+                    "FINAL_STATUS_DATE": "19900120",
+                    "LOCATION": "I-95",
+                    "CITY_CODE": "00000",
+                    "CITY": "RICHMOND",
+                    "STATE": "VA",
+                    "COUNTY_CODE": "001",
+                    "TRUCK_BUS_IND": "T",
+                    "TRAFFICWAY_ID": "1",
+                    "ACCESS_CONTROL_ID": "1",
+                    "ROAD_SURFACE_CONDITION_ID": "1",
+                    "CARGO_BODY_TYPE_ID": "3",
+                    "GVW_RATING_ID": "3",
+                    "VEHICLE_IDENTIFICATION_NUMBER": "VIN12345678901234",
+                    "VEHICLE_LICENSE_NUMBER": "ABC1234",
+                    "VEHICLE_LIC_STATE": "VA",
+                    "VEHICLE_HAZMAT_PLACARD": "Y",
+                    "WEATHER_CONDITION_ID": "1",
+                    "VEHICLE_CONFIGURATION_ID": "9",
+                    "LIGHT_CONDITION_ID": "1",
+                    "HAZMAT_RELEASED": "N",
+                    "AGENCY": "STATE POLICE",
+                    "VEHICLES_IN_ACCIDENT": "2",
+                    "FATALITIES": "0",
+                    "INJURIES": "1",
+                    "TOW_AWAY": "Y",
+                    "FEDERAL_RECORDABLE": "Y",
+                    "STATE_RECORDABLE": "Y",
+                    "SNET_VERSION_NUMBER": "1.0",
+                    "SNET_SEQUENCE_ID": "1234",
+                    "TRANSACTION_CODE": "A",
+                    "TRANSACTION_DATE": "19900119 1015",
+                    "UPLOAD_FIRST_BYTE": "0",
+                    "UPLOAD_DOT_NUMBER": "12345678",
+                    "UPLOAD_SEARCH_INDICATOR": "Y",
+                    "UPLOAD_DATE": "19900119 1100",
+                    "ADD_DATE": "19900119 1115",
+                    "CRASH_CARRIER_ID": "999",
+                    "CRASH_CARRIER_NAME": "ACME CARRIER",
+                    "CRASH_CARRIER_STREET": "1 MAIN ST",
+                    "CRASH_CARRIER_CITY": "RICHMOND",
+                    "CRASH_CARRIER_CITY_CODE": "00000",
+                    "CRASH_CARRIER_STATE": "VA",
+                    "CRASH_CARRIER_ZIP_CODE": "23219",
+                    "CRASH_COLONIA": "",
+                    "DOCKET_NUMBER": "MC123456",
+                    "CRASH_CARRIER_INTERSTATE": "Y",
+                    "NO_ID_FLAG": "",
+                    "STATE_NUMBER": "",
+                    "STATE_ISSUING_NUMBER": "",
+                    "CRASH_EVENT_SEQ_ID_DESC": "1:13:Collision involving motor vehicle in transport",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["commercial_vehicle_crashes"].values()))
+    assert stored["crash_id"] == "195291"
+    assert stored["report_date"] == "1990-01-18"
+    assert stored["tow_away"] is True
+
+
+def test_shared_carrier_registration_table_keeps_daily_and_all_history_rows_separate(
+    fake_client: _FakeSupabaseClient,
+):
+    row = {
+        "row_number": 1,
+        "raw_values": [
+            "MC012892",
+            "02217388",
+            "",
+            "",
+            "N",
+            "A",
+            "N",
+            "N",
+            "N",
+            "N",
+            "N",
+            "N",
+            "N",
+            "Y",
+            "N",
+            "N",
+            "N",
+            "N",
+            "00750",
+            "N",
+            "N",
+            "00750",
+            "N",
+            "N",
+            "Y",
+            "",
+            "ACME CARRIER LLC",
+            "1 MAIN ST",
+            "",
+            "AUSTIN",
+            "TX",
+            "US",
+            "78701",
+            "5125550000",
+            "",
+            "1 MAIN ST",
+            "",
+            "AUSTIN",
+            "TX",
+            "US",
+            "78701",
+            "5125550000",
+            "",
+        ],
+        "raw_fields": {
+            "Docket Number": "MC012892",
+            "USDOT Number": "02217388",
+            "MX Type": "",
+            "RFC Number": "",
+            "Common Authority": "N",
+            "Contract Authority": "A",
+            "Broker Authority": "N",
+            "Pending Common Authority": "N",
+            "Pending Contract Authority": "N",
+            "Pending Broker Authority": "N",
+            "Common Authority Revocation": "N",
+            "Contract Authority Revocation": "N",
+            "Broker Authority Revocation": "N",
+            "Property": "Y",
+            "Passenger": "N",
+            "Household Goods": "N",
+            "Private Check": "N",
+            "Enterprise Check": "N",
+            "BIPD Required": "00750",
+            "Cargo Required": "N",
+            "Bond/Surety Required": "N",
+            "BIPD on File": "00750",
+            "Cargo on File": "N",
+            "Bond/Surety on File": "N",
+            "Address Status": "Y",
+            "DBA Name": "",
+            "Legal Name": "ACME CARRIER LLC",
+            "Business Address - PO Box/Street": "1 MAIN ST",
+            "Business Address - Colonia": "",
+            "Business Address - City": "AUSTIN",
+            "Business Address - State Code": "TX",
+            "Business Address - Country Code": "US",
+            "Business Address - Zip Code": "78701",
+            "Business Address - Telephone Number": "5125550000",
+            "Business Address - Fax Number": "",
+            "Mailing Address - PO Box/Street": "1 MAIN ST",
+            "Mailing Address - Colonia": "",
+            "Mailing Address - City": "AUSTIN",
+            "Mailing Address - State Code": "TX",
+            "Mailing Address - Country Code": "US",
+            "Mailing Address - Zip Code": "78701",
+            "Mailing Address - Telephone Number": "5125550000",
+            "Mailing Address - Fax Number": "",
+        },
+    }
+
+    upsert_carrier_registrations(
+        source_context=_source_context(feed_name="Carrier", observed_at="2026-03-10T10:00:00Z"),
+        rows=[row],
+    )
+    upsert_carrier_registrations(
+        source_context=_source_context(
+            feed_name="Carrier - All With History",
+            observed_at="2026-03-10T11:00:00Z",
+            source_file_variant="all_with_history",
+        ),
+        rows=[row],
+    )
+
+    assert len(fake_client.tables["carrier_registrations"]) == 2
+    assert {stored["source_feed_name"] for stored in fake_client.tables["carrier_registrations"].values()} == {
+        "Carrier",
+        "Carrier - All With History",
+    }
 
 
 def test_upsert_process_agent_filings_same_day_rerun_updates_same_feed_slot(
@@ -492,6 +753,58 @@ def test_upsert_carrier_inspection_violations_preserves_feed_date_snapshots(
     assert all(stored["inspection_date"] == "2024-01-30" for stored in stored_rows)
 
 
+def test_upsert_carrier_inspection_violations_supports_vehicle_inspection_feed(
+    fake_client: _FakeSupabaseClient,
+):
+    result = upsert_carrier_inspection_violations(
+        source_context=_source_context(
+            feed_name="Vehicle Inspections and Violations",
+            observed_at="2026-03-10T12:21:00Z",
+            source_file_variant="csv_export",
+        ),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [
+                    "20230504 2141",
+                    "78529074",
+                    "252617929",
+                    "2",
+                    "393",
+                    "393.75A",
+                    "1",
+                    "194662753",
+                    "12",
+                    "Y",
+                    "1",
+                    "CIT-1",
+                ],
+                "raw_fields": {
+                    "CHANGE_DATE": "20230504 2141",
+                    "INSPECTION_ID": "78529074",
+                    "INSP_VIOLATION_ID": "252617929",
+                    "SEQ_NO": "2",
+                    "PART_NO": "393",
+                    "PART_NO_SECTION": "393.75A",
+                    "INSP_VIOL_UNIT": "1",
+                    "INSP_UNIT_ID": "194662753",
+                    "INSP_VIOLATION_CATEGORY_ID": "12",
+                    "OUT_OF_SERVICE_INDICATOR": "Y",
+                    "DEFECT_VERIFICATION_ID": "1",
+                    "CITATION_NUMBER": "CIT-1",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["carrier_inspection_violations"].values()))
+    assert stored["inspection_unique_id"] == "78529074"
+    assert stored["part_number"] == "393"
+    assert stored["citation_number"] == "CIT-1"
+    assert stored["oos_indicator"] is True
+
+
 def test_upsert_carrier_inspections_persists_typed_row(fake_client: _FakeSupabaseClient):
     result = upsert_carrier_inspections(
         source_context=_source_context(
@@ -594,6 +907,160 @@ def test_upsert_carrier_inspections_persists_typed_row(fake_client: _FakeSupabas
     assert stored["inspection_date"] == "2024-01-30"
     assert stored["unsafe_driving_inspection"] is True
     assert stored["vehicle_maintenance_violation_total"] == 1
+
+
+def test_upsert_carrier_inspections_supports_vehicle_inspection_file_feed(
+    fake_client: _FakeSupabaseClient,
+):
+    result = upsert_carrier_inspections(
+        source_context=_source_context(
+            feed_name="Vehicle Inspection File",
+            observed_at="2026-03-10T13:00:00Z",
+            source_file_variant="csv_export",
+        ),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [
+                    "20230327 2139",
+                    "78058162",
+                    "3129666",
+                    "CT",
+                    "3079001925",
+                    "20230323",
+                    "0920",
+                    "0935",
+                    "20230324",
+                    "1",
+                    "C",
+                    "4",
+                    "I-95 NORTHBOUND",
+                    "CT",
+                    "003",
+                    "2",
+                    "EA",
+                    "5",
+                    "R",
+                    "",
+                    "",
+                    "",
+                    "N",
+                    "4.0",
+                    "20230327 2000",
+                    "N",
+                    "N",
+                    "0",
+                    "N",
+                    "N",
+                    "N",
+                    "Y",
+                    "20230327 2139",
+                    "N",
+                    "80000",
+                    "1",
+                    "0",
+                    "1",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "1111",
+                    "A",
+                    "20230327 2100",
+                    "20230327 2105",
+                    "0",
+                    "3129666",
+                    "M",
+                    "20230327 2103",
+                    "20230327 2050",
+                    "CT001",
+                    "20230327 2139",
+                    "ACME HAULING",
+                    "1 MAIN ST",
+                    "HARTFORD",
+                    "CT",
+                    "06103",
+                    "",
+                    "MC123456",
+                    "Y",
+                    "STATE-1",
+                ],
+                "raw_fields": {
+                    "CHANGE_DATE": "20230327 2139",
+                    "INSPECTION_ID": "78058162",
+                    "DOT_NUMBER": "3129666",
+                    "REPORT_STATE": "CT",
+                    "REPORT_NUMBER": "3079001925",
+                    "INSP_DATE": "20230323",
+                    "INSP_START_TIME": "0920",
+                    "INSP_END_TIME": "0935",
+                    "REGISTRATION_DATE": "20230324",
+                    "REGION": "1",
+                    "CI_STATUS_CODE": "C",
+                    "LOCATION": "4",
+                    "LOCATION_DESC": "I-95 NORTHBOUND",
+                    "COUNTY_CODE_STATE": "CT",
+                    "COUNTY_CODE": "003",
+                    "INSP_LEVEL_ID": "2",
+                    "SERVICE_CENTER": "EA",
+                    "CENSUS_SOURCE_ID": "5",
+                    "INSP_FACILITY": "R",
+                    "SHIPPER_NAME": "",
+                    "SHIPPING_PAPER_NUMBER": "",
+                    "CARGO_TANK": "",
+                    "HAZMAT_PLACARD_REQ": "N",
+                    "SNET_VERSION_NUMBER": "4.0",
+                    "SNET_SEARCH_DATE": "20230327 2000",
+                    "ALCOHOL_CONTROL_SUB": "N",
+                    "DRUG_INTRDCTN_SEARCH": "N",
+                    "DRUG_INTRDCTN_ARRESTS": "0",
+                    "SIZE_WEIGHT_ENF": "N",
+                    "TRAFFIC_ENF": "N",
+                    "LOCAL_ENF_JURISDICTION": "N",
+                    "PEN_CEN_MATCH": "Y",
+                    "FINAL_STATUS_DATE": "20230327 2139",
+                    "POST_ACC_IND": "N",
+                    "GROSS_COMB_VEH_WT": "80000",
+                    "VIOL_TOTAL": "1",
+                    "OOS_TOTAL": "0",
+                    "DRIVER_VIOL_TOTAL": "1",
+                    "DRIVER_OOS_TOTAL": "0",
+                    "VEHICLE_VIOL_TOTAL": "0",
+                    "VEHICLE_OOS_TOTAL": "0",
+                    "HAZMAT_VIOL_TOTAL": "0",
+                    "HAZMAT_OOS_TOTAL": "0",
+                    "SNET_SEQUENCE_ID": "1111",
+                    "TRANSACTION_CODE": "A",
+                    "TRANSACTION_DATE": "20230327 2100",
+                    "UPLOAD_DATE": "20230327 2105",
+                    "UPLOAD_FIRST_BYTE": "0",
+                    "UPLOAD_DOT_NUMBER": "3129666",
+                    "UPLOAD_SEARCH_INDICATOR": "M",
+                    "CENSUS_SEARCH_DATE": "20230327 2103",
+                    "SNET_INPUT_DATE": "20230327 2050",
+                    "SOURCE_OFFICE": "CT001",
+                    "MCMIS_ADD_DATE": "20230327 2139",
+                    "INSP_CARRIER_NAME": "ACME HAULING",
+                    "INSP_CARRIER_STREET": "1 MAIN ST",
+                    "INSP_CARRIER_CITY": "HARTFORD",
+                    "INSP_CARRIER_STATE": "CT",
+                    "INSP_CARRIER_ZIP_CODE": "06103",
+                    "INSP_COLONIA": "",
+                    "DOCKET_NUMBER": "MC123456",
+                    "INSP_INTERSTATE": "Y",
+                    "INSP_CARRIER_STATE_ID": "STATE-1",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["carrier_inspections"].values()))
+    assert stored["inspection_unique_id"] == "78058162"
+    assert stored["registration_date"] == "2023-03-24"
+    assert stored["docket_number"] == "MC123456"
+    assert stored["carrier_name"] == "ACME HAULING"
 
 
 def test_upsert_motor_carrier_census_records_same_day_rerun_updates_same_feed_slot(
@@ -720,6 +1187,181 @@ def test_upsert_motor_carrier_census_records_same_day_rerun_updates_same_feed_sl
     assert stored["authorized_for_hire"] is True
 
 
+def test_upsert_motor_carrier_census_records_supports_company_census_file(
+    fake_client: _FakeSupabaseClient,
+):
+    result = upsert_motor_carrier_census_records(
+        source_context=_source_context(
+            feed_name="Company Census File",
+            observed_at="2026-03-10T12:45:00Z",
+            source_file_variant="csv_export",
+        ),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [],
+                "raw_fields": {
+                    "MCS150_DATE": "20240101",
+                    "ADD_DATE": "20200115",
+                    "STATUS_CODE": "A",
+                    "DOT_NUMBER": "123456",
+                    "DUN_BRADSTREET_NO": "123456789",
+                    "PHY_OMC_REGION": "6",
+                    "SAFETY_INV_TERR": "TX",
+                    "CARRIER_OPERATION": "A",
+                    "BUSINESS_ORG_ID": "3",
+                    "MCS150_MILEAGE": "120000",
+                    "MCS150_MILEAGE_YEAR": "2023",
+                    "MCS151_MILEAGE": "115000",
+                    "TOTAL_CARS": "0",
+                    "MCS150_UPDATE_CODE_ID": "U",
+                    "PRIOR_REVOKE_FLAG": "N",
+                    "PRIOR_REVOKE_DOT_NUMBER": "",
+                    "PHONE": "5125550100",
+                    "FAX": "5125550101",
+                    "CELL_PHONE": "5125550102",
+                    "COMPANY_OFFICER_1": "JANE DOE",
+                    "COMPANY_OFFICER_2": "JOHN DOE",
+                    "BUSINESS_ORG_DESC": "Corporation",
+                    "TRUCK_UNITS": "5",
+                    "POWER_UNITS": "7",
+                    "BUS_UNITS": "0",
+                    "FLEETSIZE": "D",
+                    "REVIEW_ID": "12345",
+                    "RECORDABLE_CRASH_RATE": "1.250",
+                    "MAIL_NATIONALITY_INDICATOR": "U",
+                    "PHY_NATIONALITY_INDICATOR": "U",
+                    "PHY_BARRIO": "",
+                    "MAIL_BARRIO": "",
+                    "CARSHIP": "C",
+                    "DOCKET1PREFIX": "MC",
+                    "DOCKET1": "654321",
+                    "DOCKET2PREFIX": "",
+                    "DOCKET2": "",
+                    "DOCKET3PREFIX": "",
+                    "DOCKET3": "",
+                    "POINTNUM": "P",
+                    "TOTAL_INTRASTATE_DRIVERS": "0",
+                    "MCSIPSTEP": "2",
+                    "MCSIPDATE": "20240201",
+                    "HM_Ind": "Y",
+                    "INTERSTATE_BEYOND_100_MILES": "4",
+                    "INTERSTATE_WITHIN_100_MILES": "2",
+                    "INTRASTATE_BEYOND_100_MILES": "0",
+                    "INTRASTATE_WITHIN_100_MILES": "0",
+                    "TOTAL_CDL": "6",
+                    "TOTAL_DRIVERS": "6",
+                    "AVG_DRIVERS_LEASED_PER_MONTH": "1",
+                    "CLASSDEF": "AUTHORIZED FOR HIRE;OTHER-FARMER",
+                    "LEGAL_NAME": "ACME LOGISTICS LLC",
+                    "DBA_NAME": "ACME LOGISTICS",
+                    "PHY_STREET": "1 MAIN ST",
+                    "PHY_CITY": "AUSTIN",
+                    "PHY_COUNTRY": "US",
+                    "PHY_STATE": "TX",
+                    "PHY_ZIP": "78701",
+                    "PHY_CNTY": "453",
+                    "CARRIER_MAILING_STREET": "PO BOX 1",
+                    "CARRIER_MAILING_STATE": "TX",
+                    "CARRIER_MAILING_CITY": "AUSTIN",
+                    "CARRIER_MAILING_COUNTRY": "US",
+                    "CARRIER_MAILING_ZIP": "78702",
+                    "CARRIER_MAILING_CNTY": "453",
+                    "CARRIER_MAILING_UND_DATE": "",
+                    "DRIVER_INTER_TOTAL": "6",
+                    "EMAIL_ADDRESS": "ops@acme.com",
+                    "REVIEW_TYPE": "C",
+                    "REVIEW_DATE": "20240215",
+                    "SAFETY_RATING": "S",
+                    "SAFETY_RATING_DATE": "20240220",
+                    "UNDELIV_PHY": "",
+                    "CRGO_GENFREIGHT": "X",
+                    "CRGO_HOUSEHOLD": "",
+                    "CRGO_METALSHEET": "",
+                    "CRGO_MOTOVEH": "",
+                    "CRGO_DRIVETOW": "",
+                    "CRGO_LOGPOLE": "",
+                    "CRGO_BLDGMAT": "",
+                    "CRGO_MOBILEHOME": "",
+                    "CRGO_MACHLRG": "",
+                    "CRGO_PRODUCE": "",
+                    "CRGO_LIQGAS": "",
+                    "CRGO_INTERMODAL": "",
+                    "CRGO_PASSENGERS": "",
+                    "CRGO_OILFIELD": "",
+                    "CRGO_LIVESTOCK": "",
+                    "CRGO_GRAINFEED": "",
+                    "CRGO_COALCOKE": "",
+                    "CRGO_MEAT": "",
+                    "CRGO_GARBAGE": "",
+                    "CRGO_USMAIL": "",
+                    "CRGO_CHEM": "",
+                    "CRGO_DRYBULK": "",
+                    "CRGO_COLDFOOD": "",
+                    "CRGO_BEVERAGES": "",
+                    "CRGO_PAPERPROD": "",
+                    "CRGO_UTILITY": "",
+                    "CRGO_FARMSUPP": "",
+                    "CRGO_CONSTRUCT": "",
+                    "CRGO_WATERWELL": "",
+                    "CRGO_CARGOOTHR": "X",
+                    "CRGO_CARGOOTHR_DESC": "OTHER-FARMER",
+                    "OWNTRUCK": "2",
+                    "OWNTRACT": "3",
+                    "OWNTRAIL": "4",
+                    "OWNCOACH": "0",
+                    "OWNSCHOOL_1_8": "0",
+                    "OWNSCHOOL_9_15": "0",
+                    "OWNSCHOOL_16": "0",
+                    "OWNBUS_16": "0",
+                    "OWNVAN_1_8": "0",
+                    "OWNVAN_9_15": "0",
+                    "OWNLIMO_1_8": "0",
+                    "OWNLIMO_9_15": "0",
+                    "OWNLIMO_16": "0",
+                    "TRMTRUCK": "0",
+                    "TRMTRACT": "0",
+                    "TRMTRAIL": "0",
+                    "TRMCOACH": "0",
+                    "TRMSCHOOL_1_8": "0",
+                    "TRMSCHOOL_9_15": "0",
+                    "TRMSCHOOL_16": "0",
+                    "TRMBUS_16": "0",
+                    "TRMVAN_1_8": "0",
+                    "TRMVAN_9_15": "0",
+                    "TRMLIMO_1_8": "0",
+                    "TRMLIMO_9_15": "0",
+                    "TRMLIMO_16": "0",
+                    "TRPTRUCK": "0",
+                    "TRPTRACT": "0",
+                    "TRPTRAIL": "0",
+                    "TRPCOACH": "0",
+                    "TRPSCHOOL_1_8": "0",
+                    "TRPSCHOOL_9_15": "0",
+                    "TRPSCHOOL_16": "0",
+                    "TRPBUS_16": "0",
+                    "TRPVAN_1_8": "0",
+                    "TRPVAN_9_15": "0",
+                    "TRPLIMO_1_8": "0",
+                    "TRPLIMO_9_15": "0",
+                    "TRPLIMO_16": "0",
+                    "DOCKET1_STATUS_CODE": "A",
+                    "DOCKET2_STATUS_CODE": "",
+                    "DOCKET3_STATUS_CODE": "",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["motor_carrier_census_records"].values()))
+    assert stored["status_code"] == "A"
+    assert stored["mcs150_date"] == "2024-01-01"
+    assert stored["authorized_for_hire"] is True
+    assert stored["other_operation_description"] == "OTHER-FARMER"
+    assert stored["cargo_general_freight"] is True
+
+
 def test_shared_table_keeps_daily_and_all_history_rows_separate_on_same_feed_date(
     fake_client: _FakeSupabaseClient,
 ):
@@ -783,6 +1425,117 @@ def test_shared_table_keeps_daily_and_all_history_rows_separate_on_same_feed_dat
         "InsHist",
         "InsHist - All With History",
     }
+
+
+def test_upsert_vehicle_inspection_units_preserves_multiple_rows_for_same_inspection(
+    fake_client: _FakeSupabaseClient,
+):
+    row_one = {
+        "row_number": 1,
+        "raw_values": ["20230501 1045", "78487801", "194662753", "9", "1", "UTILITY", "A1", "ABC123", "TX", "VIN1", "Y", "D1"],
+        "raw_fields": {
+            "CHANGE_DATE": "20230501 1045",
+            "INSPECTION_ID": "78487801",
+            "INSP_UNIT_ID": "194662753",
+            "INSP_UNIT_TYPE_ID": "9",
+            "INSP_UNIT_NUMBER": "1",
+            "INSP_UNIT_MAKE": "UTILITY",
+            "INSP_UNIT_COMPANY": "A1",
+            "INSP_UNIT_LICENSE": "ABC123",
+            "INSP_UNIT_LICENSE_STATE": "TX",
+            "INSP_UNIT_VEHICLE_ID_NUMBER": "VIN1",
+            "INSP_UNIT_DECAL": "Y",
+            "INSP_UNIT_DECAL_NUMBER": "D1",
+        },
+    }
+    row_two = {
+        **row_one,
+        "row_number": 2,
+        "raw_values": ["20230501 1045", "78487801", "194662754", "11", "2", "FREIGHTLINER", "A2", "XYZ987", "TX", "VIN2", "N", "D2"],
+        "raw_fields": {**row_one["raw_fields"], "INSP_UNIT_ID": "194662754", "INSP_UNIT_NUMBER": "2", "INSP_UNIT_MAKE": "FREIGHTLINER", "INSP_UNIT_COMPANY": "A2", "INSP_UNIT_LICENSE": "XYZ987", "INSP_UNIT_VEHICLE_ID_NUMBER": "VIN2", "INSP_UNIT_DECAL": "N", "INSP_UNIT_DECAL_NUMBER": "D2"},
+    }
+
+    upsert_vehicle_inspection_units(
+        source_context=_source_context(feed_name="Inspections Per Unit", observed_at="2026-03-10T12:50:00Z", source_file_variant="csv_export"),
+        rows=[row_one, row_two],
+    )
+
+    assert len(fake_client.tables["vehicle_inspection_units"]) == 2
+
+
+def test_upsert_vehicle_inspection_special_studies_persists_typed_row(fake_client: _FakeSupabaseClient):
+    result = upsert_vehicle_inspection_special_studies(
+        source_context=_source_context(feed_name="Special Studies", observed_at="2026-03-10T12:55:00Z", source_file_variant="csv_export"),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": ["20230518 2144", "78668161", "16892759", "MORGAN LEWIS", "4"],
+                "raw_fields": {
+                    "CHANGE_DATE": "20230518 2144",
+                    "INSPECTION_ID": "78668161",
+                    "INSP_STUDY_ID": "16892759",
+                    "STUDY": "MORGAN LEWIS",
+                    "SEQ_NO": "4",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["vehicle_inspection_special_studies"].values()))
+    assert stored["inspection_study_id"] == "16892759"
+    assert stored["sequence_number"] == 4
+
+
+def test_upsert_vehicle_inspection_citations_persists_typed_row(fake_client: _FakeSupabaseClient):
+    result = upsert_vehicle_inspection_citations(
+        source_context=_source_context(feed_name="Inspections and Citations", observed_at="2026-03-10T12:56:00Z", source_file_variant="csv_export"),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": ["20240220 2141", "78058442", "2", "1", "3", "Paid"],
+                "raw_fields": {
+                    "CHANGE_DATE": "20240220 2141",
+                    "INSPECTION_ID": "78058442",
+                    "VIOSEQNUM": "2",
+                    "ADJSEQ": "1",
+                    "CITATION_CODE": "3",
+                    "CITATION_RESULT": "Paid",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["vehicle_inspection_citations"].values()))
+    assert stored["inspection_id"] == "78058442"
+    assert stored["citation_result"] == "Paid"
+
+
+def test_upsert_out_of_service_orders_persists_typed_row(fake_client: _FakeSupabaseClient):
+    result = upsert_out_of_service_orders(
+        source_context=_source_context(feed_name="OUT OF SERVICE ORDERS", observed_at="2026-03-10T13:05:00Z", source_file_variant="csv_export"),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": ["1438", "AUSTIN URETHANE INC", "", "2022-07-09", "Unsatisfactory = Unfit", "ACTIVE", "2022-08-01"],
+                "raw_fields": {
+                    "DOT_NUMBER": "1438",
+                    "LEGAL_NAME": "AUSTIN URETHANE INC",
+                    "DBA_NAME": "",
+                    "OOS_DATE": "2022-07-09",
+                    "OOS_REASON": "Unsatisfactory = Unfit",
+                    "STATUS": "ACTIVE",
+                    "OOS_RESCIND_DATE": "2022-08-01",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = next(iter(fake_client.tables["out_of_service_orders"].values()))
+    assert stored["oos_date"] == "2022-07-09"
+    assert stored["oos_rescind_date"] == "2022-08-01"
 
 
 def test_upsert_insurance_filing_rejections_persists_typed_row(fake_client: _FakeSupabaseClient):

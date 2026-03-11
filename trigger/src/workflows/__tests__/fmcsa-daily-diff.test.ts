@@ -4,6 +4,18 @@ import test from "node:test";
 import { createInternalApiClient } from "../internal-api.js";
 import {
   __testables,
+  FMCSA_CARRIER_ALL_HISTORY_CSV_FEED,
+  FMCSA_COMPANY_CENSUS_FILE_FEED,
+  FMCSA_CRASH_FILE_FEED,
+  FMCSA_INSPECTIONS_AND_CITATIONS_FEED,
+  FMCSA_INSPECTIONS_PER_UNIT_FEED,
+  FMCSA_INSUR_ALL_HISTORY_CSV_FEED,
+  FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
+  FMCSA_REMAINING_CSV_EXPORT_FEEDS,
+  FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED,
+  FMCSA_SPECIAL_STUDIES_FEED,
+  FMCSA_VEHICLE_INSPECTION_FILE_FEED,
+  FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED,
   FMCSA_SMS_AB_PASS_FEED,
   FMCSA_SMS_AB_PASSPROPERTY_FEED,
   FMCSA_SMS_C_PASS_FEED,
@@ -258,6 +270,243 @@ test("shared-table variants remain distinct by source feed metadata", async () =
   assert.equal(request?.path, "/api/internal/insurance-filing-rejections/upsert-batch");
   assert.equal(request?.body?.feed_name, "Rejected - All With History");
   assert.equal(request?.body?.source_file_variant, "all_with_history");
+});
+
+test("remaining CSV export feed configs lock widths and endpoint paths", () => {
+  assert.deepEqual(
+    FMCSA_REMAINING_CSV_EXPORT_FEEDS.map((feed) => ({
+      feedName: feed.feedName,
+      sourceFileVariant: feed.sourceFileVariant,
+      expectedFieldCount: feed.expectedFieldCount,
+      internalUpsertPath: feed.internalUpsertPath,
+      useStreamingParser: feed.useStreamingParser ?? false,
+    })),
+    [
+      {
+        feedName: "Crash File",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 59,
+        internalUpsertPath: "/api/internal/commercial-vehicle-crashes/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Carrier - All With History",
+        sourceFileVariant: "all_with_history",
+        expectedFieldCount: 43,
+        internalUpsertPath: "/api/internal/carrier-registrations/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Inspections Per Unit",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 12,
+        internalUpsertPath: "/api/internal/vehicle-inspection-units/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Special Studies",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 5,
+        internalUpsertPath: "/api/internal/vehicle-inspection-special-studies/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Revocation - All With History",
+        sourceFileVariant: "all_with_history",
+        expectedFieldCount: 6,
+        internalUpsertPath: "/api/internal/operating-authority-revocations/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Insur - All With History",
+        sourceFileVariant: "all_with_history",
+        expectedFieldCount: 9,
+        internalUpsertPath: "/api/internal/insurance-policies/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "OUT OF SERVICE ORDERS",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 7,
+        internalUpsertPath: "/api/internal/out-of-service-orders/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Inspections and Citations",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 6,
+        internalUpsertPath: "/api/internal/vehicle-inspection-citations/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Vehicle Inspections and Violations",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 12,
+        internalUpsertPath: "/api/internal/carrier-inspection-violations/upsert-batch",
+        useStreamingParser: false,
+      },
+      {
+        feedName: "Company Census File",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 147,
+        internalUpsertPath: "/api/internal/motor-carrier-census-records/upsert-batch",
+        useStreamingParser: true,
+      },
+      {
+        feedName: "Vehicle Inspection File",
+        sourceFileVariant: "csv_export",
+        expectedFieldCount: 63,
+        internalUpsertPath: "/api/internal/carrier-inspections/upsert-batch",
+        useStreamingParser: true,
+      },
+    ],
+  );
+});
+
+test("remaining CSV export workflow maps aliased headers onto dictionary fields", async () => {
+  const internalRequests: Array<{ path: string; body: Record<string, unknown> | null }> = [];
+  const client = createInternalApiClient({
+    authContext: { orgId: "system" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    fetchImpl: createInternalFetch({
+      requests: internalRequests,
+      responses: [
+        {
+          body: {
+            data: {
+              feed_name: "OUT OF SERVICE ORDERS",
+              feed_date: "2026-03-10",
+              rows_received: 1,
+              rows_written: 1,
+            },
+          },
+        },
+      ],
+    }),
+  });
+
+  await runFmcsaDailyDiffWorkflow(
+    {
+      feed: FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
+      schedule: {
+        timestamp: "2026-03-10T16:00:00.000Z",
+        scheduleId: "schedule-oos",
+        timezone: "America/New_York",
+      },
+    },
+    {
+      client,
+      fetchImpl: createDownloadFetch({
+        contentType: "text/csv; charset=utf-8",
+        text: [
+          "DOT_NUMBER,LEGAL_NAME,DBA_NAME,OOS_DATE,OOS_REASON,STATUS,RESCIND_DATE",
+          "1438,AUSTIN URETHANE INC,,2022-07-09,Unsatisfactory = Unfit,ACTIVE,2022-08-01",
+        ].join("\n"),
+      }),
+    },
+  );
+
+  const request = internalRequests[0];
+  const firstRecord = ((request?.body?.records as Array<Record<string, unknown>>) ?? [])[0];
+  const rawFields = (firstRecord?.raw_fields as Record<string, unknown>) ?? {};
+  assert.equal(request?.path, "/api/internal/out-of-service-orders/upsert-batch");
+  assert.equal(rawFields.OOS_RESCIND_DATE, "2022-08-01");
+});
+
+test("remaining CSV export parser enforces representative row widths", () => {
+  for (const feed of [
+    FMCSA_CRASH_FILE_FEED,
+    FMCSA_CARRIER_ALL_HISTORY_CSV_FEED,
+    FMCSA_INSPECTIONS_PER_UNIT_FEED,
+    FMCSA_SPECIAL_STUDIES_FEED,
+    FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED,
+    FMCSA_INSUR_ALL_HISTORY_CSV_FEED,
+    FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
+    FMCSA_INSPECTIONS_AND_CITATIONS_FEED,
+    FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED,
+  ]) {
+    const invalidCsv = [feed.headerRow?.join(",") ?? "", "x"].join("\n");
+    assert.throws(
+      () => __testables.parseDailyDiffBody(feed, invalidCsv),
+      new RegExp(`expected ${feed.expectedFieldCount} columns`),
+      feed.feedName,
+    );
+  }
+});
+
+test("remaining CSV export workflow streams large files in multiple confirmed batches", async () => {
+  const internalRequests: Array<{ path: string; body: Record<string, unknown> | null }> = [];
+  const client = createInternalApiClient({
+    authContext: { orgId: "system" },
+    apiUrl: "https://example.com",
+    internalApiKey: "secret",
+    fetchImpl: createInternalFetch({
+      requests: internalRequests,
+      responses: [
+        {
+          body: {
+            data: {
+              feed_name: "Company Census File",
+              feed_date: "2026-03-10",
+              rows_received: 2,
+              rows_written: 2,
+            },
+          },
+        },
+        {
+          body: {
+            data: {
+              feed_name: "Company Census File",
+              feed_date: "2026-03-10",
+              rows_received: 1,
+              rows_written: 1,
+            },
+          },
+        },
+      ],
+    }),
+  });
+
+  const header = FMCSA_COMPANY_CENSUS_FILE_FEED.headerRow?.join(",") ?? "";
+  const row = new Array(FMCSA_COMPANY_CENSUS_FILE_FEED.expectedFieldCount).fill("").map((_, index) => {
+    if (index === 3) return "123456";
+    if (index === 52) return "ACME LOGISTICS LLC";
+    return "";
+  });
+
+  const result = await runFmcsaDailyDiffWorkflow(
+    {
+      feed: {
+        ...FMCSA_COMPANY_CENSUS_FILE_FEED,
+        writeBatchSize: 2,
+      },
+      schedule: {
+        timestamp: "2026-03-10T16:00:00.000Z",
+        scheduleId: "schedule-company-census",
+        timezone: "America/New_York",
+      },
+    },
+    {
+      client,
+      fetchImpl: createDownloadFetch({
+        contentType: "text/csv; charset=utf-8",
+        text: [header, row.join(","), row.join(","), row.join(",")].join("\n"),
+      }),
+    },
+  );
+
+  assert.equal(result.rows_downloaded, 3);
+  assert.equal(result.rows_written, 3);
+  assert.equal(internalRequests.length, 2);
+  assert.equal(
+    ((internalRequests[0]?.body?.records as Array<unknown>) ?? []).length,
+    2,
+  );
+  assert.equal(
+    ((internalRequests[1]?.body?.records as Array<unknown>) ?? []).length,
+    1,
+  );
 });
 
 test("SMS feed configs lock corrected dataset ids and crash skip metadata", () => {

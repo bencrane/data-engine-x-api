@@ -417,7 +417,7 @@ async function parseAndPersistStreamedCsv(
     skip_empty_lines: true,
     trim: false,
   });
-  const inputStream = Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>);
+  const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
   const batchSize = payload.feed.writeBatchSize ?? 500;

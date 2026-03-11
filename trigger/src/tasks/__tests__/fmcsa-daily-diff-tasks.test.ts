@@ -10,13 +10,22 @@ import {
   FMCSA_AUTHHIST_DAILY_FEED,
   FMCSA_BOC3_ALL_HISTORY_FEED,
   FMCSA_BOC3_DAILY_FEED,
+  FMCSA_CARRIER_ALL_HISTORY_CSV_FEED,
   FMCSA_CARRIER_DAILY_FEED,
+  FMCSA_COMPANY_CENSUS_FILE_FEED,
+  FMCSA_CRASH_FILE_FEED,
   FMCSA_INSHIST_DAILY_FEED,
   FMCSA_INSHIST_ALL_HISTORY_FEED,
+  FMCSA_INSPECTIONS_AND_CITATIONS_FEED,
+  FMCSA_INSPECTIONS_PER_UNIT_FEED,
   FMCSA_INSURANCE_DAILY_FEED,
+  FMCSA_INSUR_ALL_HISTORY_CSV_FEED,
   FMCSA_NEXT_BATCH_SNAPSHOT_HISTORY_FEEDS,
+  FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
   FMCSA_REJECTED_ALL_HISTORY_FEED,
   FMCSA_REJECTED_DAILY_FEED,
+  FMCSA_REMAINING_CSV_EXPORT_FEEDS,
+  FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED,
   FMCSA_REVOCATION_DAILY_FEED,
   FMCSA_SMS_AB_PASS_FEED,
   FMCSA_SMS_AB_PASSPROPERTY_FEED,
@@ -27,6 +36,9 @@ import {
   FMCSA_SMS_INPUT_VIOLATION_FEED,
   FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED,
   FMCSA_TOP5_DAILY_DIFF_FEEDS,
+  FMCSA_SPECIAL_STUDIES_FEED,
+  FMCSA_VEHICLE_INSPECTION_FILE_FEED,
+  FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED,
 } from "../../workflows/fmcsa-daily-diff.js";
 
 test("FMCSA top-5 feed configs expose the expected feed-to-URL mapping", () => {
@@ -188,6 +200,87 @@ test("FMCSA SMS feed configs expose the expected feed-to-URL mapping", () => {
   );
 });
 
+test("FMCSA remaining CSV export feed configs expose the expected feed-to-URL mapping", () => {
+  assert.equal(FMCSA_REMAINING_CSV_EXPORT_FEEDS.length, 11);
+
+  assert.deepEqual(
+    FMCSA_REMAINING_CSV_EXPORT_FEEDS.map((feed) => ({
+      feedName: feed.feedName,
+      taskId: feed.taskId,
+      downloadUrl: feed.downloadUrl,
+      sourceFileVariant: feed.sourceFileVariant,
+    })),
+    [
+      {
+        feedName: "Crash File",
+        taskId: "fmcsa-crash-file-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/aayw-vxb3/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Carrier - All With History",
+        taskId: "fmcsa-carrier-all-history-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/6eyk-hxee/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "all_with_history",
+      },
+      {
+        feedName: "Inspections Per Unit",
+        taskId: "fmcsa-inspections-per-unit-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/wt8s-2hbx/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Special Studies",
+        taskId: "fmcsa-special-studies-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/5qik-smay/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Revocation - All With History",
+        taskId: "fmcsa-revocation-all-history-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/sa6p-acbp/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "all_with_history",
+      },
+      {
+        feedName: "Insur - All With History",
+        taskId: "fmcsa-insur-all-history-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/ypjt-5ydn/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "all_with_history",
+      },
+      {
+        feedName: "OUT OF SERVICE ORDERS",
+        taskId: "fmcsa-out-of-service-orders-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/p2mt-9ige/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Inspections and Citations",
+        taskId: "fmcsa-inspections-citations-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/qbt8-7vic/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Vehicle Inspections and Violations",
+        taskId: "fmcsa-vehicle-inspections-violations-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/876r-jsdb/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Company Census File",
+        taskId: "fmcsa-company-census-file-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/az4n-8mr2/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+      {
+        feedName: "Vehicle Inspection File",
+        taskId: "fmcsa-vehicle-inspection-file-daily",
+        downloadUrl: "https://data.transportation.gov/api/views/fx4q-ay7w/rows.csv?accessType=DOWNLOAD",
+        sourceFileVariant: "csv_export",
+      },
+    ],
+  );
+});
+
 test("all FMCSA scheduled task files exist with staggered cron definitions", () => {
   const taskExpectations = [
     {
@@ -289,6 +382,61 @@ test("all FMCSA scheduled task files exist with staggered cron definitions", () 
       filename: "../fmcsa-sms-c-pass-daily.ts",
       taskIdExpression: "id: FMCSA_SMS_C_PASS_FEED.taskId",
       cronPattern: 'pattern: "18 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-crash-file-daily.ts",
+      taskIdExpression: "id: FMCSA_CRASH_FILE_FEED.taskId",
+      cronPattern: 'pattern: "25 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-carrier-all-history-daily.ts",
+      taskIdExpression: "id: FMCSA_CARRIER_ALL_HISTORY_CSV_FEED.taskId",
+      cronPattern: 'pattern: "32 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-inspections-per-unit-daily.ts",
+      taskIdExpression: "id: FMCSA_INSPECTIONS_PER_UNIT_FEED.taskId",
+      cronPattern: 'pattern: "39 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-special-studies-daily.ts",
+      taskIdExpression: "id: FMCSA_SPECIAL_STUDIES_FEED.taskId",
+      cronPattern: 'pattern: "46 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-revocation-all-history-daily.ts",
+      taskIdExpression: "id: FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED.taskId",
+      cronPattern: 'pattern: "53 12 * * *"',
+    },
+    {
+      filename: "../fmcsa-insur-all-history-daily.ts",
+      taskIdExpression: "id: FMCSA_INSUR_ALL_HISTORY_CSV_FEED.taskId",
+      cronPattern: 'pattern: "0 13 * * *"',
+    },
+    {
+      filename: "../fmcsa-out-of-service-orders-daily.ts",
+      taskIdExpression: "id: FMCSA_OUT_OF_SERVICE_ORDERS_FEED.taskId",
+      cronPattern: 'pattern: "7 13 * * *"',
+    },
+    {
+      filename: "../fmcsa-inspections-citations-daily.ts",
+      taskIdExpression: "id: FMCSA_INSPECTIONS_AND_CITATIONS_FEED.taskId",
+      cronPattern: 'pattern: "14 13 * * *"',
+    },
+    {
+      filename: "../fmcsa-vehicle-inspections-violations-daily.ts",
+      taskIdExpression: "id: FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED.taskId",
+      cronPattern: 'pattern: "21 13 * * *"',
+    },
+    {
+      filename: "../fmcsa-company-census-file-daily.ts",
+      taskIdExpression: "id: FMCSA_COMPANY_CENSUS_FILE_FEED.taskId",
+      cronPattern: 'pattern: "28 13 * * *"',
+    },
+    {
+      filename: "../fmcsa-vehicle-inspection-file-daily.ts",
+      taskIdExpression: "id: FMCSA_VEHICLE_INSPECTION_FILE_FEED.taskId",
+      cronPattern: 'pattern: "35 13 * * *"',
     },
   ];
 
