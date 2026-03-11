@@ -3,6 +3,13 @@
 This document is the execution directive for future AI contributors.
 Build decisions must follow this file unless explicitly overridden by the project owner.
 
+Authority note:
+
+- This file is normative doctrine.
+- It describes build rules, preferred patterns, and locked design intent.
+- It is not the source of truth for current production state or current live project priority.
+- For live factual state, use `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
+
 ## Mission
 
 Build `data-engine-x-api` as a **multi-tenant enrichment infrastructure product** with strict technical boundaries and practical delivery speed.
@@ -52,7 +59,11 @@ Operations must tolerate varied inputs without brittle failure.
 - Missing optional inputs => action skip with reason.
 - Missing operation-minimum inputs => operation failure with `missing_inputs`.
 
-## Current Locked V1 Decisions
+## Locked Decisions And Historical Examples
+
+This section mixes still-relevant locked decisions with earlier implementation examples.
+
+Do not read phrases like "next implementation target" below as a claim about the current live roadmap unless that priority is reconfirmed elsewhere.
 
 ### Email
 
@@ -70,7 +81,7 @@ Default runtime parameters:
 - MillionVerifier timeout: `10s`
 - Parallel processor: `core`
 
-### Company Profile (next implementation target)
+### Historical Example: Company Profile
 
 - `company.enrich.profile`
   - planned order: `prospeo -> blitzapi -> companyenrich.com -> leadmagic`

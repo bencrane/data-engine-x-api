@@ -16,6 +16,22 @@ When operating as chief agent (drafting executor directives, reviewing executor 
 
 Read `docs/STRATEGIC_DIRECTIVE.md` before architecture or implementation decisions.
 
+## Documentation Authority
+
+Before relying on repo documentation beyond the audited reports, read `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
+
+Production-truth precedence is:
+
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+3. `CLAUDE.md`
+
+Important boundary:
+
+- `docs/EXECUTOR_DIRECTIVE_*.md` files are scope documents and calibration examples.
+- They are not evidence that the described work is deployed, production-verified, or currently healthy.
+- Treat directives as intent unless the production-truth reports independently confirm the result.
+
 ## Production State (as of 2026-03-10)
 
 This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which was verified against live production SQL.
@@ -111,7 +127,7 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
 ### Known Architectural Problems
 
 - See `docs/DATA_ENGINE_X_ARCHITECTURE.md`, section `7. Known Architectural Problems`, for the full list.
-- Top 3 problems (being addressed by the dedicated workflow migration):
+- Top 3 problems (being addressed across current migration and reliability workstreams):
   - auto-persist silent failures: the legacy `run-pipeline.ts` wraps dedicated-table writes in try/catch and swallows failures. Dedicated workflows use confirmed writes that surface failures.
   - `run-pipeline.ts` monolith: being replaced by dedicated workflow files with shared utilities. Do NOT add to `run-pipeline.ts`.
   - deploy-sequencing landmine: Railway must be live before Trigger.dev deploys, or new Trigger code calls internal FastAPI endpoints that do not exist yet. Exception: the fan-out router deploy reverses this order (Trigger first, then Railway).
@@ -122,6 +138,20 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
 - `docs/DATA_ENGINE_X_ARCHITECTURE.md` - full architecture doc including known problems
 
 If `CLAUDE.md` or `docs/SYSTEM_OVERVIEW.md` conflict with these reports, the reports are correct.
+
+## Repo Workstreams In Docs
+
+Do not infer the current project picture from an older subset of directives.
+
+The repo's recent documentation spans multiple workstream families, including:
+
+- dedicated workflow migration and fan-out routing
+- schema split work plus post-split verification
+- production reliability and runtime/deploy investigations
+- FMCSA ingestion and mapping across multiple feed families
+- newer workflow families such as job-posting-led discovery
+
+Those workstreams may exist as directives, mapping docs, or in-repo implementation. Their presence does not by itself prove production completion.
 
 ## Entity Database Design
 
@@ -388,7 +418,7 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `app/services/resolve_operations.py` — 7 CRM resolve operations
 - `trigger/`
   - `trigger/src/tasks/run-pipeline.ts` — legacy generic pipeline runner (being replaced by dedicated workflows)
-  - `trigger/src/tasks/` — dedicated workflow files: company enrichment, person search/enrichment, ICP job titles, company intel briefing, person intel briefing, fan-out router, TAM building
+  - `trigger/src/tasks/` — dedicated workflow files and ingestion tasks, including company enrichment, person search/enrichment, ICP job titles, company intel briefing, person intel briefing, fan-out router, TAM building, FMCSA feed ingestion, and newer workflow families
   - `trigger/src/` — shared workflow utilities (internal HTTP, confirmed writes, context merge, Parallel.ai polling, prompt templates)
 - `tests/`
 - `scripts/` — backfill scripts for dedicated tables (icp_job_titles, company/person intel briefings)
@@ -396,6 +426,7 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
 - `docs/`
   - `docs/blueprints/` — blueprint definition JSON files
   - `docs/EXECUTOR_DIRECTIVE_*.md` — executor agent directives (documentation)
+  - `docs/FMCSA_*.md` — FMCSA contract-lock and mapping docs for current ingestion workstreams
   - `docs/directives-hq/` — directives for HQ database work (job title matching, dedup)
   - `docs/troubleshooting-fixes/` — incident post-mortems and fixes
   - `docs/api-reference-docs/` — provider API documentation (Enigma, Parallel.ai)

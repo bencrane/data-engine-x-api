@@ -4,6 +4,29 @@ How to write directives that executor agents can implement correctly without amb
 
 Production-truth rule: example directives in this file show structure, not current production truth. Do not infer system health, feature completeness, or production readiness from example wording. Cross-check current reality in `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
 
+Directive-status rule: existing `docs/EXECUTOR_DIRECTIVE_*.md` files are scope documents and format/style examples. They are not deployment records, not production verification, and not evidence that the described target architecture is live.
+
+---
+
+## What A Directive Is
+
+A directive defines:
+
+- the problem to solve
+- the files and contracts the executor must understand
+- the allowed scope
+- the acceptance criteria
+- the reporting requirements
+
+A directive does not certify:
+
+- that prior work was executed
+- that prior work shipped
+- that the described architecture is already in production
+- that the repo's latest implementation matches the directive exactly
+
+If you include current-state claims in a directive background section, tie them to the production-truth docs and date-scope them.
+
 ---
 
 ## Structure
@@ -61,6 +84,8 @@ Commit standalone.
 6. **Specify file names for new files.** If two agents might work in parallel, give them different files to avoid conflicts. Example: `app/providers/storeleads_enrich.py` and `app/providers/storeleads_search.py`, not both in `app/providers/storeleads.py`.
 
 7. **Always request a report.** The "When done" section tells the agent what to report so the chief can verify without reading every line of code.
+
+8. **Do not use existing directives as status documents.** Use them for scope and style calibration only. If production status matters, cite the audited truth docs explicitly inside the directive.
 
 ---
 
