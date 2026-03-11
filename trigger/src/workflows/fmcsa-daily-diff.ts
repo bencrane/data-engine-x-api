@@ -1,5 +1,7 @@
 import { logger } from "@trigger.dev/sdk/v3";
-import { parse as parseCsv } from "csv-parse/sync";
+import { Readable } from "node:stream";
+import { parse as createCsvStreamParser } from "csv-parse";
+import { parse as parseCsvSync } from "csv-parse/sync";
 
 import { createInternalApiClient, InternalApiClient } from "./internal-api.js";
 import { writeDedicatedTableConfirmed } from "./persistence.js";
@@ -24,7 +26,18 @@ type FmcsaFeedName =
   | "SMS Input - Inspection"
   | "SMS Input - Motor Carrier Census"
   | "SMS AB Pass"
-  | "SMS C Pass";
+  | "SMS C Pass"
+  | "Crash File"
+  | "Carrier - All With History"
+  | "Inspections Per Unit"
+  | "Special Studies"
+  | "Revocation - All With History"
+  | "Insur - All With History"
+  | "OUT OF SERVICE ORDERS"
+  | "Inspections and Citations"
+  | "Vehicle Inspections and Violations"
+  | "Company Census File"
+  | "Vehicle Inspection File";
 
 export type FmcsaSourceFileVariant = "daily diff" | "daily" | "all_with_history" | "csv_export";
 
@@ -53,6 +66,8 @@ export interface FmcsaDailyDiffFeedConfig {
   expectedFieldCount: number;
   headerRow?: readonly string[];
   expectedContentTypes?: readonly string[];
+  useStreamingParser?: boolean;
+  writeBatchSize?: number;
 }
 
 export interface FmcsaDailyDiffWorkflowPayload {
@@ -85,6 +100,14 @@ interface FmcsaDailyDiffPersistenceResponse {
   feed_date: string;
   rows_received: number;
   rows_written: number;
+}
+
+interface ParsedRowsResult {
+  rowsDownloaded: number;
+  rowsParsed: number;
+  rowsAccepted: number;
+  rowsRejected: number;
+  rows: FmcsaDailyDiffRow[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -165,13 +188,7 @@ function serializeSchedulePayload(
 function parseDailyDiffBody(
   feed: FmcsaDailyDiffFeedConfig,
   rawBody: string,
-): {
-  rowsDownloaded: number;
-  rowsParsed: number;
-  rowsAccepted: number;
-  rowsRejected: number;
-  rows: FmcsaDailyDiffRow[];
-} {
+): ParsedRowsResult {
   if (rawBody.trim().length === 0) {
     throw new Error(`${feed.feedName} download returned an empty body`);
   }
@@ -181,7 +198,7 @@ function parseDailyDiffBody(
 
   let parsedRecords: unknown;
   try {
-    parsedRecords = parseCsv(rawBody, {
+    parsedRecords = parseCsvSync(rawBody, {
       bom: true,
       columns: false,
       skip_empty_lines: true,
@@ -200,25 +217,10 @@ function parseDailyDiffBody(
 
   let dataRecords = parsedRecords;
   if (feed.headerRow) {
-    const headerRow = ensureStringArray(
-      parsedRecords[0],
-      `${feed.feedName} header row is not a CSV value array`,
+    validateHeaderRow(
+      feed,
+      ensureStringArray(parsedRecords[0], `${feed.feedName} header row is not a CSV value array`),
     );
-
-    if (headerRow.length !== feed.headerRow.length) {
-      throw new Error(
-        `${feed.feedName} header row width validation failed: expected ${feed.headerRow.length} columns but received ${headerRow.length}`,
-      );
-    }
-
-    const mismatchedHeaderIndex = feed.headerRow.findIndex(
-      (expectedHeader, index) => headerRow[index] !== expectedHeader,
-    );
-    if (mismatchedHeaderIndex >= 0) {
-      throw new Error(
-        `${feed.feedName} header validation failed at column ${mismatchedHeaderIndex + 1}: expected "${feed.headerRow[mismatchedHeaderIndex]}" but received "${headerRow[mismatchedHeaderIndex]}"`,
-      );
-    }
 
     dataRecords = parsedRecords.slice(1);
     if (dataRecords.length === 0) {
@@ -233,21 +235,11 @@ function parseDailyDiffBody(
     const rowNumber = index + 1;
     const values = ensureStringArray(record, `${feed.feedName} row ${rowNumber} is not a CSV value array`);
 
-    if (values.length !== feed.expectedFieldCount) {
+    try {
+      normalizedRows.push(normalizeCsvRow(feed, values, rowNumber));
+    } catch {
       rejectedRows.push({ rowNumber, width: values.length });
-      return;
     }
-
-    const rawFields: Record<string, string> = {};
-    feed.sourceFields.forEach((fieldName, fieldIndex) => {
-      rawFields[fieldName] = values[fieldIndex] ?? "";
-    });
-
-    normalizedRows.push({
-      row_number: rowNumber,
-      raw_values: values,
-      raw_fields: rawFields,
-    });
   });
 
   if (rejectedRows.length > 0) {
@@ -269,22 +261,51 @@ function parseDailyDiffBody(
   };
 }
 
-async function downloadDailyDiffText(
-  fetchImpl: typeof fetch,
-  feed: FmcsaDailyDiffFeedConfig,
-): Promise<string> {
-  let response: Response;
-  try {
-    response = await fetchImpl(feed.downloadUrl, {
-      method: "GET",
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch (error) {
+function validateHeaderRow(feed: FmcsaDailyDiffFeedConfig, headerRow: string[]): void {
+  if (!feed.headerRow) {
+    return;
+  }
+
+  if (headerRow.length !== feed.headerRow.length) {
     throw new Error(
-      `${feed.feedName} download failed: ${error instanceof Error ? error.message : String(error)}`,
+      `${feed.feedName} header row width validation failed: expected ${feed.headerRow.length} columns but received ${headerRow.length}`,
     );
   }
 
+  const mismatchedHeaderIndex = feed.headerRow.findIndex(
+    (expectedHeader, index) => headerRow[index] !== expectedHeader,
+  );
+  if (mismatchedHeaderIndex >= 0) {
+    throw new Error(
+      `${feed.feedName} header validation failed at column ${mismatchedHeaderIndex + 1}: expected "${feed.headerRow[mismatchedHeaderIndex]}" but received "${headerRow[mismatchedHeaderIndex]}"`,
+    );
+  }
+}
+
+function normalizeCsvRow(
+  feed: FmcsaDailyDiffFeedConfig,
+  values: string[],
+  rowNumber: number,
+): FmcsaDailyDiffRow {
+  if (values.length !== feed.expectedFieldCount) {
+    throw new Error(
+      `${feed.feedName} row width validation failed: expected ${feed.expectedFieldCount} columns; row ${rowNumber} width ${values.length}`,
+    );
+  }
+
+  const rawFields: Record<string, string> = {};
+  feed.sourceFields.forEach((fieldName, fieldIndex) => {
+    rawFields[fieldName] = values[fieldIndex] ?? "";
+  });
+
+  return {
+    row_number: rowNumber,
+    raw_values: values,
+    raw_fields: rawFields,
+  };
+}
+
+function validateDownloadResponse(response: Response, feed: FmcsaDailyDiffFeedConfig): void {
   if (!response.ok) {
     throw new Error(`${feed.feedName} download failed with HTTP ${response.status}`);
   }
@@ -298,7 +319,33 @@ async function downloadDailyDiffText(
   if (contentType.includes("text/html")) {
     throw new Error(`${feed.feedName} download returned HTML instead of CSV data`);
   }
+}
 
+async function downloadDailyDiffResponse(
+  fetchImpl: typeof fetch,
+  feed: FmcsaDailyDiffFeedConfig,
+): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetchImpl(feed.downloadUrl, {
+      method: "GET",
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (error) {
+    throw new Error(
+      `${feed.feedName} download failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  validateDownloadResponse(response, feed);
+  return response;
+}
+
+async function downloadDailyDiffText(
+  fetchImpl: typeof fetch,
+  feed: FmcsaDailyDiffFeedConfig,
+): Promise<string> {
+  const response = await downloadDailyDiffResponse(fetchImpl, feed);
   return response.text();
 }
 
@@ -352,6 +399,96 @@ async function persistDailyDiffRows(
   });
 }
 
+async function parseAndPersistStreamedCsv(
+  client: InternalApiClient,
+  payload: FmcsaDailyDiffWorkflowPayload,
+  feedDate: string,
+  observedAt: string,
+  response: Response,
+): Promise<FmcsaDailyDiffWorkflowResult> {
+  if (!response.body) {
+    throw new Error(`${payload.feed.feedName} download returned no response body`);
+  }
+
+  const parser = createCsvStreamParser({
+    bom: true,
+    columns: false,
+    relax_column_count: true,
+    skip_empty_lines: true,
+    trim: false,
+  });
+  const inputStream = Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>);
+  inputStream.pipe(parser);
+
+  const batchSize = payload.feed.writeBatchSize ?? 500;
+  let headerValidated = false;
+  let rowNumber = 0;
+  let rowsDownloaded = 0;
+  let rowsParsed = 0;
+  let rowsAccepted = 0;
+  let rowsWritten = 0;
+  let batch: FmcsaDailyDiffRow[] = [];
+
+  const flushBatch = async () => {
+    if (batch.length === 0) {
+      return;
+    }
+    const persistence = await persistDailyDiffRows(client, payload, batch, feedDate, observedAt);
+    rowsWritten += persistence.rows_written;
+    batch = [];
+  };
+
+  try {
+    for await (const record of parser) {
+      const values = ensureStringArray(record, `${payload.feed.feedName} row is not a CSV value array`);
+      if (payload.feed.headerRow && !headerValidated) {
+        validateHeaderRow(payload.feed, values);
+        headerValidated = true;
+        continue;
+      }
+
+      rowNumber += 1;
+      rowsDownloaded += 1;
+      rowsParsed += 1;
+      batch.push(normalizeCsvRow(payload.feed, values, rowNumber));
+      rowsAccepted += 1;
+
+      if (batch.length >= batchSize) {
+        await flushBatch();
+      }
+    }
+  } catch (error) {
+    throw new Error(
+      `${payload.feed.feedName} CSV parsing failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (payload.feed.headerRow && !headerValidated) {
+    throw new Error(`${payload.feed.feedName} download contained no parseable header row`);
+  }
+  if (payload.feed.headerRow && rowsDownloaded === 0) {
+    throw new Error(`${payload.feed.feedName} download contained a header row but no data rows`);
+  }
+  if (!payload.feed.headerRow && rowsDownloaded === 0) {
+    throw new Error(`${payload.feed.feedName} download contained no parseable rows`);
+  }
+
+  await flushBatch();
+
+  return {
+    feed_name: payload.feed.feedName,
+    feed_date: feedDate,
+    download_url: payload.feed.downloadUrl,
+    source_file_variant: payload.feed.sourceFileVariant,
+    observed_at: observedAt,
+    rows_downloaded: rowsDownloaded,
+    rows_parsed: rowsParsed,
+    rows_accepted: rowsAccepted,
+    rows_rejected: 0,
+    rows_written: rowsWritten,
+  };
+}
+
 export async function runFmcsaDailyDiffWorkflow(
   payload: FmcsaDailyDiffWorkflowPayload,
   dependencies: FmcsaDailyDiffWorkflowDependencies = {},
@@ -371,6 +508,19 @@ export async function runFmcsaDailyDiffWorkflow(
     task_id: payload.feed.taskId,
     schedule_id: payload.schedule?.scheduleId ?? null,
   });
+
+  if (payload.feed.useStreamingParser) {
+    const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
+    const result = await parseAndPersistStreamedCsv(
+      client,
+      payload,
+      feedDate,
+      observedAt,
+      response,
+    );
+    logger.info("fmcsa snapshot workflow succeeded", { ...result });
+    return result;
+  }
 
   const rawBody = await downloadDailyDiffText(fetchImpl, payload.feed);
   const parsed = parseDailyDiffBody(payload.feed, rawBody);
@@ -667,6 +817,580 @@ export const FMCSA_NEXT_BATCH_SNAPSHOT_HISTORY_FEEDS = [
   FMCSA_ACTPENDINSUR_ALL_HISTORY_FEED,
   FMCSA_REJECTED_ALL_HISTORY_FEED,
   FMCSA_AUTHHIST_ALL_HISTORY_FEED,
+] as const;
+
+const FMCSA_CRASH_FILE_SOURCE_FIELDS = [
+  "CHANGE_DATE",
+  "CRASH_ID",
+  "REPORT_STATE",
+  "REPORT_NUMBER",
+  "REPORT_DATE",
+  "REPORT_TIME",
+  "REPORT_SEQ_NO",
+  "DOT_NUMBER",
+  "CI_STATUS_CODE",
+  "FINAL_STATUS_DATE",
+  "LOCATION",
+  "CITY_CODE",
+  "CITY",
+  "STATE",
+  "COUNTY_CODE",
+  "TRUCK_BUS_IND",
+  "TRAFFICWAY_ID",
+  "ACCESS_CONTROL_ID",
+  "ROAD_SURFACE_CONDITION_ID",
+  "CARGO_BODY_TYPE_ID",
+  "GVW_RATING_ID",
+  "VEHICLE_IDENTIFICATION_NUMBER",
+  "VEHICLE_LICENSE_NUMBER",
+  "VEHICLE_LIC_STATE",
+  "VEHICLE_HAZMAT_PLACARD",
+  "WEATHER_CONDITION_ID",
+  "VEHICLE_CONFIGURATION_ID",
+  "LIGHT_CONDITION_ID",
+  "HAZMAT_RELEASED",
+  "AGENCY",
+  "VEHICLES_IN_ACCIDENT",
+  "FATALITIES",
+  "INJURIES",
+  "TOW_AWAY",
+  "FEDERAL_RECORDABLE",
+  "STATE_RECORDABLE",
+  "SNET_VERSION_NUMBER",
+  "SNET_SEQUENCE_ID",
+  "TRANSACTION_CODE",
+  "TRANSACTION_DATE",
+  "UPLOAD_FIRST_BYTE",
+  "UPLOAD_DOT_NUMBER",
+  "UPLOAD_SEARCH_INDICATOR",
+  "UPLOAD_DATE",
+  "ADD_DATE",
+  "CRASH_CARRIER_ID",
+  "CRASH_CARRIER_NAME",
+  "CRASH_CARRIER_STREET",
+  "CRASH_CARRIER_CITY",
+  "CRASH_CARRIER_CITY_CODE",
+  "CRASH_CARRIER_STATE",
+  "CRASH_CARRIER_ZIP_CODE",
+  "CRASH_COLONIA",
+  "DOCKET_NUMBER",
+  "CRASH_CARRIER_INTERSTATE",
+  "NO_ID_FLAG",
+  "STATE_NUMBER",
+  "STATE_ISSUING_NUMBER",
+  "CRASH_EVENT_SEQ_ID_DESC",
+] as const;
+
+const FMCSA_CARRIER_ALL_HISTORY_SOURCE_FIELDS = [
+  ...FMCSA_CARRIER_DAILY_FEED.sourceFields,
+] as const;
+
+const FMCSA_CARRIER_ALL_HISTORY_HEADERS = [
+  "DOCKET_NUMBER",
+  "DOT_NUMBER",
+  "MX_TYPE",
+  "RFC_NUMBER",
+  "COMMON_STAT",
+  "CONTRACT_STAT",
+  "BROKER_STAT",
+  "COMMON_APP_PEND",
+  "CONTRACT_APP_PEND",
+  "BROKER_APP_PEND",
+  "COMMON_REV_PEND",
+  "CONTRACT_REV_PEND",
+  "BROKER_REV_PEND",
+  "PROPERTY_CHK",
+  "PASSENGER_CHK",
+  "HHG_CHK",
+  "PRIVATE_AUTH_CHK",
+  "ENTERPRISE_CHK",
+  "MIN_COV_AMOUNT",
+  "CARGO_REQ",
+  "BOND_REQ",
+  "BIPD_FILE",
+  "CARGO_FILE",
+  "BOND_FILE",
+  "UNDELIVERABLE_MAIL",
+  "DBA_NAME",
+  "LEGAL_NAME",
+  "BUS_STREET_PO",
+  "BUS_COLONIA",
+  "BUS_CITY",
+  "BUS_STATE_CODE",
+  "BUS_CTRY_CODE",
+  "BUS_ZIP_CODE",
+  "BUS_TELNO",
+  "BUS_FAX",
+  "MAIL_STREET_PO",
+  "MAIL_COLONIA",
+  "MAIL_CITY",
+  "MAIL_STATE_CODE",
+  "MAIL_CTRY_CODE",
+  "MAIL_ZIP_CODE",
+  "MAIL_TELNO",
+  "MAIL_FAX",
+] as const;
+
+const FMCSA_INSPECTION_UNITS_SOURCE_FIELDS = [
+  "CHANGE_DATE",
+  "INSPECTION_ID",
+  "INSP_UNIT_ID",
+  "INSP_UNIT_TYPE_ID",
+  "INSP_UNIT_NUMBER",
+  "INSP_UNIT_MAKE",
+  "INSP_UNIT_COMPANY",
+  "INSP_UNIT_LICENSE",
+  "INSP_UNIT_LICENSE_STATE",
+  "INSP_UNIT_VEHICLE_ID_NUMBER",
+  "INSP_UNIT_DECAL",
+  "INSP_UNIT_DECAL_NUMBER",
+] as const;
+
+const FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS = [
+  "CHANGE_DATE",
+  "INSPECTION_ID",
+  "INSP_STUDY_ID",
+  "STUDY",
+  "SEQ_NO",
+] as const;
+
+const FMCSA_REVOCATION_ALL_HISTORY_SOURCE_FIELDS = [
+  ...FMCSA_REVOCATION_DAILY_FEED.sourceFields,
+] as const;
+
+const FMCSA_REVOCATION_ALL_HISTORY_HEADERS = [
+  "DOCKET_NUMBER",
+  "DOT_NUMBER",
+  "TYPE_LICENSE",
+  "ORDER1_SERVE_DATE",
+  "ORDER2_TYPE_DESC",
+  "order2_effective_Date",
+] as const;
+
+const FMCSA_INSUR_ALL_HISTORY_SOURCE_FIELDS = [
+  ...FMCSA_INSURANCE_DAILY_FEED.sourceFields,
+] as const;
+
+const FMCSA_INSUR_ALL_HISTORY_HEADERS = [
+  "prefix_docket_number",
+  "ins_type_code",
+  "ins_class_code",
+  "max_cov_amount",
+  "underl_lim_amount",
+  "policy_no",
+  "effective_date",
+  "ins_form_code",
+  "name_company",
+] as const;
+
+const FMCSA_OUT_OF_SERVICE_ORDER_SOURCE_FIELDS = [
+  "DOT_NUMBER",
+  "LEGAL_NAME",
+  "DBA_NAME",
+  "OOS_DATE",
+  "OOS_REASON",
+  "STATUS",
+  "OOS_RESCIND_DATE",
+] as const;
+
+const FMCSA_OUT_OF_SERVICE_ORDER_HEADERS = [
+  "DOT_NUMBER",
+  "LEGAL_NAME",
+  "DBA_NAME",
+  "OOS_DATE",
+  "OOS_REASON",
+  "STATUS",
+  "RESCIND_DATE",
+] as const;
+
+const FMCSA_INSPECTION_CITATIONS_SOURCE_FIELDS = [
+  "CHANGE_DATE",
+  "INSPECTION_ID",
+  "VIOSEQNUM",
+  "ADJSEQ",
+  "CITATION_CODE",
+  "CITATION_RESULT",
+] as const;
+
+const FMCSA_VEHICLE_INSPECTION_VIOLATIONS_SOURCE_FIELDS = [
+  "CHANGE_DATE",
+  "INSPECTION_ID",
+  "INSP_VIOLATION_ID",
+  "SEQ_NO",
+  "PART_NO",
+  "PART_NO_SECTION",
+  "INSP_VIOL_UNIT",
+  "INSP_UNIT_ID",
+  "INSP_VIOLATION_CATEGORY_ID",
+  "OUT_OF_SERVICE_INDICATOR",
+  "DEFECT_VERIFICATION_ID",
+  "CITATION_NUMBER",
+] as const;
+
+const FMCSA_COMPANY_CENSUS_SOURCE_FIELDS = [
+  "MCS150_DATE",
+  "ADD_DATE",
+  "STATUS_CODE",
+  "DOT_NUMBER",
+  "DUN_BRADSTREET_NO",
+  "PHY_OMC_REGION",
+  "SAFETY_INV_TERR",
+  "CARRIER_OPERATION",
+  "BUSINESS_ORG_ID",
+  "MCS150_MILEAGE",
+  "MCS150_MILEAGE_YEAR",
+  "MCS151_MILEAGE",
+  "TOTAL_CARS",
+  "MCS150_UPDATE_CODE_ID",
+  "PRIOR_REVOKE_FLAG",
+  "PRIOR_REVOKE_DOT_NUMBER",
+  "PHONE",
+  "FAX",
+  "CELL_PHONE",
+  "COMPANY_OFFICER_1",
+  "COMPANY_OFFICER_2",
+  "BUSINESS_ORG_DESC",
+  "TRUCK_UNITS",
+  "POWER_UNITS",
+  "BUS_UNITS",
+  "FLEETSIZE",
+  "REVIEW_ID",
+  "RECORDABLE_CRASH_RATE",
+  "MAIL_NATIONALITY_INDICATOR",
+  "PHY_NATIONALITY_INDICATOR",
+  "PHY_BARRIO",
+  "MAIL_BARRIO",
+  "CARSHIP",
+  "DOCKET1PREFIX",
+  "DOCKET1",
+  "DOCKET2PREFIX",
+  "DOCKET2",
+  "DOCKET3PREFIX",
+  "DOCKET3",
+  "POINTNUM",
+  "TOTAL_INTRASTATE_DRIVERS",
+  "MCSIPSTEP",
+  "MCSIPDATE",
+  "HM_Ind",
+  "INTERSTATE_BEYOND_100_MILES",
+  "INTERSTATE_WITHIN_100_MILES",
+  "INTRASTATE_BEYOND_100_MILES",
+  "INTRASTATE_WITHIN_100_MILES",
+  "TOTAL_CDL",
+  "TOTAL_DRIVERS",
+  "AVG_DRIVERS_LEASED_PER_MONTH",
+  "CLASSDEF",
+  "LEGAL_NAME",
+  "DBA_NAME",
+  "PHY_STREET",
+  "PHY_CITY",
+  "PHY_COUNTRY",
+  "PHY_STATE",
+  "PHY_ZIP",
+  "PHY_CNTY",
+  "CARRIER_MAILING_STREET",
+  "CARRIER_MAILING_STATE",
+  "CARRIER_MAILING_CITY",
+  "CARRIER_MAILING_COUNTRY",
+  "CARRIER_MAILING_ZIP",
+  "CARRIER_MAILING_CNTY",
+  "CARRIER_MAILING_UND_DATE",
+  "DRIVER_INTER_TOTAL",
+  "EMAIL_ADDRESS",
+  "REVIEW_TYPE",
+  "REVIEW_DATE",
+  "SAFETY_RATING",
+  "SAFETY_RATING_DATE",
+  "UNDELIV_PHY",
+  "CRGO_GENFREIGHT",
+  "CRGO_HOUSEHOLD",
+  "CRGO_METALSHEET",
+  "CRGO_MOTOVEH",
+  "CRGO_DRIVETOW",
+  "CRGO_LOGPOLE",
+  "CRGO_BLDGMAT",
+  "CRGO_MOBILEHOME",
+  "CRGO_MACHLRG",
+  "CRGO_PRODUCE",
+  "CRGO_LIQGAS",
+  "CRGO_INTERMODAL",
+  "CRGO_PASSENGERS",
+  "CRGO_OILFIELD",
+  "CRGO_LIVESTOCK",
+  "CRGO_GRAINFEED",
+  "CRGO_COALCOKE",
+  "CRGO_MEAT",
+  "CRGO_GARBAGE",
+  "CRGO_USMAIL",
+  "CRGO_CHEM",
+  "CRGO_DRYBULK",
+  "CRGO_COLDFOOD",
+  "CRGO_BEVERAGES",
+  "CRGO_PAPERPROD",
+  "CRGO_UTILITY",
+  "CRGO_FARMSUPP",
+  "CRGO_CONSTRUCT",
+  "CRGO_WATERWELL",
+  "CRGO_CARGOOTHR",
+  "CRGO_CARGOOTHR_DESC",
+  "OWNTRUCK",
+  "OWNTRACT",
+  "OWNTRAIL",
+  "OWNCOACH",
+  "OWNSCHOOL_1_8",
+  "OWNSCHOOL_9_15",
+  "OWNSCHOOL_16",
+  "OWNBUS_16",
+  "OWNVAN_1_8",
+  "OWNVAN_9_15",
+  "OWNLIMO_1_8",
+  "OWNLIMO_9_15",
+  "OWNLIMO_16",
+  "TRMTRUCK",
+  "TRMTRACT",
+  "TRMTRAIL",
+  "TRMCOACH",
+  "TRMSCHOOL_1_8",
+  "TRMSCHOOL_9_15",
+  "TRMSCHOOL_16",
+  "TRMBUS_16",
+  "TRMVAN_1_8",
+  "TRMVAN_9_15",
+  "TRMLIMO_1_8",
+  "TRMLIMO_9_15",
+  "TRMLIMO_16",
+  "TRPTRUCK",
+  "TRPTRACT",
+  "TRPTRAIL",
+  "TRPCOACH",
+  "TRPSCHOOL_1_8",
+  "TRPSCHOOL_9_15",
+  "TRPSCHOOL_16",
+  "TRPBUS_16",
+  "TRPVAN_1_8",
+  "TRPVAN_9_15",
+  "TRPLIMO_1_8",
+  "TRPLIMO_9_15",
+  "TRPLIMO_16",
+  "DOCKET1_STATUS_CODE",
+  "DOCKET2_STATUS_CODE",
+  "DOCKET3_STATUS_CODE",
+] as const;
+
+const FMCSA_VEHICLE_INSPECTION_FILE_SOURCE_FIELDS = [
+  "CHANGE_DATE",
+  "INSPECTION_ID",
+  "DOT_NUMBER",
+  "REPORT_STATE",
+  "REPORT_NUMBER",
+  "INSP_DATE",
+  "INSP_START_TIME",
+  "INSP_END_TIME",
+  "REGISTRATION_DATE",
+  "REGION",
+  "CI_STATUS_CODE",
+  "LOCATION",
+  "LOCATION_DESC",
+  "COUNTY_CODE_STATE",
+  "COUNTY_CODE",
+  "INSP_LEVEL_ID",
+  "SERVICE_CENTER",
+  "CENSUS_SOURCE_ID",
+  "INSP_FACILITY",
+  "SHIPPER_NAME",
+  "SHIPPING_PAPER_NUMBER",
+  "CARGO_TANK",
+  "HAZMAT_PLACARD_REQ",
+  "SNET_VERSION_NUMBER",
+  "SNET_SEARCH_DATE",
+  "ALCOHOL_CONTROL_SUB",
+  "DRUG_INTRDCTN_SEARCH",
+  "DRUG_INTRDCTN_ARRESTS",
+  "SIZE_WEIGHT_ENF",
+  "TRAFFIC_ENF",
+  "LOCAL_ENF_JURISDICTION",
+  "PEN_CEN_MATCH",
+  "FINAL_STATUS_DATE",
+  "POST_ACC_IND",
+  "GROSS_COMB_VEH_WT",
+  "VIOL_TOTAL",
+  "OOS_TOTAL",
+  "DRIVER_VIOL_TOTAL",
+  "DRIVER_OOS_TOTAL",
+  "VEHICLE_VIOL_TOTAL",
+  "VEHICLE_OOS_TOTAL",
+  "HAZMAT_VIOL_TOTAL",
+  "HAZMAT_OOS_TOTAL",
+  "SNET_SEQUENCE_ID",
+  "TRANSACTION_CODE",
+  "TRANSACTION_DATE",
+  "UPLOAD_DATE",
+  "UPLOAD_FIRST_BYTE",
+  "UPLOAD_DOT_NUMBER",
+  "UPLOAD_SEARCH_INDICATOR",
+  "CENSUS_SEARCH_DATE",
+  "SNET_INPUT_DATE",
+  "SOURCE_OFFICE",
+  "MCMIS_ADD_DATE",
+  "INSP_CARRIER_NAME",
+  "INSP_CARRIER_STREET",
+  "INSP_CARRIER_CITY",
+  "INSP_CARRIER_STATE",
+  "INSP_CARRIER_ZIP_CODE",
+  "INSP_COLONIA",
+  "DOCKET_NUMBER",
+  "INSP_INTERSTATE",
+  "INSP_CARRIER_STATE_ID",
+] as const;
+
+export const FMCSA_CRASH_FILE_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Crash File",
+  downloadUrl: "https://data.transportation.gov/api/views/aayw-vxb3/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-crash-file-daily",
+  internalUpsertPath: "/api/internal/commercial-vehicle-crashes/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_CRASH_FILE_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_CRASH_FILE_SOURCE_FIELDS.length,
+  headerRow: FMCSA_CRASH_FILE_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_CARRIER_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Carrier - All With History",
+  downloadUrl: "https://data.transportation.gov/api/views/6eyk-hxee/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-carrier-all-history-daily",
+  internalUpsertPath: "/api/internal/carrier-registrations/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: FMCSA_CARRIER_ALL_HISTORY_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_CARRIER_ALL_HISTORY_SOURCE_FIELDS.length,
+  headerRow: FMCSA_CARRIER_ALL_HISTORY_HEADERS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_INSPECTIONS_PER_UNIT_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Inspections Per Unit",
+  downloadUrl: "https://data.transportation.gov/api/views/wt8s-2hbx/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-inspections-per-unit-daily",
+  internalUpsertPath: "/api/internal/vehicle-inspection-units/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS.length,
+  headerRow: FMCSA_INSPECTION_UNITS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_SPECIAL_STUDIES_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Special Studies",
+  downloadUrl: "https://data.transportation.gov/api/views/5qik-smay/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-special-studies-daily",
+  internalUpsertPath: "/api/internal/vehicle-inspection-special-studies/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS.length,
+  headerRow: FMCSA_SPECIAL_STUDIES_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Revocation - All With History",
+  downloadUrl: "https://data.transportation.gov/api/views/sa6p-acbp/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-revocation-all-history-daily",
+  internalUpsertPath: "/api/internal/operating-authority-revocations/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: FMCSA_REVOCATION_ALL_HISTORY_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_REVOCATION_ALL_HISTORY_SOURCE_FIELDS.length,
+  headerRow: FMCSA_REVOCATION_ALL_HISTORY_HEADERS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_INSUR_ALL_HISTORY_CSV_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Insur - All With History",
+  downloadUrl: "https://data.transportation.gov/api/views/ypjt-5ydn/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-insur-all-history-daily",
+  internalUpsertPath: "/api/internal/insurance-policies/upsert-batch",
+  sourceFileVariant: "all_with_history",
+  sourceFields: FMCSA_INSUR_ALL_HISTORY_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_INSUR_ALL_HISTORY_SOURCE_FIELDS.length,
+  headerRow: FMCSA_INSUR_ALL_HISTORY_HEADERS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_OUT_OF_SERVICE_ORDERS_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "OUT OF SERVICE ORDERS",
+  downloadUrl: "https://data.transportation.gov/api/views/p2mt-9ige/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-out-of-service-orders-daily",
+  internalUpsertPath: "/api/internal/out-of-service-orders/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_OUT_OF_SERVICE_ORDER_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_OUT_OF_SERVICE_ORDER_SOURCE_FIELDS.length,
+  headerRow: FMCSA_OUT_OF_SERVICE_ORDER_HEADERS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_INSPECTIONS_AND_CITATIONS_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Inspections and Citations",
+  downloadUrl: "https://data.transportation.gov/api/views/qbt8-7vic/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-inspections-citations-daily",
+  internalUpsertPath: "/api/internal/vehicle-inspection-citations/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_INSPECTION_CITATIONS_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_INSPECTION_CITATIONS_SOURCE_FIELDS.length,
+  headerRow: FMCSA_INSPECTION_CITATIONS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Vehicle Inspections and Violations",
+  downloadUrl: "https://data.transportation.gov/api/views/876r-jsdb/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-vehicle-inspections-violations-daily",
+  internalUpsertPath: "/api/internal/carrier-inspection-violations/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_VEHICLE_INSPECTION_VIOLATIONS_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_VEHICLE_INSPECTION_VIOLATIONS_SOURCE_FIELDS.length,
+  headerRow: FMCSA_VEHICLE_INSPECTION_VIOLATIONS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+};
+
+export const FMCSA_COMPANY_CENSUS_FILE_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Company Census File",
+  downloadUrl: "https://data.transportation.gov/api/views/az4n-8mr2/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-company-census-file-daily",
+  internalUpsertPath: "/api/internal/motor-carrier-census-records/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_COMPANY_CENSUS_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_COMPANY_CENSUS_SOURCE_FIELDS.length,
+  headerRow: FMCSA_COMPANY_CENSUS_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+  useStreamingParser: true,
+  writeBatchSize: 250,
+};
+
+export const FMCSA_VEHICLE_INSPECTION_FILE_FEED: FmcsaDailyDiffFeedConfig = {
+  feedName: "Vehicle Inspection File",
+  downloadUrl: "https://data.transportation.gov/api/views/fx4q-ay7w/rows.csv?accessType=DOWNLOAD",
+  taskId: "fmcsa-vehicle-inspection-file-daily",
+  internalUpsertPath: "/api/internal/carrier-inspections/upsert-batch",
+  sourceFileVariant: "csv_export",
+  sourceFields: FMCSA_VEHICLE_INSPECTION_FILE_SOURCE_FIELDS,
+  expectedFieldCount: FMCSA_VEHICLE_INSPECTION_FILE_SOURCE_FIELDS.length,
+  headerRow: FMCSA_VEHICLE_INSPECTION_FILE_SOURCE_FIELDS,
+  expectedContentTypes: ["text/csv"],
+  useStreamingParser: true,
+  writeBatchSize: 500,
+};
+
+export const FMCSA_REMAINING_CSV_EXPORT_FEEDS = [
+  FMCSA_CRASH_FILE_FEED,
+  FMCSA_CARRIER_ALL_HISTORY_CSV_FEED,
+  FMCSA_INSPECTIONS_PER_UNIT_FEED,
+  FMCSA_SPECIAL_STUDIES_FEED,
+  FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED,
+  FMCSA_INSUR_ALL_HISTORY_CSV_FEED,
+  FMCSA_OUT_OF_SERVICE_ORDERS_FEED,
+  FMCSA_INSPECTIONS_AND_CITATIONS_FEED,
+  FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED,
+  FMCSA_COMPANY_CENSUS_FILE_FEED,
+  FMCSA_VEHICLE_INSPECTION_FILE_FEED,
 ] as const;
 
 const SMS_PASSPROPERTY_SOURCE_FIELDS = [

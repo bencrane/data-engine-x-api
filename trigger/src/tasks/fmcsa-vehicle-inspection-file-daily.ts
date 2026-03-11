@@ -1,0 +1,20 @@
+import { schedules } from "@trigger.dev/sdk/v3";
+
+import {
+  FMCSA_VEHICLE_INSPECTION_FILE_FEED,
+  runFmcsaDailyDiffWorkflow,
+} from "../workflows/fmcsa-daily-diff.js";
+
+export const fmcsaVehicleInspectionFileDaily = schedules.task({
+  id: FMCSA_VEHICLE_INSPECTION_FILE_FEED.taskId,
+  cron: {
+    pattern: "35 13 * * *",
+    timezone: "America/New_York",
+  },
+  run: async (payload) => {
+    return runFmcsaDailyDiffWorkflow({
+      feed: FMCSA_VEHICLE_INSPECTION_FILE_FEED,
+      schedule: payload,
+    });
+  },
+});
