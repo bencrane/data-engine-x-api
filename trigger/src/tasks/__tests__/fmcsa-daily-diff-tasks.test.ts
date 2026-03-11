@@ -451,14 +451,14 @@ test("all FMCSA scheduled task files exist with staggered cron definitions", () 
       taskIdExpression: "id: FMCSA_COMPANY_CENSUS_FILE_FEED.taskId",
       cronPattern: 'pattern: "28 13 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 10800",
     },
     {
       filename: "../fmcsa-vehicle-inspection-file-daily.ts",
       taskIdExpression: "id: FMCSA_VEHICLE_INSPECTION_FILE_FEED.taskId",
       cronPattern: 'pattern: "35 13 * * *"',
       machinePattern: 'machine: "medium-2x"',
-      maxDurationPattern: "maxDuration: 3600",
+      maxDurationPattern: "maxDuration: 10800",
     },
   ];
 

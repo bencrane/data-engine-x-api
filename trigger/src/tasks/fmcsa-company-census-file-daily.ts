@@ -8,7 +8,7 @@ import {
 export const fmcsaCompanyCensusFileDaily = schedules.task({
   id: FMCSA_COMPANY_CENSUS_FILE_FEED.taskId,
   machine: "medium-2x",
-  maxDuration: 3600,
+  maxDuration: 10800,
   cron: {
     pattern: "28 13 * * *",
     timezone: "America/New_York",

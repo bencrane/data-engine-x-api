@@ -8,7 +8,7 @@ import {
 export const fmcsaVehicleInspectionFileDaily = schedules.task({
   id: FMCSA_VEHICLE_INSPECTION_FILE_FEED.taskId,
   machine: "medium-2x",
-  maxDuration: 3600,
+  maxDuration: 10800,
   cron: {
     pattern: "35 13 * * *",
     timezone: "America/New_York",
