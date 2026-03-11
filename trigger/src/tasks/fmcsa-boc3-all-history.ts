@@ -7,6 +7,8 @@ import {
 
 export const fmcsaBoc3AllHistory = schedules.task({
   id: FMCSA_BOC3_ALL_HISTORY_FEED.taskId,
+  machine: "large-2x",
+  maxDuration: 43200,
   cron: {
     pattern: "8 11 * * *",
     timezone: "America/New_York",

@@ -107,7 +107,7 @@ export function resolveInternalApiConfig(
   return {
     apiUrl: normalizeApiUrl(apiUrl),
     internalApiKey,
-    defaultTimeoutMs: overrides.defaultTimeoutMs ?? 30_000,
+    defaultTimeoutMs: overrides.defaultTimeoutMs ?? 120_000,
   };
 }
 

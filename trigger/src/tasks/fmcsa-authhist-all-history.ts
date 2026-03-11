@@ -7,6 +7,8 @@ import {
 
 export const fmcsaAuthHistAllHistory = schedules.task({
   id: FMCSA_AUTHHIST_ALL_HISTORY_FEED.taskId,
+  machine: "large-2x",
+  maxDuration: 43200,
   cron: {
     pattern: "29 11 * * *",
     timezone: "America/New_York",
