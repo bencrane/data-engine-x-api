@@ -1335,6 +1335,7 @@ export const FMCSA_CRASH_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: FMCSA_CRASH_FILE_SOURCE_FIELDS.length,
   headerRow: FMCSA_CRASH_FILE_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 10000,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1443,6 +1444,8 @@ export const FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED: FmcsaDailyDiffFeedCo
   expectedFieldCount: FMCSA_VEHICLE_INSPECTION_VIOLATIONS_SOURCE_FIELDS.length,
   headerRow: FMCSA_VEHICLE_INSPECTION_VIOLATIONS_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 10000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_COMPANY_CENSUS_FILE_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1665,6 +1668,7 @@ export const FMCSA_SMS_AB_PASSPROPERTY_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: SMS_PASSPROPERTY_SOURCE_FIELDS.length,
   headerRow: SMS_PASSPROPERTY_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_SMS_C_PASSPROPERTY_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1677,6 +1681,7 @@ export const FMCSA_SMS_C_PASSPROPERTY_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: SMS_PASSPROPERTY_SOURCE_FIELDS.length,
   headerRow: SMS_PASSPROPERTY_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_SMS_INPUT_VIOLATION_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1689,6 +1694,8 @@ export const FMCSA_SMS_INPUT_VIOLATION_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: SMS_INPUT_VIOLATION_SOURCE_FIELDS.length,
   headerRow: SMS_INPUT_VIOLATION_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 10000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_SMS_INPUT_INSPECTION_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1701,6 +1708,8 @@ export const FMCSA_SMS_INPUT_INSPECTION_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: SMS_INPUT_INSPECTION_SOURCE_FIELDS.length,
   headerRow: SMS_INPUT_INSPECTION_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 10000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED: FmcsaDailyDiffFeedConfig = {
@@ -1713,6 +1722,8 @@ export const FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED: FmcsaDailyDiffFeedConfig = {
   expectedFieldCount: SMS_MOTOR_CARRIER_CENSUS_SOURCE_FIELDS.length,
   headerRow: SMS_MOTOR_CARRIER_CENSUS_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
+  writeBatchSize: 10000,
+  ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
 export const FMCSA_SMS_AB_PASS_FEED: FmcsaDailyDiffFeedConfig = {
