@@ -4,7 +4,9 @@ from contextlib import closing
 from functools import lru_cache
 from hashlib import sha256
 import json
+import logging
 import re
+import time
 from uuid import uuid4
 from collections.abc import Callable
 from datetime import date, datetime, timezone
@@ -13,6 +15,8 @@ from typing import Any, TypedDict
 from psycopg import connect
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 FMCSA_SOURCE_PROVIDER = "fmcsa_open_data"
 FMCSA_ENTITIES_SCHEMA = "entities"
@@ -346,115 +350,152 @@ def upsert_fmcsa_daily_diff_rows(
     rows: list[FmcsaDailyDiffRow],
     row_builder: Callable[[FmcsaDailyDiffRow], dict[str, Any]],
 ) -> dict[str, Any]:
-    now = utc_now_iso()
-    source_observed_at = source_context["source_observed_at"]
-    live_table_columns = set(_get_table_columns(table_name))
-    upsert_rows: list[dict[str, Any]] = []
-    for row in rows:
-        typed_row = row_builder(row)
-        insert_row = {
-            **typed_row,
-            "feed_date": source_context["feed_date"],
-            "row_position": row["row_number"],
-            "source_provider": FMCSA_SOURCE_PROVIDER,
-            "source_feed_name": source_context["feed_name"],
-            "source_download_url": source_context["download_url"],
-            "source_file_variant": source_context["source_file_variant"],
-            "source_observed_at": source_observed_at,
-            "source_task_id": source_context["source_task_id"],
-            "source_schedule_id": source_context["source_schedule_id"],
-            "source_run_metadata": source_context["source_run_metadata"],
-            "raw_source_row": {
-                "row_number": row["row_number"],
-                "raw_values": row["raw_values"],
-                "raw_fields": row["raw_fields"],
-            },
-            "updated_at": now,
-        }
-        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
-            not live_table_columns or "record_fingerprint" in live_table_columns
-        ):
-            insert_row["record_fingerprint"] = _build_record_fingerprint(
-                table_name=table_name,
-                feed_date=source_context["feed_date"],
-                feed_name=source_context["feed_name"],
-                row_position=row["row_number"],
-            )
-        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
-            not live_table_columns or "first_observed_at" in live_table_columns
-        ):
-            insert_row["first_observed_at"] = source_observed_at
-        if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
-            not live_table_columns or "last_observed_at" in live_table_columns
-        ):
-            insert_row["last_observed_at"] = source_observed_at
-        upsert_rows.append(insert_row)
+    t_total_start = time.perf_counter()
+    phases: dict[str, Any] = {
+        "table_name": table_name,
+        "feed_date": source_context["feed_date"],
+        "rows_received": len(rows),
+        "rows_written": 0,
+        "error": False,
+    }
 
-    if not upsert_rows:
+    try:
+        now = utc_now_iso()
+        source_observed_at = source_context["source_observed_at"]
+        live_table_columns = set(_get_table_columns(table_name))
+
+        t_row_builder_start = time.perf_counter()
+        upsert_rows: list[dict[str, Any]] = []
+        for row in rows:
+            typed_row = row_builder(row)
+            insert_row = {
+                **typed_row,
+                "feed_date": source_context["feed_date"],
+                "row_position": row["row_number"],
+                "source_provider": FMCSA_SOURCE_PROVIDER,
+                "source_feed_name": source_context["feed_name"],
+                "source_download_url": source_context["download_url"],
+                "source_file_variant": source_context["source_file_variant"],
+                "source_observed_at": source_observed_at,
+                "source_task_id": source_context["source_task_id"],
+                "source_schedule_id": source_context["source_schedule_id"],
+                "source_run_metadata": source_context["source_run_metadata"],
+                "raw_source_row": {
+                    "row_number": row["row_number"],
+                    "raw_values": row["raw_values"],
+                    "raw_fields": row["raw_fields"],
+                },
+                "updated_at": now,
+            }
+            if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
+                not live_table_columns or "record_fingerprint" in live_table_columns
+            ):
+                insert_row["record_fingerprint"] = _build_record_fingerprint(
+                    table_name=table_name,
+                    feed_date=source_context["feed_date"],
+                    feed_name=source_context["feed_name"],
+                    row_position=row["row_number"],
+                )
+            if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
+                not live_table_columns or "first_observed_at" in live_table_columns
+            ):
+                insert_row["first_observed_at"] = source_observed_at
+            if table_name in FMCSA_SNAPSHOT_HISTORY_TABLES and (
+                not live_table_columns or "last_observed_at" in live_table_columns
+            ):
+                insert_row["last_observed_at"] = source_observed_at
+            upsert_rows.append(insert_row)
+        phases["row_builder_ms"] = round((time.perf_counter() - t_row_builder_start) * 1000, 1)
+
+        if not upsert_rows:
+            phases["total_ms"] = round((time.perf_counter() - t_total_start) * 1000, 1)
+            logger.info("fmcsa_batch_persist_phases", extra=phases)
+            return {
+                "feed_name": source_context["feed_name"],
+                "table_name": table_name,
+                "feed_date": source_context["feed_date"],
+                "rows_received": len(rows),
+                "rows_written": 0,
+            }
+
+        if live_table_columns:
+            upsert_rows = [
+                {
+                    column_name: row_value
+                    for column_name, row_value in row.items()
+                    if column_name in live_table_columns
+                }
+                for row in upsert_rows
+            ]
+        columns = _collect_insert_columns(upsert_rows)
+        conflict_columns = (
+            _get_conflict_columns(available_columns=set(columns))
+            if live_table_columns
+            else FMCSA_CONFLICT_COLUMNS
+        )
+        temp_table_name = _build_temp_table_name(table_name)
+        upsert_sql = _build_fmcsa_bulk_merge_sql(
+            table_name=table_name,
+            temp_table_name=temp_table_name,
+            columns=columns,
+            conflict_columns=conflict_columns,
+        )
+
+        t_conn_start = time.perf_counter()
+        with closing(get_fmcsa_direct_postgres_connection()) as connection:
+            phases["connection_acquire_ms"] = round((time.perf_counter() - t_conn_start) * 1000, 1)
+            try:
+                with connection.cursor() as cursor:
+                    t_temp = time.perf_counter()
+                    _create_temp_staging_table(
+                        cursor=cursor,
+                        table_name=table_name,
+                        temp_table_name=temp_table_name,
+                    )
+                    phases["temp_table_create_ms"] = round((time.perf_counter() - t_temp) * 1000, 1)
+
+                    t_copy = time.perf_counter()
+                    _copy_rows_into_temp_table(
+                        cursor=cursor,
+                        temp_table_name=temp_table_name,
+                        rows=upsert_rows,
+                        columns=columns,
+                    )
+                    phases["copy_ms"] = round((time.perf_counter() - t_copy) * 1000, 1)
+
+                    t_merge = time.perf_counter()
+                    cursor.execute(upsert_sql)
+                    phases["merge_ms"] = round((time.perf_counter() - t_merge) * 1000, 1)
+
+                t_commit = time.perf_counter()
+                connection.commit()
+                phases["commit_ms"] = round((time.perf_counter() - t_commit) * 1000, 1)
+            except Exception:
+                try:
+                    connection.rollback()
+                finally:
+                    try:
+                        _drop_temp_table_if_exists(
+                            connection=connection,
+                            temp_table_name=temp_table_name,
+                        )
+                    except Exception:
+                        pass
+                raise
+
+        phases["rows_written"] = len(upsert_rows)
+        phases["total_ms"] = round((time.perf_counter() - t_total_start) * 1000, 1)
+        logger.info("fmcsa_batch_persist_phases", extra=phases)
+
         return {
             "feed_name": source_context["feed_name"],
             "table_name": table_name,
             "feed_date": source_context["feed_date"],
             "rows_received": len(rows),
-            "rows_written": 0,
+            "rows_written": len(upsert_rows),
         }
-
-    if live_table_columns:
-        upsert_rows = [
-            {
-                column_name: row_value
-                for column_name, row_value in row.items()
-                if column_name in live_table_columns
-            }
-            for row in upsert_rows
-        ]
-    columns = _collect_insert_columns(upsert_rows)
-    conflict_columns = (
-        _get_conflict_columns(available_columns=set(columns))
-        if live_table_columns
-        else FMCSA_CONFLICT_COLUMNS
-    )
-    temp_table_name = _build_temp_table_name(table_name)
-    upsert_sql = _build_fmcsa_bulk_merge_sql(
-        table_name=table_name,
-        temp_table_name=temp_table_name,
-        columns=columns,
-        conflict_columns=conflict_columns,
-    )
-
-    with closing(get_fmcsa_direct_postgres_connection()) as connection:
-        try:
-            with connection.cursor() as cursor:
-                _create_temp_staging_table(
-                    cursor=cursor,
-                    table_name=table_name,
-                    temp_table_name=temp_table_name,
-                )
-                _copy_rows_into_temp_table(
-                    cursor=cursor,
-                    temp_table_name=temp_table_name,
-                    rows=upsert_rows,
-                    columns=columns,
-                )
-                cursor.execute(upsert_sql)
-            connection.commit()
-        except Exception:
-            try:
-                connection.rollback()
-            finally:
-                try:
-                    _drop_temp_table_if_exists(
-                        connection=connection,
-                        temp_table_name=temp_table_name,
-                    )
-                except Exception:
-                    pass
-            raise
-
-    return {
-        "feed_name": source_context["feed_name"],
-        "table_name": table_name,
-        "feed_date": source_context["feed_date"],
-        "rows_received": len(rows),
-        "rows_written": len(upsert_rows),
-    }
+    except Exception:
+        phases["error"] = True
+        phases["total_ms"] = round((time.perf_counter() - t_total_start) * 1000, 1)
+        logger.info("fmcsa_batch_persist_phases", extra=phases)
+        raise
