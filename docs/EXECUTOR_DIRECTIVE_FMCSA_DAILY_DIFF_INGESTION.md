@@ -55,7 +55,7 @@ Column-mapping rule for all non-Revocation feeds:
 - `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` — naming, attribution, global-entity rules, additive schema rules
 - `docs/DATA_ENGINE_X_ARCHITECTURE.md` — known dedicated-write failure modes and why confirmed writes matter
 - `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` — confirms there are currently no in-repo cron definitions and shows the dedicated-table reliability context
-- `docs/SYSTEM_OVERVIEW.md` — existing FMCSA context and the note that FMCSA daily feeds currently live in a separate repo
+- `docs/SYSTEM_OVERVIEW.md` — secondary reference: existing FMCSA context and the note that FMCSA daily feeds currently live in a separate repo
 - `research.md` — dataset IDs and current FMCSA feed inventory notes
 - `app/providers/fmcsa.py` — existing FMCSA provider conventions and field-normalization style
 - `app/routers/internal.py` — existing internal batch/dedicated upsert endpoint patterns

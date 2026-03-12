@@ -1,19 +1,17 @@
 # Phase Directive: Per-Step Timeline Observability
 
-## Context
+**Context:** You are working on `data-engine-x-api`. Read `CLAUDE.md` before starting.
 
-You are working on `data-engine-x-api`.
+**Scope clarification on autonomy:** You are expected to make strong engineering decisions within the scope defined below. What you must not do is drift outside this scope, run deploy commands, or take actions not covered by this directive. Within scope, use your best judgment.
 
-Read these before coding:
-- `CLAUDE.md`
-- `docs/STRATEGIC_DIRECTIVE.md`
-- `docs/SYSTEM_OVERVIEW.md`
-
-Scope clarification on autonomy:
-- You are expected to make strong engineering decisions **within the scope below**.
-- Do not drift outside scope.
-- Do not deploy.
-- Do not run destructive commands.
+**Existing code to read:**
+- `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` — production timeline and entity state context
+- `docs/DATA_ENGINE_X_ARCHITECTURE.md` — runtime boundary and entity accumulation flow
+- `docs/STRATEGIC_DIRECTIVE.md` — doctrine and build rules
+- `docs/SYSTEM_OVERVIEW.md` — secondary reference: execution flow, entity timeline, fan-out model
+- `app/services/entity_timeline.py` — existing timeline recording
+- `app/routers/internal.py` — internal endpoint patterns
+- `trigger/src/tasks/run-pipeline.ts` — step execution and terminal state transitions
 
 ---
 
