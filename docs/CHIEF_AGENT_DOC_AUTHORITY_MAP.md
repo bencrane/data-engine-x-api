@@ -1,10 +1,10 @@
 # Chief Agent Doc Authority Map
 
-Use this file to understand which docs are authoritative, which are doctrine, and which are only reference or history.
+Use this as the first-click navigation file for Chief Agent onboarding.
 
-## Reading Order
+## First Read Path
 
-Read in this order before drafting directives or making architecture judgments:
+Read in this order before drafting directives, judging architecture, or treating any repo claim as current fact:
 
 1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
 2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
@@ -14,87 +14,78 @@ Read in this order before drafting directives or making architecture judgments:
 6. `docs/STRATEGIC_DIRECTIVE.md`
 7. `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` when the work touches entity schema or dedicated intelligence tables
 
+That is the canonical Chief Agent reading path. Do not start with older architecture snapshots, handoff notes, or individual executor directives.
+
 ## Authority Buckets
 
-### Production-Truth Reports
+### Production Truth
 
-These are the authoritative baseline for what is live, healthy, broken, or verified:
+These are the factual baseline for what is live, healthy, broken, or production-verified:
 
-- `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
-- `docs/DATA_ENGINE_X_ARCHITECTURE.md`
-- `CLAUDE.md`
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+3. `CLAUDE.md`
 
 If another doc conflicts with these, these win.
 
-### Normative Design / Doctrine
+### Doctrine
 
-These describe rules, principles, and intended design direction. They are not by themselves proof that production matches the doctrine:
+These define intended design, build rules, and schema principles. They are authoritative about doctrine, not proof that production already matches the doctrine:
 
 - `docs/STRATEGIC_DIRECTIVE.md`
 - `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md`
 
-### Chief Agent Onboarding / Workflow
+### Chief Agent Workflow
 
-These define the Chief Agent role, reading order, and directive-writing process:
+These define the Chief Agent role, reading order, and directive-writing standard:
 
+- `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
 - `docs/CHIEF_AGENT_DIRECTIVE.md`
 - `docs/WRITING_EXECUTOR_DIRECTIVES.md`
-- this file: `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
+- `docs/EXECUTOR_AGENT_DIRECTIVE.md` as a secondary aligned template reference
 
 ### Technical Reference
 
-Useful for broad codebase lookup, concepts, or older implementation context, but not for live-truth claims:
+Useful for broad lookup, system orientation, and codebase surface area after you understand the truth hierarchy:
 
 - `docs/SYSTEM_OVERVIEW.md`
 
 ### Historical / Lower-Authority Context
 
-These are intentionally retained for historical reasoning, prior handoff context, or older architecture thinking. They should not be used as current production truth:
+Retained to preserve older mental models, handoff context, and prior planning artifacts. Do not use these as current production truth:
 
 - `docs/ARCHITECTURE.md`
 - `docs/AGENT_HANDOFF.md`
 - `docs/COMPREHENSION.md`
 
-They remain useful because they preserve earlier mental models, design assumptions, and implementation-era context that may still explain why parts of the repo look the way they do.
-
 ## Directive Files
 
 `docs/EXECUTOR_DIRECTIVE_*.md` files are:
 
-- task scopes for executor agents
-- format/style calibration artifacts for future directives
-- evidence of what work was planned or requested
+- scope documents for executor work
+- acceptance-criteria artifacts
+- style and format calibration examples
+- evidence of what work was requested or planned
 
 They are not:
 
 - proof the work was executed
 - proof it was deployed
 - proof it is healthy in production
-- proof the described target architecture is now live
+- proof the target architecture described there is now live
 
-Treat directive files as intent and scope documents unless the production-truth reports independently confirm the outcome.
+Treat directive files as intent and scope unless the production-truth docs independently confirm the outcome.
 
 ## Current Workstream Picture
 
-A new Chief Agent should understand that the repo is not only about the early dedicated-workflow migration. Recent directive families materially include:
+Do not infer the repo's current picture from only the early dedicated-workflow migration directives.
+
+Recent documentation spans multiple workstream families, including:
 
 - dedicated workflow migration and fan-out routing
-- schema split and post-split verification work
-- production reliability investigation and deploy/runtime failure analysis
-- FMCSA ingestion and mapping work across multiple feed families
+- schema split work and post-split verification
+- production reliability, runtime, and deploy-sequencing investigations
+- FMCSA ingestion and mapping across multiple feed families
 - newer workflow families such as job-posting-led discovery
 
-Those workstreams are visible in repo docs and directives, but their presence does not prove production completion.
-
-## Files Updated By This Documentation Refresh
-
-This refresh updates the surrounding navigation and onboarding surface directly:
-
-- `CLAUDE.md`
-- `docs/CHIEF_AGENT_DIRECTIVE.md`
-- `docs/WRITING_EXECUTOR_DIRECTIVES.md`
-- `docs/STRATEGIC_DIRECTIVE.md`
-- `docs/SYSTEM_OVERVIEW.md`
-- `docs/ARCHITECTURE.md`
-- `docs/AGENT_HANDOFF.md`
-- `docs/COMPREHENSION.md`
+Those workstreams are present in the docs surface, but their presence does not prove production completion.

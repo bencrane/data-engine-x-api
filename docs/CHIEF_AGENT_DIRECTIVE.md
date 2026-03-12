@@ -16,18 +16,20 @@ Your job is not to implement the work yourself.
 
 Your deliverable is a directive document or a review of executor output.
 
-## Read First
+## First Read Path
 
-Use `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md` as the navigation map.
+Use `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md` as the first-click navigation map.
 
 Before drafting anything substantial, read in this order:
 
-1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
-2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
-3. `CLAUDE.md`
-4. `docs/WRITING_EXECUTOR_DIRECTIVES.md`
-5. `docs/STRATEGIC_DIRECTIVE.md`
-6. `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` when the work touches entity schema or dedicated intelligence tables
+1. `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
+2. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+3. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
+4. `CLAUDE.md`
+5. `docs/CHIEF_AGENT_DIRECTIVE.md`
+6. `docs/WRITING_EXECUTOR_DIRECTIVES.md`
+7. `docs/STRATEGIC_DIRECTIVE.md`
+8. `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` when the work touches entity schema or dedicated intelligence tables
 
 ## Truth Precedence
 
@@ -38,6 +40,18 @@ For factual, current, production-state truth, use these in this order:
 3. `CLAUDE.md`
 
 If another doc conflicts with them, those audited docs win.
+
+## Authority Boundary
+
+Keep these categories separate:
+
+- Production truth: what is live, verified, healthy, broken, or observed in production
+- Doctrine: intended design and build rules
+- Chief Agent workflow: how to read, scope, and write directives
+- Technical reference: broad lookup material that is useful after the truth hierarchy is internalized
+- Historical context: older snapshots retained to explain why the repo looks the way it does
+
+Do not collapse these into one story.
 
 ## Role
 
@@ -61,7 +75,7 @@ Directive files are not:
 - proof that the work is healthy in production
 - proof that the described target architecture is already live
 
-Use directive files to understand intent and workstream history. Use the audited reports for live truth.
+Use directive files to understand intent, workstream history, and style calibration. Use the audited production-truth docs for live truth.
 
 ## Architecture Reality To Keep In Mind
 
@@ -73,7 +87,7 @@ The live production system still centers on the audited `2026-03-10` reality:
 - several others are provably broken
 - production reliability is not clean
 
-At the same time, the repo and directive inventory reflect real in-flight architecture direction:
+At the same time, the repo and directive inventory reflect real in-flight architecture direction and current documentation surface:
 
 - dedicated workflow migration
 - fan-out router work
@@ -98,7 +112,7 @@ Do not collapse those into one story. "There is a directive for it" is not the s
 
 - Use the standard scope clarification on autonomy verbatim from `docs/WRITING_EXECUTOR_DIRECTIVES.md`.
 - Follow the template in `docs/WRITING_EXECUTOR_DIRECTIVES.md` exactly.
-- Reference `docs/EXECUTOR_DIRECTIVE_*.md` for style calibration only.
+- Reference `docs/EXECUTOR_DIRECTIVE_*.md` for style calibration and prior scope context only.
 - Save new directives as `docs/EXECUTOR_DIRECTIVE_*.md`.
 
 ## Current Workstream Picture
@@ -121,10 +135,12 @@ Treat those as the current documentation surface, not as verified deployment sta
 | `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` | primary production-truth audit |
 | `docs/DATA_ENGINE_X_ARCHITECTURE.md` | ground-truth architecture and known problems |
 | `CLAUDE.md` | project conventions and production summary |
+| `docs/CHIEF_AGENT_DIRECTIVE.md` | Chief Agent role boundary and operating posture |
 | `docs/WRITING_EXECUTOR_DIRECTIVES.md` | directive-writing spec |
 | `docs/STRATEGIC_DIRECTIVE.md` | doctrine and build rules, not live-status proof |
 | `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` | schema doctrine for entity/intelligence tables |
 | `docs/SYSTEM_OVERVIEW.md` | broad technical reference, lower authority than the audited reports |
+| `docs/ARCHITECTURE.md`, `docs/AGENT_HANDOFF.md`, `docs/COMPREHENSION.md` | historical context only |
 
 ## Deploy Protocol
 
