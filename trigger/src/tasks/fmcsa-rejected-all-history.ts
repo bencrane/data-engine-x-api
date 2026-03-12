@@ -7,6 +7,7 @@ import {
 
 export const fmcsaRejectedAllHistory = schedules.task({
   id: FMCSA_REJECTED_ALL_HISTORY_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "22 11 * * *",
     timezone: "America/New_York",

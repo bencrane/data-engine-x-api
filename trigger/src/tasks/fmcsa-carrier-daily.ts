@@ -7,6 +7,7 @@ import {
 
 export const fmcsaCarrierDaily = schedules.task({
   id: FMCSA_CARRIER_DAILY_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "40 10 * * *",
     timezone: "America/New_York",

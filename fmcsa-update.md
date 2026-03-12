@@ -10,7 +10,7 @@ We're building a pipeline to ingest FMCSA (Federal Motor Carrier Safety Administ
 - **Pipeline infrastructure**: The ingest script runs, connects to the database, and logs progress
 - **`oos` feed (Out of Service Orders)**: Successfully ingested 1000 rows - this dataset is a proper SODA API dataset
 - **Database schema**: Tables exist in `fmcsa` schema (census, daily_changes, authority_history, etc.)
-- **Environment**: `.env` with `HQ_DATABASE_URL` and Socrata credentials
+- **Environment**: Doppler-managed env vars for `HQ_DATABASE_URL` and Socrata credentials
 
 ### What Doesn't Work
 - **5 of 6 feeds return 403 Forbidden**: carrier, auth_hist, boc3, insurance, revocation
@@ -75,9 +75,9 @@ https://data.transportation.gov/api/views/{socrata_id}/files/{blob_id}?download=
 
 ## Files Modified
 
-- `app/config.py` - Added `env_file=".env"` to load env vars, added Socrata credentials
+- `app/config.py` - Added Socrata credentials to the app settings contract
 - `app/ingest/fmcsa_daily.py` - Added `row_limit=1000` for testing, added auth support
-- `.env` - Contains `HQ_DATABASE_URL`, `SOCRATA_KEY_ID`, `SOCRATA_KEY_SECRET`
+- Doppler config - Contains `HQ_DATABASE_URL`, `SOCRATA_KEY_ID`, `SOCRATA_KEY_SECRET`
 - `.gitignore` - Excludes `.env`, `.venv/`, `__pycache__/`
 
 ## Next Steps
@@ -95,7 +95,7 @@ https://data.transportation.gov/api/views/{socrata_id}/files/{blob_id}?download=
 
 ## Credentials
 
-Stored in `.env` (not committed to git):
+Stored in Doppler-managed environment variables:
 - `HQ_DATABASE_URL` - Supabase PostgreSQL connection string
 - `SOCRATA_KEY_ID` - data.transportation.gov API key ID
 - `SOCRATA_KEY_SECRET` - data.transportation.gov API key secret
@@ -104,7 +104,7 @@ Stored in `.env` (not committed to git):
 
 ```bash
 source .venv/bin/activate
-python scripts/run_fmcsa_ingest.py
+doppler run -- python scripts/run_fmcsa_ingest.py
 # Or for a specific date:
-python scripts/run_fmcsa_ingest.py --date 2026-02-18
+doppler run -- python scripts/run_fmcsa_ingest.py --date 2026-02-18
 ```

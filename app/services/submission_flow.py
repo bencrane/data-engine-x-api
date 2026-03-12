@@ -14,6 +14,25 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def build_client_automation_submission_metadata(
+    *,
+    config_id: str,
+    schedule_id: str,
+    schedule_run_id: str,
+    scheduler_invoked_at: str,
+    scheduler_task_id: str | None,
+    scheduled_for: str,
+) -> dict[str, Any]:
+    return {
+        "company_blueprint_config_id": config_id,
+        "company_blueprint_schedule_id": schedule_id,
+        "schedule_run_id": schedule_run_id,
+        "scheduler_invoked_at": scheduler_invoked_at,
+        "scheduler_task_id": scheduler_task_id,
+        "scheduled_for": scheduled_for,
+    }
+
+
 def _is_uuid(value: str) -> bool:
     try:
         UUID(value)

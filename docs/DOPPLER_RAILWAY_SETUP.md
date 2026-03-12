@@ -132,23 +132,15 @@ doppler run -- pytest
 doppler run -- npm test
 ```
 
-## .env.example
+## Required Secret Inventory
 
-Keep an `.env.example` file listing all required vars (without values) for documentation:
+Do not maintain local `.env` or `.env.example` files in this repo.
 
-```bash
-# Core
-DATABASE_URL=
-API_URL=
+The required secret inventory lives in two places:
+- `app/config.py` for the application contract
+- Doppler project configs for actual values
 
-# Auth
-JWT_SECRET=
-INTERNAL_API_KEY=
-
-# Provider keys
-SOME_API_KEY=
-ANOTHER_API_KEY=
-```
+For local development and scripts, use `doppler run -- ...` so secrets come from the active Doppler project/config at runtime.
 
 ## Troubleshooting
 

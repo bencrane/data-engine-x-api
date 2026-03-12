@@ -219,6 +219,7 @@ DOT_NUMBER, LEGAL_NAME, DBA_NAME, CARRIER_OPERATION, HM_FLAG, PC_FLAG, PHY_STREE
   - BASIC violation counts
 - Raw row preservation plan: preserve the full CSV row in `raw_source_row`.
 - Row identity / rerun strategy: `feed_date + source_feed_name + row_position`.
+- Contract clarification: the local repo dictionary for `SMS Input - Inspection` is valid and matches the live `rbkj-cgst` CSV export header exactly at 39 columns. This feed is not one of the stale/mismatched SMS doc cases.
 - Semantic caveat: this is a snapshot of current SMS input rows for the run date, not a deduplicated inspection master table.
 
 ### `SMS Input - Motor Carrier Census`

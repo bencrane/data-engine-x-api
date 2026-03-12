@@ -8,7 +8,7 @@ import {
 export const fmcsaSpecialStudiesDaily = schedules.task({
   id: FMCSA_SPECIAL_STUDIES_FEED.taskId,
   machine: "medium-2x",
-  maxDuration: 3600,
+  maxDuration: 43200,
   cron: {
     pattern: "46 12 * * *",
     timezone: "America/New_York",

@@ -7,6 +7,7 @@ import {
 
 export const fmcsaActPendInsurDaily = schedules.task({
   id: FMCSA_ACTPENDINSUR_DAILY_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "26 10 * * *",
     timezone: "America/New_York",

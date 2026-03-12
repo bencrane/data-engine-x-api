@@ -25,14 +25,14 @@ pip install -r requirements.txt
 # Install Trigger.dev dependencies
 cd trigger && npm install && cd ..
 
-# Copy environment template
-cp .env.example .env
+# Configure Doppler for this repo first
+# See docs/DOPPLER_RAILWAY_SETUP.md
 
 # Run API locally
-uvicorn app.main:app --reload
+doppler run -- uvicorn app.main:app --reload
 
 # Run Trigger.dev dev server (in another terminal)
-cd trigger && npm run dev
+cd trigger && doppler run -- npm run dev
 ```
 
 ## Architecture

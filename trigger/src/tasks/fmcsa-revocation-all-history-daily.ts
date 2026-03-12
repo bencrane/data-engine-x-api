@@ -8,7 +8,7 @@ import {
 export const fmcsaRevocationAllHistoryDaily = schedules.task({
   id: FMCSA_REVOCATION_ALL_HISTORY_CSV_FEED.taskId,
   machine: "medium-2x",
-  maxDuration: 3600,
+  maxDuration: 43200,
   cron: {
     pattern: "53 12 * * *",
     timezone: "America/New_York",

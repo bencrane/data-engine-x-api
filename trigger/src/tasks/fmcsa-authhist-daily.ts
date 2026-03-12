@@ -7,6 +7,7 @@ import {
 
 export const fmcsaAuthHistDaily = schedules.task({
   id: FMCSA_AUTHHIST_DAILY_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "5 10 * * *",
     timezone: "America/New_York",

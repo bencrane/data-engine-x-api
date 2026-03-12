@@ -30,6 +30,18 @@ def test_schema_aware_client_routes_ops_tables():
 
     assert result == {"schema": database.OPS_SCHEMA, "table": "submissions"}
 
+    config_result = client.table("company_blueprint_configs")
+    assert config_result == {"schema": database.OPS_SCHEMA, "table": "company_blueprint_configs"}
+
+    schedule_result = client.table("company_blueprint_schedules")
+    assert schedule_result == {"schema": database.OPS_SCHEMA, "table": "company_blueprint_schedules"}
+
+    schedule_run_result = client.table("company_blueprint_schedule_runs")
+    assert schedule_run_result == {"schema": database.OPS_SCHEMA, "table": "company_blueprint_schedule_runs"}
+
+    association_result = client.table("company_entity_associations")
+    assert association_result == {"schema": database.OPS_SCHEMA, "table": "company_entity_associations"}
+
 
 def test_schema_aware_client_routes_entities_tables():
     client = database.SchemaAwareSupabaseClient(_RawClientStub())

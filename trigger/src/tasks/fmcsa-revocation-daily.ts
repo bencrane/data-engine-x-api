@@ -7,6 +7,7 @@ import {
 
 export const fmcsaRevocationDaily = schedules.task({
   id: FMCSA_REVOCATION_DAILY_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "12 10 * * *",
     timezone: "America/New_York",

@@ -7,6 +7,7 @@ import {
 
 export const fmcsaSmsInputViolationDaily = schedules.task({
   id: FMCSA_SMS_INPUT_VIOLATION_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "50 11 * * *",
     timezone: "America/New_York",

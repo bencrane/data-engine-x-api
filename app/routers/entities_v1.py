@@ -12,6 +12,7 @@ from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.company_ads import query_company_ads
 from app.services.company_customers import query_company_customers
 from app.services.company_intel_briefings import query_company_intel_briefings
+from app.services.company_entity_associations import list_associated_entity_ids
 from app.services.entity_relationships import query_entity_relationships
 from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
@@ -188,7 +189,23 @@ async def list_company_entities(
             return error_response("Company-scoped user missing company_id", 403)
         if payload.company_id and payload.company_id != auth.company_id:
             return error_response("Forbidden company access", 403)
-        query = query.eq("company_id", auth.company_id)
+        associated_ids = list_associated_entity_ids(
+            org_id=auth.org_id,
+            company_id=auth.company_id,
+            entity_type="company",
+        )
+        if not associated_ids:
+            return DataEnvelope(
+                data={
+                    "items": [],
+                    "pagination": {
+                        "page": payload.page,
+                        "per_page": payload.per_page,
+                        "returned": 0,
+                    },
+                }
+            )
+        query = query.in_("entity_id", associated_ids)
     elif payload.company_id:
         query = query.eq("company_id", payload.company_id)
 
@@ -233,7 +250,23 @@ async def list_person_entities(
             return error_response("Company-scoped user missing company_id", 403)
         if payload.company_id and payload.company_id != auth.company_id:
             return error_response("Forbidden company access", 403)
-        query = query.eq("company_id", auth.company_id)
+        associated_ids = list_associated_entity_ids(
+            org_id=auth.org_id,
+            company_id=auth.company_id,
+            entity_type="person",
+        )
+        if not associated_ids:
+            return DataEnvelope(
+                data={
+                    "items": [],
+                    "pagination": {
+                        "page": payload.page,
+                        "per_page": payload.per_page,
+                        "returned": 0,
+                    },
+                }
+            )
+        query = query.in_("entity_id", associated_ids)
     elif payload.company_id:
         query = query.eq("company_id", payload.company_id)
 
@@ -295,7 +328,23 @@ async def list_job_posting_entities(
             return error_response("Company-scoped user missing company_id", 403)
         if payload.company_id and payload.company_id != auth.company_id:
             return error_response("Forbidden company access", 403)
-        query = query.eq("company_id", auth.company_id)
+        associated_ids = list_associated_entity_ids(
+            org_id=org_id,
+            company_id=auth.company_id,
+            entity_type="job",
+        )
+        if not associated_ids:
+            return DataEnvelope(
+                data={
+                    "items": [],
+                    "pagination": {
+                        "page": payload.page,
+                        "per_page": payload.per_page,
+                        "returned": 0,
+                    },
+                }
+            )
+        query = query.in_("entity_id", associated_ids)
     elif payload.company_id:
         query = query.eq("company_id", payload.company_id)
 

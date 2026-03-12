@@ -26,6 +26,10 @@ OPS_TABLES = frozenset(
         "step_results",
         "operation_runs",
         "operation_attempts",
+        "company_blueprint_configs",
+        "company_blueprint_schedules",
+        "company_blueprint_schedule_runs",
+        "company_entity_associations",
     }
 )
 

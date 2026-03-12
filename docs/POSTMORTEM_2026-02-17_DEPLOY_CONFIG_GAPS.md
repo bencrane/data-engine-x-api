@@ -28,7 +28,7 @@ The overseeing agent had full knowledge of the system's runtime dependencies —
 
 ## Root Cause
 
-The agent knew the full env var inventory (it exists in `.env.example`, `app/config.py`, and was documented in the Phase 4 deliverables). It failed to translate that knowledge into an actionable pre-deploy checklist at the moment the operator needed it — before step 1, not after step 7 failed.
+The agent knew the full env var inventory (it exists in `app/config.py`, the Doppler project config, and was documented in the Phase 4 deliverables). It failed to translate that knowledge into an actionable pre-deploy checklist at the moment the operator needed it — before step 1, not after step 7 failed.
 
 Secondary: the agent treated Trigger.dev dev vs prod secret keys as something the operator would know, rather than flagging the `tr_dev_` prefix as an obvious mismatch during the deploy steps.
 

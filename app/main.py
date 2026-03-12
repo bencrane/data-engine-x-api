@@ -14,7 +14,9 @@ from app.routers import (
     registry_v1,
     super_admin_api,
     super_admin_auth,
+    super_admin_client_automation,
     super_admin_flow,
+    tenant_client_automation,
     tenant_blueprints,
     tenant_companies,
     tenant_flow,
@@ -57,6 +59,11 @@ app.include_router(
     tags=["super-admin-flow"],
 )
 app.include_router(
+    super_admin_client_automation.router,
+    prefix="/api/super-admin/client-automation",
+    tags=["super-admin-client-automation"],
+)
+app.include_router(
     tenant_companies.router,
     prefix="/api/companies",
     tags=["tenant-companies"],
@@ -80,6 +87,11 @@ app.include_router(
     tenant_flow.router,
     prefix="/api",
     tags=["tenant-flow"],
+)
+app.include_router(
+    tenant_client_automation.router,
+    prefix="/api/client-automation",
+    tags=["tenant-client-automation"],
 )
 app.include_router(
     execute_v1.router,

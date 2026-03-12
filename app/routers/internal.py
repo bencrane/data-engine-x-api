@@ -51,6 +51,8 @@ from app.services.entity_state import (
     upsert_person_entity,
 )
 from app.services.entity_timeline import record_entity_event
+from app.services.company_blueprint_schedules import evaluate_and_execute_due_schedules
+from app.services.company_entity_associations import record_company_entity_association
 from app.services.submission_flow import create_fan_out_child_pipeline_runs
 
 router = APIRouter()
@@ -321,6 +323,12 @@ class InternalUpsertFmcsaDailyDiffBatchRequest(BaseModel):
     records: list[InternalFmcsaDailyDiffRow]
 
 
+class InternalEvaluateClientAutomationSchedulesRequest(BaseModel):
+    max_schedules: int = 100
+    scheduler_task_id: str | None = None
+    scheduler_invoked_at: str | None = None
+
+
 def _normalize_timeline_status(status_value: str | None) -> str:
     if status_value in {"found", "not_found", "failed", "skipped"}:
         return status_value
@@ -526,6 +534,21 @@ async def internal_record_step_timeline_event(
             "metadata": metadata,
         }
     )
+
+
+@router.post("/client-automation/schedules/evaluate-due", response_model=DataEnvelope)
+async def internal_evaluate_client_automation_schedules(
+    payload: InternalEvaluateClientAutomationSchedulesRequest,
+    _: None = Depends(require_internal_key),
+):
+    if payload.max_schedules <= 0:
+        return error_response("max_schedules must be greater than zero", 400)
+    result = await evaluate_and_execute_due_schedules(
+        max_schedules=payload.max_schedules,
+        scheduler_task_id=payload.scheduler_task_id,
+        scheduler_invoked_at=payload.scheduler_invoked_at,
+    )
+    return DataEnvelope(data=result)
 
 
 @router.post("/entity-state/check-freshness", response_model=DataEnvelope)
@@ -1428,5 +1451,20 @@ async def internal_upsert_entity_state(
             "pipeline_entity_type": payload.entity_type,
         },
     )
+
+    if run.get("company_id"):
+        record_company_entity_association(
+            org_id=run["org_id"],
+            company_id=run["company_id"],
+            entity_type=payload.entity_type,
+            entity_id=upserted["entity_id"],
+            source_submission_id=run.get("submission_id"),
+            source_pipeline_run_id=run["id"],
+            source_operation_id=payload.last_operation_id or upserted.get("last_operation_id"),
+            metadata={
+                "association_source": "internal.entity-state.upsert",
+                "pipeline_entity_type": payload.entity_type,
+            },
+        )
 
     return DataEnvelope(data=upserted)

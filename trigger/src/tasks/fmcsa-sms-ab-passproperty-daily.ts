@@ -7,6 +7,7 @@ import {
 
 export const fmcsaSmsAbPassPropertyDaily = schedules.task({
   id: FMCSA_SMS_AB_PASSPROPERTY_FEED.taskId,
+  maxDuration: 43200,
   cron: {
     pattern: "36 11 * * *",
     timezone: "America/New_York",

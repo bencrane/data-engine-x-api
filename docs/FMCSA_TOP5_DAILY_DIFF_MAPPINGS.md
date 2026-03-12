@@ -15,7 +15,8 @@ This document is the contract lock for the five FMCSA daily diff feeds in scope:
 - None of these tables should carry `org_id` or `company_id`.
 - None of these tables should block ingestion on linkage to `company_entities`.
 - Each table keeps typed business columns plus shared ingestion/lineage columns:
-  - `record_fingerprint TEXT NOT NULL UNIQUE`
+  - `feed_date DATE NOT NULL`
+  - `row_position INTEGER NOT NULL`
   - `source_provider TEXT NOT NULL` with value `fmcsa_open_data`
   - `source_feed_name TEXT NOT NULL`
   - `source_download_url TEXT NOT NULL`
@@ -25,14 +26,11 @@ This document is the contract lock for the five FMCSA daily diff feeds in scope:
   - `source_schedule_id TEXT`
   - `source_run_metadata JSONB NOT NULL`
   - `raw_source_row JSONB NOT NULL`
-  - `first_observed_at TIMESTAMPTZ NOT NULL`
-  - `last_observed_at TIMESTAMPTZ NOT NULL`
   - `created_at TIMESTAMPTZ NOT NULL`
   - `updated_at TIMESTAMPTZ NOT NULL`
-- `first_observed_at` is set when a canonical record first lands and is never changed by reruns.
-- `last_observed_at` is updated every time the same canonical record fingerprint is re-seen.
+- Each table enforces `UNIQUE(feed_date, row_position)` to prevent double-ingesting the same day's file while still storing the same business row again on later feed dates.
 - `raw_source_row` preserves both the ordered raw values and the keyed source-field mapping for the row, along with the source row number.
-- Dedup/idempotency is record-level, not entity-level. We do not collapse distinct historical/event rows into snapshots.
+- Ingestion stores exactly what the worker saw in that day's file. Change detection happens downstream by comparing rows across `feed_date` values.
 - Nullable linkage to existing `company_entities` is explicitly deferred. The current `company_entities` model is not a global FMCSA carrier master, so adding nullable tenant-shaped foreign keys now would create misleading semantics.
 
 ## Feed 1: AuthHist
@@ -74,14 +72,11 @@ Raw payload and source metadata preservation:
 - Use the shared lineage columns above.
 - `raw_source_row` stores the original 9 values plus the keyed field map.
 
-Dedup/idempotency key:
+Dedup/idempotency behavior:
 
-- `record_fingerprint = sha256(docket_number, usdot_number, sub_number, operating_authority_type, original_authority_action_description, original_authority_action_served_date, final_authority_action_description, final_authority_decision_date, final_authority_served_date)`
-
-Observed-at behavior:
-
-- First sighting of the exact history row sets both `first_observed_at` and `last_observed_at`.
-- Reruns of the same row only advance `last_observed_at`.
+- No business-row deduplication at ingestion time.
+- The same authority-history row can appear on multiple `feed_date` values and will be stored once per day.
+- Same-day reruns upsert on `(feed_date, row_position)`.
 
 Dataset scope:
 
@@ -131,14 +126,11 @@ Raw payload and source metadata preservation:
 - Use the shared lineage columns above.
 - `raw_source_row` stores the original 6 values plus the keyed field map.
 
-Dedup/idempotency key:
+Dedup/idempotency behavior:
 
-- `record_fingerprint = sha256(docket_number, usdot_number, operating_authority_registration_type, serve_date, revocation_type, effective_date)`
-
-Observed-at behavior:
-
-- First sighting sets both observation timestamps.
-- Repeat sightings only advance `last_observed_at`.
+- No business-row deduplication at ingestion time.
+- The same revocation row can exist on Monday and Tuesday as two rows with different `feed_date` values.
+- Same-day reruns upsert on `(feed_date, row_position)`.
 
 Dataset scope:
 
@@ -196,16 +188,11 @@ Raw payload and source metadata preservation:
 - Use the shared lineage columns above.
 - `raw_source_row` stores the original 9 values plus the keyed field map.
 
-Dedup/idempotency key:
+Dedup/idempotency behavior:
 
-- `record_fingerprint = sha256(full normalized 9-field source row + is_removal_signal)`
-- For non-removal rows this behaves like a full-policy row key.
-- For blank daily-diff removal rows this preserves the FMCSA deletion signal even though the feed does not identify the exact removed policy.
-
-Observed-at behavior:
-
-- Policy rows preserve their original `first_observed_at` and advance `last_observed_at` on rerun.
-- Removal-signal rows behave the same way at the signal-row level.
+- No business-row deduplication at ingestion time.
+- Repeated appearances of the same policy row across feed dates are stored once per day.
+- Same-day reruns upsert on `(feed_date, row_position)`.
 
 Dataset scope:
 
@@ -267,14 +254,11 @@ Raw payload and source metadata preservation:
 - Use the shared lineage columns above.
 - `raw_source_row` stores the original 11 values plus the keyed field map.
 
-Dedup/idempotency key:
+Dedup/idempotency behavior:
 
-- `record_fingerprint = sha256(docket_number, usdot_number, form_code, insurance_type_description, insurance_company_name, policy_number, posted_date, bipd_underlying_limit_thousands_usd, bipd_maximum_limit_thousands_usd, effective_date, cancel_effective_date)`
-
-Observed-at behavior:
-
-- First sighting sets both observation timestamps.
-- Re-seeing the exact filing row only advances `last_observed_at`.
+- No business-row deduplication at ingestion time.
+- The same filing row can appear on multiple `feed_date` values and is stored once per day.
+- Same-day reruns upsert on `(feed_date, row_position)`.
 
 Dataset scope:
 
@@ -346,14 +330,11 @@ Raw payload and source metadata preservation:
 - Use the shared lineage columns above.
 - `raw_source_row` stores the original 17 values plus the keyed field map.
 
-Dedup/idempotency key:
+Dedup/idempotency behavior:
 
-- `record_fingerprint = sha256(docket_number, usdot_number, form_code, cancellation_method, cancellation_form_code, insurance_type_indicator, insurance_type_description, policy_number, minimum_coverage_amount_thousands_usd, insurance_class_code, effective_date, bipd_underlying_limit_amount_thousands_usd, bipd_max_coverage_amount_thousands_usd, cancel_effective_date, specific_cancellation_method, insurance_company_branch, insurance_company_name)`
-
-Observed-at behavior:
-
-- First sighting sets both observation timestamps.
-- Re-seeing the exact historical row only advances `last_observed_at`.
+- No business-row deduplication at ingestion time.
+- The same historical policy row can appear on multiple `feed_date` values and is stored once per day.
+- Same-day reruns upsert on `(feed_date, row_position)`.
 
 Dataset scope:
 
