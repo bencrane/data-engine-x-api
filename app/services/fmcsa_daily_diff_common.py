@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import closing
 from functools import lru_cache
 from hashlib import sha256
 import json
@@ -12,11 +11,16 @@ from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any, TypedDict
 
-from psycopg import connect
+import threading
+
+from psycopg_pool import ConnectionPool
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+_fmcsa_pool: ConnectionPool | None = None
+_fmcsa_pool_lock = threading.Lock()
 
 FMCSA_SOURCE_PROVIDER = "fmcsa_open_data"
 FMCSA_ENTITIES_SCHEMA = "entities"
@@ -62,9 +66,25 @@ class FmcsaSourceContext(TypedDict):
     source_run_metadata: dict[str, Any]
 
 
+def _get_fmcsa_connection_pool() -> ConnectionPool:
+    global _fmcsa_pool
+    if _fmcsa_pool is not None:
+        return _fmcsa_pool
+    with _fmcsa_pool_lock:
+        if _fmcsa_pool is not None:
+            return _fmcsa_pool
+        settings = get_settings()
+        _fmcsa_pool = ConnectionPool(
+            conninfo=settings.database_url,
+            min_size=1,
+            max_size=4,
+            timeout=30.0,
+        )
+        return _fmcsa_pool
+
+
 def get_fmcsa_direct_postgres_connection():
-    settings = get_settings()
-    return connect(settings.database_url)
+    return _get_fmcsa_connection_pool().getconn()
 
 
 def utc_now_iso() -> str:
@@ -197,7 +217,7 @@ def _build_record_fingerprint(
 
 @lru_cache(maxsize=None)
 def _get_table_columns(table_name: str) -> tuple[str, ...]:
-    with get_fmcsa_direct_postgres_connection() as connection:
+    with _get_fmcsa_connection_pool().connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -441,8 +461,9 @@ def upsert_fmcsa_daily_diff_rows(
             conflict_columns=conflict_columns,
         )
 
+        pool = _get_fmcsa_connection_pool()
         t_conn_start = time.perf_counter()
-        with closing(get_fmcsa_direct_postgres_connection()) as connection:
+        with pool.connection() as connection:
             phases["connection_acquire_ms"] = round((time.perf_counter() - t_conn_start) * 1000, 1)
             try:
                 with connection.cursor() as cursor:
