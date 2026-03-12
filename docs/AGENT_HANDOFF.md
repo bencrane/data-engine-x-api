@@ -7,10 +7,11 @@ Current HEAD at handoff update: `26bcbf6` (local `main`)
 
 ## Status
 
-- Status: historical handoff note
-- Authority: lower than the audited production-truth docs
+- Status: historical / lower-authority handoff note
+- Authority bucket: historical context
+- Read this only after: `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`, the audited truth docs, and `CLAUDE.md`
 - Use this for: historical operator context and older repo-state notes
-- Do not use this for: current production truth, current roadmap priority, or deployment verification
+- Do not use this for: onboarding first read, current production truth, current roadmap priority, or deployment verification
 
 This is a historical handoff note from `2026-02-17`.
 
@@ -97,7 +98,7 @@ This section is historical and no longer accurate as a current-state summary.
 - Trigger.dev <-> FastAPI internal callback path (`/api/internal/*`)
 - Doppler-based secrets management (`doppler run` in `Dockerfile`, `DOPPLER_TOKEN` on Railway)
 
-## 6) Recommended Next Steps
+## 6) Historical Next-Step Ideas
 
 1. Add `person.enrich.profile` operation.
 2. Add `max_results` and `provider_overrides` support to `person.search`.

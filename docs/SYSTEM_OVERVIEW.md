@@ -4,14 +4,17 @@ Technical reference snapshot originally written on 2026-02-22 and updated with p
 
 ## Status
 
-- Status: active technical reference
-- Authority: lower than the audited production-truth docs
+- Status: active lower-authority technical reference
+- Authority bucket: technical reference
+- Read this only after: `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`, `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`
 - Use this for: broad system lookup, feature/reference orientation, and codebase surface area
-- Do not use this for: proving deployment status, proving production health, or resolving contradictions with audited reports
+- Do not use this for: onboarding first read, proving deployment status, proving production health, or resolving contradictions with audited reports
 
 This file is useful, but it is **not** the sole source of truth for live production state.
 
 It is a broad technical reference, not a direct production audit. If you read it as if every built capability is working cleanly in production, you will be misled.
+
+It is also not the repo's front-door architecture entrypoint for Chief Agents. The audited reports and `CLAUDE.md` come first.
 
 For reading order across the Chief Agent docs, start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
 

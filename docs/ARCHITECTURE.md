@@ -2,12 +2,15 @@
 
 ## Status
 
-- Status: historical architecture snapshot
-- Authority: lower than `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`
+- Status: historical / lower-authority architecture snapshot
+- Authority bucket: historical context
+- Read this only after: `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`, the audited truth docs, and `CLAUDE.md`
 - Use this for: older runtime-model context and broad implementation reference
-- Do not use this for: current production-truth claims or deployment verification
+- Do not use this for: onboarding first read, current production-truth claims, or deployment verification
 
 This file predates the audited architecture documents and is retained for context. If it conflicts with the audited reports, the audited reports win.
+
+Skip this file unless you specifically need legacy architectural framing.
 
 For reading order across the Chief Agent docs, start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
 

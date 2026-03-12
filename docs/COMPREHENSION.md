@@ -2,14 +2,17 @@
 
 ## Status
 
-- Status: historical comprehension and planning note
-- Authority: lower than the audited production-truth docs
+- Status: historical / lower-authority comprehension and planning note
+- Authority bucket: historical context
+- Read this only after: `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`, the audited truth docs, and `CLAUDE.md`
 - Use this for: older architecture reasoning, schema-planning context, and design-history context
-- Do not use this for: current production truth, current schema reality, or deployment verification
+- Do not use this for: onboarding first read, current production truth, current schema reality, or deployment verification
 
 This is an older comprehension note, not a current production-state document.
 
 It should be treated as historical architecture thinking and schema planning context, not as a factual description of what is true in production right now.
+
+Much of the document below preserves early planning material and proposed structures that have since been superseded, partially implemented, or contradicted by the audited reports.
 
 For reading order across the Chief Agent docs, start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
 
