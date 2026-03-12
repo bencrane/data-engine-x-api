@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.middleware.gzip_request import GzipRequestMiddleware
 from app.routers import (
     alumni_gtm,
     auth,
@@ -29,6 +30,9 @@ app = FastAPI(
     description="Multi-tenant data processing engine",
     version="0.1.0",
 )
+
+
+app.add_middleware(GzipRequestMiddleware)
 
 
 @app.exception_handler(HTTPException)
