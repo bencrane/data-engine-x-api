@@ -488,7 +488,7 @@ async function parseAndPersistStreamedCsv(
   const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
-  const batchSize = payload.feed.writeBatchSize ?? 500;
+  const batchSize = payload.feed.writeBatchSize ?? 5000;
   let headerValidated = false;
   let rowNumber = 0;
   let rowsDownloaded = 0;
@@ -1456,7 +1456,7 @@ export const FMCSA_COMPANY_CENSUS_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   headerRow: FMCSA_COMPANY_CENSUS_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
   useStreamingParser: true,
-  writeBatchSize: 125,
+  writeBatchSize: 10000,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 
@@ -1471,7 +1471,7 @@ export const FMCSA_VEHICLE_INSPECTION_FILE_FEED: FmcsaDailyDiffFeedConfig = {
   headerRow: FMCSA_VEHICLE_INSPECTION_FILE_SOURCE_FIELDS,
   expectedContentTypes: ["text/csv"],
   useStreamingParser: true,
-  writeBatchSize: 250,
+  writeBatchSize: 10000,
   ...FMCSA_LONG_RUNNING_STREAM_TIMEOUTS,
 };
 

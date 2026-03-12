@@ -470,7 +470,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
       internalUpsertPath: feed.internalUpsertPath,
       downloadTimeoutMs: __testables.resolveDownloadTimeoutMs(feed),
       persistenceTimeoutMs: __testables.resolvePersistenceTimeoutMs(feed) ?? null,
-      writeBatchSize: feed.writeBatchSize ?? 500,
+      writeBatchSize: feed.writeBatchSize ?? 5000,
     })),
     [
       {
@@ -480,7 +480,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/commercial-vehicle-crashes/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 500,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Carrier - All With History",
@@ -489,7 +489,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/carrier-registrations/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 500,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Inspections Per Unit",
@@ -543,7 +543,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/vehicle-inspection-citations/upsert-batch",
         downloadTimeoutMs: 300_000,
         persistenceTimeoutMs: 120_000,
-        writeBatchSize: 500,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Vehicle Inspections and Violations",
@@ -552,7 +552,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/carrier-inspection-violations/upsert-batch",
         downloadTimeoutMs: 300_000,
         persistenceTimeoutMs: 120_000,
-        writeBatchSize: 500,
+        writeBatchSize: 5000,
       },
       {
         feedName: "Company Census File",
@@ -561,7 +561,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/motor-carrier-census-records/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 125,
+        writeBatchSize: 10000,
       },
       {
         feedName: "Vehicle Inspection File",
@@ -570,7 +570,7 @@ test("remaining CSV export feed configs lock widths, timeout overrides, and batc
         internalUpsertPath: "/api/internal/carrier-inspections/upsert-batch",
         downloadTimeoutMs: 3_300_000,
         persistenceTimeoutMs: 300_000,
-        writeBatchSize: 250,
+        writeBatchSize: 10000,
       },
     ],
   );

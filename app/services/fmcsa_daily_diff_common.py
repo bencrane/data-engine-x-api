@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from contextlib import closing
 from functools import lru_cache
 from hashlib import sha256
+import json
 import re
+from uuid import uuid4
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, TypedDict
 
 from psycopg import connect
-from psycopg.types.json import Jsonb
 
 from app.config import get_settings
 
@@ -23,6 +25,7 @@ FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS = frozenset(
         "first_observed_at",
     }
 )
+FMCSA_JSONB_COLUMNS = frozenset({"raw_source_row", "source_run_metadata"})
 FMCSA_SNAPSHOT_HISTORY_TABLES = frozenset(
     {
         "operating_authority_histories",
@@ -33,6 +36,9 @@ FMCSA_SNAPSHOT_HISTORY_TABLES = frozenset(
     }
 )
 _SQL_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_COPY_NULL_TOKEN = r"\N"
+_COPY_DELIMITER = "\t"
+_COPY_ROW_DELIMITER = "\n"
 
 
 class FmcsaDailyDiffRow(TypedDict):
@@ -223,36 +229,15 @@ def _collect_insert_columns(rows: list[dict[str, Any]]) -> list[str]:
     return columns
 
 
-def _adapt_postgres_value(value: Any) -> Any:
-    if isinstance(value, (dict, list)):
-        return Jsonb(value)
-    return value
-
-
-def _normalize_postgres_rows(
-    *,
-    rows: list[dict[str, Any]],
-    columns: list[str],
-) -> list[dict[str, Any]]:
-    normalized_rows: list[dict[str, Any]] = []
-    for row in rows:
-        normalized_rows.append(
-            {
-                column_name: _adapt_postgres_value(row.get(column_name))
-                for column_name in columns
-            }
-        )
-    return normalized_rows
-
-
-def _build_fmcsa_bulk_upsert_sql(
+def _build_fmcsa_bulk_merge_sql(
     *,
     table_name: str,
+    temp_table_name: str,
     columns: list[str],
     conflict_columns: tuple[str, ...],
 ) -> str:
     quoted_columns = ", ".join(_quote_identifier(column_name) for column_name in columns)
-    placeholders = ", ".join(f"%({column_name})s" for column_name in columns)
+    projected_columns = ", ".join(_quote_identifier(column_name) for column_name in columns)
     quoted_conflict_columns = ", ".join(_quote_identifier(column_name) for column_name in conflict_columns)
 
     update_assignments = [
@@ -265,11 +250,93 @@ def _build_fmcsa_bulk_upsert_sql(
         raise ValueError(f"FMCSA bulk upsert for {table_name} has no mutable columns")
 
     return (
-        f"INSERT INTO { _quote_qualified_identifier(FMCSA_ENTITIES_SCHEMA, table_name) } "
-        f"({quoted_columns}) VALUES ({placeholders}) "
+        f"INSERT INTO {_quote_qualified_identifier(FMCSA_ENTITIES_SCHEMA, table_name)} "
+        f"({quoted_columns}) SELECT {projected_columns} "
+        f"FROM {_quote_identifier(temp_table_name)} "
         f"ON CONFLICT ({quoted_conflict_columns}) DO UPDATE SET "
         f"{', '.join(update_assignments)}"
     )
+
+
+def _build_temp_table_name(table_name: str) -> str:
+    sanitized_table_name = re.sub(r"[^A-Za-z0-9_]", "_", table_name)
+    suffix = uuid4().hex[:8]
+    max_table_name_length = 63 - len("tmp_fmcsa__") - len(suffix)
+    truncated_table_name = sanitized_table_name[:max_table_name_length]
+    return f"tmp_fmcsa_{truncated_table_name}_{suffix}"
+
+
+def _create_temp_staging_table(*, cursor: Any, table_name: str, temp_table_name: str) -> None:
+    cursor.execute(
+        f"CREATE TEMP TABLE {_quote_identifier(temp_table_name)} "
+        f"(LIKE {_quote_qualified_identifier(FMCSA_ENTITIES_SCHEMA, table_name)} INCLUDING DEFAULTS) "
+        "ON COMMIT DROP"
+    )
+
+
+def _serialize_jsonb_copy_value(value: dict[str, Any] | list[Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _escape_copy_text(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\t", "\\t")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+
+
+def _serialize_copy_value(*, column_name: str, value: Any) -> str:
+    if value is None:
+        return _COPY_NULL_TOKEN
+    if column_name in FMCSA_JSONB_COLUMNS and isinstance(value, (dict, list)):
+        text_value = _serialize_jsonb_copy_value(value)
+    elif isinstance(value, bool):
+        text_value = "t" if value else "f"
+    elif isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        text_value = value.astimezone(timezone.utc).isoformat()
+    elif isinstance(value, date):
+        text_value = value.isoformat()
+    else:
+        text_value = str(value)
+    return _escape_copy_text(text_value)
+
+
+def _build_copy_payload(*, rows: list[dict[str, Any]], columns: list[str]) -> str:
+    serialized_rows: list[str] = []
+    for row in rows:
+        serialized_rows.append(
+            _COPY_DELIMITER.join(
+                _serialize_copy_value(column_name=column_name, value=row.get(column_name))
+                for column_name in columns
+            )
+        )
+    return f"{_COPY_ROW_DELIMITER.join(serialized_rows)}{_COPY_ROW_DELIMITER}"
+
+
+def _copy_rows_into_temp_table(
+    *,
+    cursor: Any,
+    temp_table_name: str,
+    rows: list[dict[str, Any]],
+    columns: list[str],
+) -> None:
+    quoted_columns = ", ".join(_quote_identifier(column_name) for column_name in columns)
+    copy_sql = (
+        f"COPY {_quote_identifier(temp_table_name)} ({quoted_columns}) "
+        "FROM STDIN WITH (FORMAT text, DELIMITER E'\\t', NULL '\\N')"
+    )
+    copy_payload = _build_copy_payload(rows=rows, columns=columns)
+    with cursor.copy(copy_sql) as copy:
+        copy.write(copy_payload)
+
+
+def _drop_temp_table_if_exists(*, connection: Any, temp_table_name: str) -> None:
+    with connection.cursor() as cleanup_cursor:
+        cleanup_cursor.execute(f'DROP TABLE IF EXISTS {_quote_identifier(temp_table_name)}')
 
 
 def upsert_fmcsa_daily_diff_rows(
@@ -347,16 +414,42 @@ def upsert_fmcsa_daily_diff_rows(
         if live_table_columns
         else FMCSA_CONFLICT_COLUMNS
     )
-    postgres_rows = _normalize_postgres_rows(rows=upsert_rows, columns=columns)
-    upsert_sql = _build_fmcsa_bulk_upsert_sql(
+    temp_table_name = _build_temp_table_name(table_name)
+    upsert_sql = _build_fmcsa_bulk_merge_sql(
         table_name=table_name,
+        temp_table_name=temp_table_name,
         columns=columns,
         conflict_columns=conflict_columns,
     )
 
-    with get_fmcsa_direct_postgres_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.executemany(upsert_sql, postgres_rows)
+    with closing(get_fmcsa_direct_postgres_connection()) as connection:
+        try:
+            with connection.cursor() as cursor:
+                _create_temp_staging_table(
+                    cursor=cursor,
+                    table_name=table_name,
+                    temp_table_name=temp_table_name,
+                )
+                _copy_rows_into_temp_table(
+                    cursor=cursor,
+                    temp_table_name=temp_table_name,
+                    rows=upsert_rows,
+                    columns=columns,
+                )
+                cursor.execute(upsert_sql)
+            connection.commit()
+        except Exception:
+            try:
+                connection.rollback()
+            finally:
+                try:
+                    _drop_temp_table_if_exists(
+                        connection=connection,
+                        temp_table_name=temp_table_name,
+                    )
+                except Exception:
+                    pass
+            raise
 
     return {
         "feed_name": source_context["feed_name"],

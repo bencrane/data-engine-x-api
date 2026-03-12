@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import os
 import re
 
 import pytest
+from psycopg import connect
+from psycopg.rows import dict_row
 
 from app.routers import internal
 from app.services.carrier_registrations import upsert_carrier_registrations
@@ -46,8 +51,9 @@ def _unwrap_postgres_value(value):
 
 
 class _FakeDirectPostgresCursor:
-    def __init__(self, database: _FakeDirectPostgresDatabase):
-        self.database = database
+    def __init__(self, connection: _FakeDirectPostgresConnection):
+        self.connection = connection
+        self.database = connection.database
         self.rowcount = 0
 
     def __enter__(self):
@@ -56,67 +62,93 @@ class _FakeDirectPostgresCursor:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def execute(self, query: str, params: tuple[str, str]):
-        if "information_schema.columns" not in query:
-            raise AssertionError(f"Unsupported execute query in fake cursor: {query}")
-        schema_name, table_name = params
-        assert schema_name == "entities"
-        self._last_fetchall = [
-            (column_name,)
-            for column_name in self.database.table_columns.get(
-                table_name, _default_table_columns(table_name)
+    def execute(self, query: str, params: tuple[str, str] | None = None):
+        if "information_schema.columns" in query:
+            assert params is not None
+            schema_name, table_name = params
+            assert schema_name == "entities"
+            self._last_fetchall = [
+                (column_name,)
+                for column_name in self.database.table_columns.get(
+                    table_name, _default_table_columns(table_name)
+                )
+            ]
+            return self
+
+        create_temp_match = re.search(
+            r'CREATE TEMP TABLE "([^"]+)" \(LIKE "entities"\."([^"]+)" INCLUDING DEFAULTS\) ON COMMIT DROP',
+            query,
+        )
+        if create_temp_match is not None:
+            temp_table_name = create_temp_match.group(1)
+            self.connection.temp_tables[temp_table_name] = []
+            return self
+
+        merge_match = re.search(
+            r'INSERT INTO "entities"\."([^"]+)" \(([^)]+)\) SELECT ([^;]+?) FROM "([^"]+)" ON CONFLICT \(([^)]+)\) DO UPDATE SET',
+            query,
+        )
+        if merge_match is not None:
+            table_name = merge_match.group(1)
+            column_names = tuple(
+                column_name.strip().strip('"')
+                for column_name in merge_match.group(2).split(",")
             )
-        ]
-        return self
+            temp_table_name = merge_match.group(4)
+            conflict_columns = tuple(
+                column_name.strip().strip('"')
+                for column_name in merge_match.group(5).split(",")
+            )
+            table = self.connection.working_tables.setdefault(table_name, {})
+            staged_rows = self.connection.temp_tables.get(temp_table_name, [])
+            self.rowcount = 0
+
+            for staged_row in staged_rows:
+                normalized = {
+                    key: deepcopy(staged_row.get(key))
+                    for key in column_names
+                }
+                identity = tuple(normalized[column_name] for column_name in conflict_columns)
+                existing = table.get(identity)
+                if existing is None:
+                    stored = {
+                        "id": f"{table_name}-{len(table) + 1}",
+                        "created_at": normalized.get("updated_at"),
+                        **normalized,
+                    }
+                else:
+                    stored = {
+                        **existing,
+                        **{
+                            key: value
+                            for key, value in normalized.items()
+                            if key not in fmcsa_daily_diff_common.FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS
+                        },
+                        "created_at": existing["created_at"],
+                    }
+                    for key in fmcsa_daily_diff_common.FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS:
+                        if key in existing:
+                            stored[key] = existing[key]
+                table[identity] = stored
+                self.rowcount += 1
+            return self
+
+        drop_temp_match = re.search(r'DROP TABLE IF EXISTS "([^"]+)"', query)
+        if drop_temp_match is not None:
+            self.connection.temp_tables.pop(drop_temp_match.group(1), None)
+            return self
+
+        raise AssertionError(f"Unsupported execute query in fake cursor: {query}")
 
     def fetchall(self):
         return getattr(self, "_last_fetchall", [])
-
-    def executemany(self, query: str, params_seq: list[dict]):
-        table_match = re.search(r'INSERT INTO "entities"\."([^"]+)"', query)
-        if table_match is None:
-            raise AssertionError(f"Could not parse target table from query: {query}")
-        table_name = table_match.group(1)
-        conflict_match = re.search(r"ON CONFLICT \(([^)]+)\)", query)
-        if conflict_match is None:
-            raise AssertionError(f"Could not parse conflict target from query: {query}")
-        conflict_columns = tuple(
-            column_name.strip().strip('"')
-            for column_name in conflict_match.group(1).split(",")
-        )
-        table = self.database.tables.setdefault(table_name, {})
-        self.rowcount = 0
-
-        for params in params_seq:
-            normalized = {key: _unwrap_postgres_value(value) for key, value in params.items()}
-            identity = tuple(normalized[column_name] for column_name in conflict_columns)
-            existing = table.get(identity)
-            if existing is None:
-                stored = {
-                    "id": f"{table_name}-{len(table) + 1}",
-                    "created_at": normalized.get("updated_at"),
-                    **normalized,
-                }
-            else:
-                stored = {
-                    **existing,
-                    **{
-                        key: value
-                        for key, value in normalized.items()
-                        if key not in fmcsa_daily_diff_common.FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS
-                    },
-                    "created_at": existing["created_at"],
-                }
-                for key in fmcsa_daily_diff_common.FMCSA_INSERT_ONLY_ON_CONFLICT_COLUMNS:
-                    if key in existing:
-                        stored[key] = existing[key]
-            table[identity] = stored
-            self.rowcount += 1
 
 
 class _FakeDirectPostgresConnection:
     def __init__(self, database: _FakeDirectPostgresDatabase):
         self.database = database
+        self.working_tables = deepcopy(database.tables)
+        self.temp_tables: dict[str, list[dict[str, object]]] = {}
 
     def __enter__(self):
         return self
@@ -124,8 +156,19 @@ class _FakeDirectPostgresConnection:
     def __exit__(self, exc_type, exc, tb):
         return False
 
+    def commit(self):
+        self.database.tables = deepcopy(self.working_tables)
+        self.temp_tables = {}
+
+    def rollback(self):
+        self.working_tables = deepcopy(self.database.tables)
+        self.temp_tables = {}
+
+    def close(self):
+        return None
+
     def cursor(self):
-        return _FakeDirectPostgresCursor(self.database)
+        return _FakeDirectPostgresCursor(self)
 
 
 @pytest.fixture
@@ -136,6 +179,20 @@ def fake_client(monkeypatch: pytest.MonkeyPatch) -> _FakeDirectPostgresDatabase:
         fmcsa_daily_diff_common,
         "get_fmcsa_direct_postgres_connection",
         lambda: _FakeDirectPostgresConnection(database),
+    )
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "_copy_rows_into_temp_table",
+        lambda *, cursor, temp_table_name, rows, columns: cursor.connection.temp_tables.__setitem__(
+            temp_table_name,
+            [
+                {
+                    column_name: deepcopy(_unwrap_postgres_value(row.get(column_name)))
+                    for column_name in columns
+                }
+                for row in rows
+            ],
+        ),
     )
     return database
 
@@ -158,6 +215,52 @@ def _source_context(
     }
 
 
+@pytest.fixture
+def fmcsa_copy_test_database_url() -> str:
+    database_url = os.getenv("FMCSA_COPY_TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("FMCSA_COPY_TEST_DATABASE_URL is not set")
+    return database_url
+
+
+@pytest.fixture
+def real_postgres(monkeypatch: pytest.MonkeyPatch, fmcsa_copy_test_database_url: str) -> str:
+    fmcsa_daily_diff_common._get_table_columns.cache_clear()
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "get_settings",
+        lambda: type("Settings", (), {"database_url": fmcsa_copy_test_database_url})(),
+    )
+    yield fmcsa_copy_test_database_url
+    fmcsa_daily_diff_common._get_table_columns.cache_clear()
+
+
+def _execute_sql(database_url: str, statements: list[str]) -> None:
+    with connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            for statement in statements:
+                cursor.execute(statement)
+        connection.commit()
+
+
+def _fetch_all_rows(database_url: str, query: str) -> list[dict]:
+    with connect(database_url, row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            return list(cursor.fetchall())
+
+
+def _setup_real_table(database_url: str, *, table_name: str, create_sql: str) -> None:
+    _execute_sql(
+        database_url,
+        [
+            "CREATE SCHEMA IF NOT EXISTS entities",
+            f'DROP TABLE IF EXISTS entities."{table_name}" CASCADE',
+            create_sql,
+        ],
+    )
+
+
 def test_get_fmcsa_direct_postgres_connection_uses_database_url(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -178,6 +281,44 @@ def test_get_fmcsa_direct_postgres_connection_uses_database_url(
 
     assert connection is not None
     assert captured["database_url"] == "postgresql://fmcsa:test@localhost:5432/app"
+
+
+def test_copy_payload_serialization_preserves_null_empty_and_special_characters():
+    payload = fmcsa_daily_diff_common._build_copy_payload(
+        rows=[
+            {
+                "text_value": "",
+                "nullable_value": None,
+                "raw_source_row": {
+                    "message": "tab\tline\nslash\\quote\"snowman \u2603",
+                    "empty": "",
+                },
+                "source_run_metadata": {"schedule": "alpha", "upcoming": ["2026-03-10T00:00:00Z"]},
+            }
+        ],
+        columns=["text_value", "nullable_value", "raw_source_row", "source_run_metadata"],
+    )
+
+    assert payload == (
+        "\t\\N\t"
+        '{"message":"tab\\\\tline\\\\nslash\\\\\\\\quote\\\\"snowman ☃","empty":""}'
+        "\t"
+        '{"schedule":"alpha","upcoming":["2026-03-10T00:00:00Z"]}'
+        "\n"
+    )
+
+
+def test_copy_value_serialization_uses_postgres_text_literals_for_scalars():
+    assert fmcsa_daily_diff_common._serialize_copy_value(column_name="flag", value=True) == "t"
+    assert fmcsa_daily_diff_common._serialize_copy_value(column_name="flag", value=False) == "f"
+    assert fmcsa_daily_diff_common._serialize_copy_value(column_name="amount", value=1250) == "1250"
+    assert (
+        fmcsa_daily_diff_common._serialize_copy_value(
+            column_name="observed_at",
+            value=datetime(2026, 3, 10, 15, 30, tzinfo=timezone.utc),
+        )
+        == "2026-03-10T15:30:00+00:00"
+    )
 
 
 def test_top5_tables_fall_back_to_live_legacy_columns_when_snapshot_columns_absent(
@@ -2095,9 +2236,625 @@ def test_upsert_insurance_policy_history_events_persists_typed_row(fake_client: 
     assert stored["cancel_effective_date"] == "1995-09-01"
 
 
+def test_real_postgres_carrier_registrations_copy_round_trips_jsonb_and_special_characters(
+    real_postgres: str,
+):
+    _setup_real_table(
+        real_postgres,
+        table_name="carrier_registrations",
+        create_sql="""
+        CREATE TABLE entities.carrier_registrations (
+            feed_date date NOT NULL,
+            source_feed_name text NOT NULL,
+            row_position integer NOT NULL,
+            docket_number text,
+            bipd_required_thousands_usd integer,
+            business_address_colonia text,
+            business_address_city text,
+            source_provider text,
+            source_download_url text,
+            source_file_variant text,
+            source_observed_at timestamptz,
+            source_task_id text,
+            source_schedule_id text,
+            source_run_metadata jsonb,
+            raw_source_row jsonb,
+            updated_at timestamptz,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            UNIQUE (feed_date, source_feed_name, row_position)
+        )
+        """,
+    )
+
+    result = upsert_carrier_registrations(
+        source_context=_source_context(feed_name="Carrier", observed_at="2026-03-10T15:00:00Z"),
+        rows=[
+            {
+                "row_number": 4,
+                "raw_values": [],
+                "raw_fields": {
+                    "Docket Number": "MC444444",
+                    "USDOT Number": "12345678",
+                    "MX Type": "",
+                    "RFC Number": "",
+                    "Common Authority": "A",
+                    "Contract Authority": "N",
+                    "Broker Authority": "I",
+                    "Pending Common Authority": "N",
+                    "Pending Contract Authority": "N",
+                    "Pending Broker Authority": "Y",
+                    "Common Authority Revocation": "N",
+                    "Contract Authority Revocation": "N",
+                    "Broker Authority Revocation": "Y",
+                    "Property": "Y",
+                    "Passenger": "N",
+                    "Household Goods": "N",
+                    "Private Check": "N",
+                    "Enterprise Check": "Y",
+                    "BIPD Required": "00750",
+                    "Cargo Required": "N",
+                    "Bond/Surety Required": "Y",
+                    "BIPD on File": "01000",
+                    "Cargo on File": "N",
+                    "Bond/Surety on File": "Y",
+                    "Address Status": "Y",
+                    "DBA Name": "ACME LOGISTICS",
+                    "Legal Name": "ACME LOGISTICS LLC",
+                    "Business Address - PO Box/Street": "123 MAIN ST",
+                    "Business Address - Colonia": 'Sector 7\tNorth\nLine\\\\Two "quoted" ☃',
+                    "Business Address - City": "AUSTIN",
+                    "Business Address - State Code": "TX",
+                    "Business Address - Country Code": "US",
+                    "Business Address - Zip Code": "78701",
+                    "Business Address - Telephone Number": "5125550101",
+                    "Business Address - Fax Number": "",
+                    "Mailing Address - PO Box/Street": "PO BOX 5",
+                    "Mailing Address - Colonia": "",
+                    "Mailing Address - City": "AUSTIN",
+                    "Mailing Address - State Code": "TX",
+                    "Mailing Address - Country Code": "US",
+                    "Mailing Address - Zip Code": "78702",
+                    "Mailing Address - Telephone Number": "5125550102",
+                    "Mailing Address - Fax Number": "",
+                },
+            }
+        ],
+    )
+
+    assert result["rows_written"] == 1
+    stored = _fetch_all_rows(
+        real_postgres,
+        """
+        SELECT
+            docket_number,
+            bipd_required_thousands_usd,
+            business_address_colonia,
+            business_address_city,
+            source_run_metadata,
+            raw_source_row,
+            created_at
+        FROM entities.carrier_registrations
+        """,
+    )[0]
+    assert stored["docket_number"] == "MC444444"
+    assert stored["bipd_required_thousands_usd"] == 750
+    assert stored["business_address_city"] == "AUSTIN"
+    assert stored["business_address_colonia"] == 'Sector 7\tNorth\nLine\\\\Two "quoted" ☃'
+    assert stored["source_run_metadata"] == {"run": "Carrier"}
+    assert stored["raw_source_row"]["row_number"] == 4
+    assert stored["raw_source_row"]["raw_fields"]["Business Address - Fax Number"] == ""
+    assert stored["raw_source_row"]["raw_fields"]["Business Address - Colonia"] == (
+        'Sector 7\tNorth\nLine\\\\Two "quoted" ☃'
+    )
+    assert stored["created_at"] is not None
+
+
+def test_real_postgres_legacy_record_fingerprint_conflict_preserves_insert_only_fields(
+    real_postgres: str,
+):
+    _setup_real_table(
+        real_postgres,
+        table_name="insurance_policy_history_events",
+        create_sql="""
+        CREATE TABLE entities.insurance_policy_history_events (
+            record_fingerprint text NOT NULL UNIQUE,
+            docket_number text,
+            cancellation_method text,
+            source_provider text,
+            source_feed_name text,
+            source_download_url text,
+            source_file_variant text,
+            source_observed_at timestamptz,
+            source_task_id text,
+            source_schedule_id text,
+            source_run_metadata jsonb,
+            raw_source_row jsonb,
+            first_observed_at timestamptz,
+            last_observed_at timestamptz,
+            updated_at timestamptz,
+            created_at timestamptz NOT NULL DEFAULT now()
+        )
+        """,
+    )
+
+    first_row = {
+        "row_number": 3,
+        "raw_values": [
+            "MC333333",
+            "33334444",
+            "91X",
+            "Cancelled",
+            "35",
+            " ",
+            "BIPD/Primary",
+            "TP404896",
+            "750",
+            "P",
+            "09/01/1991",
+            "0",
+            "1000",
+            "09/01/1995",
+            "CANCEL",
+            "00",
+            "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
+        ],
+        "raw_fields": {
+            "Docket Number": "MC333333",
+            "USDOT Number": "33334444",
+            "Form Code": "91X",
+            "Cancellation Method": "Cancelled",
+            "Cancel/Replace/Name Change/Transfer Form": "35",
+            "Insurance Type Indicator": " ",
+            "Insurance Type Description": "BIPD/Primary",
+            "Policy Number": "TP404896",
+            "Minimum Coverage Amount": "750",
+            "Insurance Class Code": "P",
+            "Effective Date": "09/01/1991",
+            "BI&PD Underlying Limit Amount": "0",
+            "BI&PD Max Coverage Amount": "1000",
+            "Cancel Effective Date": "09/01/1995",
+            "Specific Cancellation Method": "CANCEL",
+            "Insurance Company Branch": "00",
+            "Insurance Company Name": "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
+        },
+    }
+    second_row = {
+        **first_row,
+        "raw_fields": {
+            **first_row["raw_fields"],
+            "Cancellation Method": "Reinstated",
+        },
+    }
+
+    upsert_insurance_policy_history_events(
+        source_context=_source_context(feed_name="InsHist", observed_at="2026-03-10T15:20:00Z"),
+        rows=[first_row],
+    )
+    initial_row = _fetch_all_rows(
+        real_postgres,
+        """
+        SELECT record_fingerprint, first_observed_at, last_observed_at, created_at
+        FROM entities.insurance_policy_history_events
+        """,
+    )[0]
+    upsert_insurance_policy_history_events(
+        source_context=_source_context(feed_name="InsHist", observed_at="2026-03-10T15:21:00Z"),
+        rows=[second_row],
+    )
+
+    stored = _fetch_all_rows(
+        real_postgres,
+        """
+        SELECT
+            record_fingerprint,
+            cancellation_method,
+            first_observed_at,
+            last_observed_at,
+            created_at
+        FROM entities.insurance_policy_history_events
+        """,
+    )[0]
+    assert stored["record_fingerprint"] == initial_row["record_fingerprint"]
+    assert stored["cancellation_method"] == "Reinstated"
+    assert stored["first_observed_at"] == initial_row["first_observed_at"]
+    assert stored["last_observed_at"] != initial_row["last_observed_at"]
+    assert stored["created_at"] == initial_row["created_at"]
+
+
+def test_real_postgres_shared_carrier_inspections_preserve_sparse_and_wide_feed_variants(
+    real_postgres: str,
+):
+    _setup_real_table(
+        real_postgres,
+        table_name="carrier_inspections",
+        create_sql="""
+        CREATE TABLE entities.carrier_inspections (
+            feed_date date NOT NULL,
+            source_feed_name text NOT NULL,
+            row_position integer NOT NULL,
+            inspection_unique_id text,
+            report_number text,
+            registration_date date,
+            docket_number text,
+            carrier_name text,
+            source_provider text,
+            source_download_url text,
+            source_file_variant text,
+            source_observed_at timestamptz,
+            source_task_id text,
+            source_schedule_id text,
+            source_run_metadata jsonb,
+            raw_source_row jsonb,
+            updated_at timestamptz,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            UNIQUE (feed_date, source_feed_name, row_position)
+        )
+        """,
+    )
+
+    upsert_carrier_inspections(
+        source_context=_source_context(
+            feed_name="SMS Input - Inspection",
+            observed_at="2026-03-10T12:30:00Z",
+            source_file_variant="csv_export",
+        ),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [],
+                "raw_fields": {
+                    "Unique_ID": "726403509",
+                    "Report_Number": "1147001995",
+                    "Report_State": "CT",
+                    "DOT_Number": "1926619",
+                    "Insp_Date": "30-JAN-24",
+                    "Insp_level_ID": "3",
+                    "County_code_State": "CT",
+                    "Time_Weight": "1",
+                    "Driver_OOS_Total": "0",
+                    "Vehicle_OOS_Total": "0",
+                    "Total_Hazmat_Sent": "0",
+                    "OOS_Total": "0",
+                    "Hazmat_OOS_Total": "0",
+                    "Hazmat_Placard_req": "false",
+                    "Unit_Type_Desc": "Truck Tractor",
+                    "Unit_Make": "Freightliner",
+                    "Unit_License": "ABC123",
+                    "Unit_License_State": "CT",
+                    "VIN": "VINMAIN",
+                    "Unit_Decal_Number": "DECAL1",
+                    "Unit_Type_Desc2": "Trailer",
+                    "Unit_Make2": "Utility",
+                    "Unit_License2": "XYZ987",
+                    "Unit_License_State2": "CT",
+                    "VIN2": "VIN2",
+                    "Unit_Decal_Number2": "DECAL2",
+                    "Unsafe_Insp": "true",
+                    "Fatigued_Insp": "false",
+                    "Dr_Fitness_Insp": "false",
+                    "Subt_Alcohol_Insp": "false",
+                    "Vh_Maint_Insp": "true",
+                    "HM_Insp": "false",
+                    "BASIC_Viol": "2",
+                    "Unsafe_Viol": "1",
+                    "Fatigued_Viol": "0",
+                    "Dr_Fitness_Viol": "0",
+                    "Subt_Alcohol_Viol": "0",
+                    "Vh_Maint_Viol": "1",
+                    "HM_Viol": "0",
+                },
+            }
+        ],
+    )
+    upsert_carrier_inspections(
+        source_context=_source_context(
+            feed_name="Vehicle Inspection File",
+            observed_at="2026-03-10T13:00:00Z",
+            source_file_variant="csv_export",
+        ),
+        rows=[
+            {
+                "row_number": 1,
+                "raw_values": [],
+                "raw_fields": {
+                    "CHANGE_DATE": "20230327 2139",
+                    "INSPECTION_ID": "78058162",
+                    "DOT_NUMBER": "3129666",
+                    "REPORT_STATE": "CT",
+                    "REPORT_NUMBER": "3079001925",
+                    "INSP_DATE": "20230323",
+                    "INSP_START_TIME": "0920",
+                    "INSP_END_TIME": "0935",
+                    "REGISTRATION_DATE": "20230324",
+                    "REGION": "1",
+                    "CI_STATUS_CODE": "C",
+                    "LOCATION": "4",
+                    "LOCATION_DESC": "I-95 NORTHBOUND",
+                    "COUNTY_CODE_STATE": "CT",
+                    "COUNTY_CODE": "003",
+                    "INSP_LEVEL_ID": "2",
+                    "SERVICE_CENTER": "EA",
+                    "CENSUS_SOURCE_ID": "5",
+                    "INSP_FACILITY": "R",
+                    "SHIPPER_NAME": "",
+                    "SHIPPING_PAPER_NUMBER": "",
+                    "CARGO_TANK": "",
+                    "HAZMAT_PLACARD_REQ": "N",
+                    "SNET_VERSION_NUMBER": "4.0",
+                    "SNET_SEARCH_DATE": "20230327 2000",
+                    "ALCOHOL_CONTROL_SUB": "N",
+                    "DRUG_INTRDCTN_SEARCH": "N",
+                    "DRUG_INTRDCTN_ARRESTS": "0",
+                    "SIZE_WEIGHT_ENF": "N",
+                    "TRAFFIC_ENF": "N",
+                    "LOCAL_ENF_JURISDICTION": "N",
+                    "PEN_CEN_MATCH": "Y",
+                    "FINAL_STATUS_DATE": "20230327 2139",
+                    "POST_ACC_IND": "N",
+                    "GROSS_COMB_VEH_WT": "80000",
+                    "VIOL_TOTAL": "1",
+                    "OOS_TOTAL": "0",
+                    "DRIVER_VIOL_TOTAL": "1",
+                    "DRIVER_OOS_TOTAL": "0",
+                    "VEHICLE_VIOL_TOTAL": "0",
+                    "VEHICLE_OOS_TOTAL": "0",
+                    "HAZMAT_VIOL_TOTAL": "0",
+                    "HAZMAT_OOS_TOTAL": "0",
+                    "SNET_SEQUENCE_ID": "1111",
+                    "TRANSACTION_CODE": "A",
+                    "TRANSACTION_DATE": "20230327 2100",
+                    "UPLOAD_DATE": "20230327 2105",
+                    "UPLOAD_FIRST_BYTE": "0",
+                    "UPLOAD_DOT_NUMBER": "3129666",
+                    "UPLOAD_SEARCH_INDICATOR": "M",
+                    "CENSUS_SEARCH_DATE": "20230327 2103",
+                    "SNET_INPUT_DATE": "20230327 2050",
+                    "SOURCE_OFFICE": "CT001",
+                    "MCMIS_ADD_DATE": "20230327 2139",
+                    "INSP_CARRIER_NAME": "ACME HAULING",
+                    "INSP_CARRIER_STREET": "1 MAIN ST",
+                    "INSP_CARRIER_CITY": "HARTFORD",
+                    "INSP_CARRIER_STATE": "CT",
+                    "INSP_CARRIER_ZIP_CODE": "06103",
+                    "INSP_COLONIA": "",
+                    "DOCKET_NUMBER": "MC123456",
+                    "INSP_INTERSTATE": "Y",
+                    "INSP_CARRIER_STATE_ID": "STATE-1",
+                },
+            }
+        ],
+    )
+
+    stored_rows = _fetch_all_rows(
+        real_postgres,
+        """
+        SELECT
+            source_feed_name,
+            inspection_unique_id,
+            report_number,
+            registration_date,
+            docket_number,
+            carrier_name
+        FROM entities.carrier_inspections
+        ORDER BY source_feed_name
+        """,
+    )
+    assert len(stored_rows) == 2
+    assert [row["source_feed_name"] for row in stored_rows] == [
+        "SMS Input - Inspection",
+        "Vehicle Inspection File",
+    ]
+    assert stored_rows[0]["inspection_unique_id"] == "726403509"
+    assert stored_rows[0]["registration_date"] is None
+    assert stored_rows[0]["carrier_name"] is None
+    assert stored_rows[1]["inspection_unique_id"] == "78058162"
+    assert stored_rows[1]["registration_date"].isoformat() == "2023-03-24"
+    assert stored_rows[1]["docket_number"] == "MC123456"
+    assert stored_rows[1]["carrier_name"] == "ACME HAULING"
+
+
+def test_real_postgres_copy_failure_rolls_back_without_partial_commit(
+    real_postgres: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _setup_real_table(
+        real_postgres,
+        table_name="carrier_registrations",
+        create_sql="""
+        CREATE TABLE entities.carrier_registrations (
+            feed_date date NOT NULL,
+            source_feed_name text NOT NULL,
+            row_position integer NOT NULL,
+            docket_number text,
+            source_provider text,
+            source_download_url text,
+            source_file_variant text,
+            source_observed_at timestamptz,
+            source_task_id text,
+            source_schedule_id text,
+            source_run_metadata jsonb,
+            raw_source_row jsonb,
+            updated_at timestamptz,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            UNIQUE (feed_date, source_feed_name, row_position)
+        )
+        """,
+    )
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "_serialize_jsonb_copy_value",
+        lambda value: "{not-valid-json",
+    )
+
+    with pytest.raises(Exception):
+        upsert_carrier_registrations(
+            source_context=_source_context(feed_name="Carrier", observed_at="2026-03-10T15:00:00Z"),
+            rows=[
+                {
+                    "row_number": 1,
+                    "raw_values": [],
+                    "raw_fields": {
+                        "Docket Number": "MC123456",
+                        "USDOT Number": "12345678",
+                        "MX Type": "",
+                        "RFC Number": "",
+                        "Common Authority": "A",
+                        "Contract Authority": "N",
+                        "Broker Authority": "I",
+                        "Pending Common Authority": "N",
+                        "Pending Contract Authority": "N",
+                        "Pending Broker Authority": "Y",
+                        "Common Authority Revocation": "N",
+                        "Contract Authority Revocation": "N",
+                        "Broker Authority Revocation": "Y",
+                        "Property": "Y",
+                        "Passenger": "N",
+                        "Household Goods": "N",
+                        "Private Check": "N",
+                        "Enterprise Check": "Y",
+                        "BIPD Required": "00750",
+                        "Cargo Required": "N",
+                        "Bond/Surety Required": "Y",
+                        "BIPD on File": "01000",
+                        "Cargo on File": "N",
+                        "Bond/Surety on File": "Y",
+                        "Address Status": "Y",
+                        "DBA Name": "ACME LOGISTICS",
+                        "Legal Name": "ACME LOGISTICS LLC",
+                        "Business Address - PO Box/Street": "123 MAIN ST",
+                        "Business Address - Colonia": "",
+                        "Business Address - City": "AUSTIN",
+                        "Business Address - State Code": "TX",
+                        "Business Address - Country Code": "US",
+                        "Business Address - Zip Code": "78701",
+                        "Business Address - Telephone Number": "5125550101",
+                        "Business Address - Fax Number": "",
+                        "Mailing Address - PO Box/Street": "PO BOX 5",
+                        "Mailing Address - Colonia": "",
+                        "Mailing Address - City": "AUSTIN",
+                        "Mailing Address - State Code": "TX",
+                        "Mailing Address - Country Code": "US",
+                        "Mailing Address - Zip Code": "78702",
+                        "Mailing Address - Telephone Number": "5125550102",
+                        "Mailing Address - Fax Number": "",
+                    },
+                }
+            ],
+        )
+
+    remaining_rows = _fetch_all_rows(
+        real_postgres,
+        "SELECT count(*) AS row_count FROM entities.carrier_registrations",
+    )
+    assert remaining_rows[0]["row_count"] == 0
+
+
+def test_real_postgres_merge_failure_rolls_back_without_partial_commit(
+    real_postgres: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _setup_real_table(
+        real_postgres,
+        table_name="carrier_registrations",
+        create_sql="""
+        CREATE TABLE entities.carrier_registrations (
+            feed_date date NOT NULL,
+            source_feed_name text NOT NULL,
+            row_position integer NOT NULL,
+            docket_number text,
+            source_provider text,
+            source_download_url text,
+            source_file_variant text,
+            source_observed_at timestamptz,
+            source_task_id text,
+            source_schedule_id text,
+            source_run_metadata jsonb,
+            raw_source_row jsonb,
+            updated_at timestamptz,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            UNIQUE (feed_date, source_feed_name, row_position)
+        )
+        """,
+    )
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "_build_fmcsa_bulk_merge_sql",
+        lambda **kwargs: 'INSERT INTO "entities"."carrier_registrations" ("feed_date") SELECT missing_column FROM "broken_temp"',
+    )
+
+    with pytest.raises(Exception):
+        upsert_carrier_registrations(
+            source_context=_source_context(feed_name="Carrier", observed_at="2026-03-10T15:00:00Z"),
+            rows=[
+                {
+                    "row_number": 1,
+                    "raw_values": [],
+                    "raw_fields": {
+                        "Docket Number": "MC123456",
+                        "USDOT Number": "12345678",
+                        "MX Type": "",
+                        "RFC Number": "",
+                        "Common Authority": "A",
+                        "Contract Authority": "N",
+                        "Broker Authority": "I",
+                        "Pending Common Authority": "N",
+                        "Pending Contract Authority": "N",
+                        "Pending Broker Authority": "Y",
+                        "Common Authority Revocation": "N",
+                        "Contract Authority Revocation": "N",
+                        "Broker Authority Revocation": "Y",
+                        "Property": "Y",
+                        "Passenger": "N",
+                        "Household Goods": "N",
+                        "Private Check": "N",
+                        "Enterprise Check": "Y",
+                        "BIPD Required": "00750",
+                        "Cargo Required": "N",
+                        "Bond/Surety Required": "Y",
+                        "BIPD on File": "01000",
+                        "Cargo on File": "N",
+                        "Bond/Surety on File": "Y",
+                        "Address Status": "Y",
+                        "DBA Name": "ACME LOGISTICS",
+                        "Legal Name": "ACME LOGISTICS LLC",
+                        "Business Address - PO Box/Street": "123 MAIN ST",
+                        "Business Address - Colonia": "",
+                        "Business Address - City": "AUSTIN",
+                        "Business Address - State Code": "TX",
+                        "Business Address - Country Code": "US",
+                        "Business Address - Zip Code": "78701",
+                        "Business Address - Telephone Number": "5125550101",
+                        "Business Address - Fax Number": "",
+                        "Mailing Address - PO Box/Street": "PO BOX 5",
+                        "Mailing Address - Colonia": "",
+                        "Mailing Address - City": "AUSTIN",
+                        "Mailing Address - State Code": "TX",
+                        "Mailing Address - Country Code": "US",
+                        "Mailing Address - Zip Code": "78702",
+                        "Mailing Address - Telephone Number": "5125550102",
+                        "Mailing Address - Fax Number": "",
+                    },
+                }
+            ],
+        )
+
+    remaining_rows = _fetch_all_rows(
+        real_postgres,
+        "SELECT count(*) AS row_count FROM entities.carrier_registrations",
+    )
+    assert remaining_rows[0]["row_count"] == 0
+
+
 def test_direct_postgres_failures_surface_without_fake_success(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    class _FailingCopy:
+        def __enter__(self):
+            raise RuntimeError("direct postgres write failed")
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
     class _FailingCursor:
         def __enter__(self):
             return self
@@ -2105,14 +2862,14 @@ def test_direct_postgres_failures_surface_without_fake_success(
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def execute(self, query: str, params: tuple[str, str]):
+        def execute(self, query: str, params: tuple[str, str] | None = None):
             return self
 
         def fetchall(self):
             return []
 
-        def executemany(self, query: str, params_seq: list[dict]):
-            raise RuntimeError("direct postgres write failed")
+        def copy(self, query: str):
+            return _FailingCopy()
 
     class _FailingConnection:
         def __enter__(self):
@@ -2120,6 +2877,15 @@ def test_direct_postgres_failures_surface_without_fake_success(
 
         def __exit__(self, exc_type, exc, tb):
             return False
+
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
 
         def cursor(self):
             return _FailingCursor()
