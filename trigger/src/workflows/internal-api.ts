@@ -1,3 +1,5 @@
+import { gzipSync } from "node:zlib";
+
 export interface InternalAuthContext {
   orgId: string;
   companyId?: string | null;
@@ -136,17 +138,21 @@ export class InternalApiClient {
     let response: Response;
 
     try {
+      const jsonBody = JSON.stringify(payload);
+      const compressedBody = gzipSync(jsonBody);
+
       response = await this.fetchImpl(`${this.config.apiUrl}${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Content-Encoding": "gzip",
           Authorization: `Bearer ${this.config.internalApiKey}`,
           "x-internal-org-id": this.authContext.orgId,
           ...(this.authContext.companyId
             ? { "x-internal-company-id": this.authContext.companyId }
             : {}),
         },
-        body: JSON.stringify(payload),
+        body: compressedBody,
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
