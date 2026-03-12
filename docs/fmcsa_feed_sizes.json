@@ -1,0 +1,312 @@
+[
+  {
+    "feed_name": "InsHist - All With History",
+    "dataset_id": "nzpz-e5xn",
+    "download_url": "https://data.transportation.gov/download/nzpz-e5xn/text%2Fplain",
+    "file_size_bytes": 1261735381,
+    "file_size_mb": 1203.28,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "AuthHist - All With History",
+    "dataset_id": "wahn-z3rq",
+    "download_url": "https://data.transportation.gov/download/wahn-z3rq/text%2Fplain",
+    "file_size_bytes": 560172134,
+    "file_size_mb": 534.22,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "BOC3 - All With History",
+    "dataset_id": "gmxu-awv7",
+    "download_url": "https://data.transportation.gov/download/gmxu-awv7/text%2Fplain",
+    "file_size_bytes": 200351389,
+    "file_size_mb": 191.07,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "ActPendInsur - All With History",
+    "dataset_id": "y77m-3nfx",
+    "download_url": "https://data.transportation.gov/download/y77m-3nfx/text%2Fplain",
+    "file_size_bytes": 60899156,
+    "file_size_mb": 58.08,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "InsHist",
+    "dataset_id": "xkmg-ff2t",
+    "download_url": "https://data.transportation.gov/download/xkmg-ff2t/text%2Fplain",
+    "file_size_bytes": 5749808,
+    "file_size_mb": 5.48,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "Rejected - All With History",
+    "dataset_id": "9m5y-imtw",
+    "download_url": "https://data.transportation.gov/download/9m5y-imtw/text%2Fplain",
+    "file_size_bytes": 2863139,
+    "file_size_mb": 2.73,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "AuthHist",
+    "dataset_id": "sn3k-dnx7",
+    "download_url": "https://data.transportation.gov/download/sn3k-dnx7/text%2Fplain",
+    "file_size_bytes": 2442572,
+    "file_size_mb": 2.33,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "Carrier",
+    "dataset_id": "6qg9-x4f8",
+    "download_url": "https://data.transportation.gov/download/6qg9-x4f8/text%2Fplain",
+    "file_size_bytes": 1850752,
+    "file_size_mb": 1.77,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "BOC3",
+    "dataset_id": "fb8g-ngam",
+    "download_url": "https://data.transportation.gov/download/fb8g-ngam/text%2Fplain",
+    "file_size_bytes": 780898,
+    "file_size_mb": 0.74,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "ActPendInsur",
+    "dataset_id": "chgs-tx6x",
+    "download_url": "https://data.transportation.gov/download/chgs-tx6x/text%2Fplain",
+    "file_size_bytes": 648375,
+    "file_size_mb": 0.62,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "Insurance",
+    "dataset_id": "mzmm-6xep",
+    "download_url": "https://data.transportation.gov/download/mzmm-6xep/text%2Fplain",
+    "file_size_bytes": 632056,
+    "file_size_mb": 0.6,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "Revocation",
+    "dataset_id": "pivg-szje",
+    "download_url": "https://data.transportation.gov/download/pivg-szje/text%2Fplain",
+    "file_size_bytes": 236614,
+    "file_size_mb": 0.23,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "Rejected",
+    "dataset_id": "t3zq-c6n3",
+    "download_url": "https://data.transportation.gov/download/t3zq-c6n3/text%2Fplain",
+    "file_size_bytes": 34090,
+    "file_size_mb": 0.03,
+    "row_count": null,
+    "row_count_source": null,
+    "file_size_source": "content_length_header"
+  },
+  {
+    "feed_name": "Inspections Per Unit",
+    "dataset_id": "wt8s-2hbx",
+    "download_url": "https://data.transportation.gov/api/views/wt8s-2hbx/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 13259174,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Special Studies",
+    "dataset_id": "5qik-smay",
+    "download_url": "https://data.transportation.gov/api/views/5qik-smay/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 981634,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Carrier - All With History",
+    "dataset_id": "6eyk-hxee",
+    "download_url": "https://data.transportation.gov/api/views/6eyk-hxee/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 1841351,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Revocation - All With History",
+    "dataset_id": "sa6p-acbp",
+    "download_url": "https://data.transportation.gov/api/views/sa6p-acbp/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 1513476,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Inspections and Citations",
+    "dataset_id": "qbt8-7vic",
+    "download_url": "https://data.transportation.gov/api/views/qbt8-7vic/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 27236,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Insur - All With History",
+    "dataset_id": "ypjt-5ydn",
+    "download_url": "https://data.transportation.gov/api/views/ypjt-5ydn/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 468088,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "OUT OF SERVICE ORDERS",
+    "dataset_id": "p2mt-9ige",
+    "download_url": "https://data.transportation.gov/api/views/p2mt-9ige/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 383640,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Vehicle Inspections and Violations",
+    "dataset_id": "876r-jsdb",
+    "download_url": "https://data.transportation.gov/api/views/876r-jsdb/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 12945593,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Vehicle Inspection File",
+    "dataset_id": "fx4q-ay7w",
+    "download_url": "https://data.transportation.gov/api/views/fx4q-ay7w/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 8182384,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Company Census File",
+    "dataset_id": "az4n-8mr2",
+    "download_url": "https://data.transportation.gov/api/views/az4n-8mr2/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 4402459,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS C PassProperty",
+    "dataset_id": "h9zy-gjn8",
+    "download_url": "https://data.transportation.gov/api/views/h9zy-gjn8/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 1364356,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS AB PassProperty",
+    "dataset_id": "4y6x-dmck",
+    "download_url": "https://data.transportation.gov/api/views/4y6x-dmck/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 714685,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS Input - Motor Carrier Census",
+    "dataset_id": "kjg3-diqy",
+    "download_url": "https://data.transportation.gov/api/views/kjg3-diqy/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 2079041,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "Crash File",
+    "dataset_id": "aayw-vxb3",
+    "download_url": "https://data.transportation.gov/api/views/aayw-vxb3/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 4906670,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS AB Pass",
+    "dataset_id": "m3ry-qcip",
+    "download_url": "https://data.transportation.gov/api/views/m3ry-qcip/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 9123,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS C Pass",
+    "dataset_id": "h3zn-uid9",
+    "download_url": "https://data.transportation.gov/api/views/h3zn-uid9/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 27439,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS Input - Inspection",
+    "dataset_id": "rbkj-cgst",
+    "download_url": "https://data.transportation.gov/api/views/rbkj-cgst/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 5778075,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  },
+  {
+    "feed_name": "SMS Input - Violation",
+    "dataset_id": "8mt8-2mdr",
+    "download_url": "https://data.transportation.gov/api/views/8mt8-2mdr/rows.csv?accessType=DOWNLOAD",
+    "file_size_bytes": null,
+    "file_size_mb": null,
+    "row_count": 6593446,
+    "row_count_source": "socrata_count_query",
+    "file_size_source": null
+  }
+]
