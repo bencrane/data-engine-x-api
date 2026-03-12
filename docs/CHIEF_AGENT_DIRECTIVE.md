@@ -20,7 +20,7 @@ Your deliverable is a directive document or a review of executor output.
 
 Use `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md` as the first-click navigation map.
 
-Before drafting anything substantial, read in this order:
+If you did not arrive here from the authority map, go back and start there. Then continue in this order before drafting anything substantial:
 
 1. `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
 2. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`

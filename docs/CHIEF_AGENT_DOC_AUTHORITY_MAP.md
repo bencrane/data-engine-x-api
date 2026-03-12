@@ -4,7 +4,7 @@ Use this as the first-click navigation file for Chief Agent onboarding.
 
 ## First Read Path
 
-Read in this order before drafting directives, judging architecture, or treating any repo claim as current fact:
+Start with this file, then continue in this order before drafting directives, judging architecture, or treating any repo claim as current fact:
 
 1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
 2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
