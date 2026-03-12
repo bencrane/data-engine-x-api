@@ -171,10 +171,32 @@ class _FakeDirectPostgresConnection:
         return _FakeDirectPostgresCursor(self)
 
 
+class _FakeConnectionPool:
+    """Mimics psycopg_pool.ConnectionPool for tests."""
+
+    def __init__(self, database: _FakeDirectPostgresDatabase):
+        self.database = database
+
+    def connection(self):
+        return _FakeDirectPostgresConnection(self.database)
+
+    def getconn(self):
+        return _FakeDirectPostgresConnection(self.database)
+
+    def putconn(self, conn):
+        pass
+
+
 @pytest.fixture
 def fake_client(monkeypatch: pytest.MonkeyPatch) -> _FakeDirectPostgresDatabase:
     database = _FakeDirectPostgresDatabase()
     fmcsa_daily_diff_common._get_table_columns.cache_clear()
+    fake_pool = _FakeConnectionPool(database)
+    monkeypatch.setattr(
+        fmcsa_daily_diff_common,
+        "_get_fmcsa_connection_pool",
+        lambda: fake_pool,
+    )
     monkeypatch.setattr(
         fmcsa_daily_diff_common,
         "get_fmcsa_direct_postgres_connection",
@@ -226,6 +248,7 @@ def fmcsa_copy_test_database_url() -> str:
 @pytest.fixture
 def real_postgres(monkeypatch: pytest.MonkeyPatch, fmcsa_copy_test_database_url: str) -> str:
     fmcsa_daily_diff_common._get_table_columns.cache_clear()
+    monkeypatch.setattr(fmcsa_daily_diff_common, "_fmcsa_pool", None)
     monkeypatch.setattr(
         fmcsa_daily_diff_common,
         "get_settings",
@@ -233,6 +256,7 @@ def real_postgres(monkeypatch: pytest.MonkeyPatch, fmcsa_copy_test_database_url:
     )
     yield fmcsa_copy_test_database_url
     fmcsa_daily_diff_common._get_table_columns.cache_clear()
+    fmcsa_daily_diff_common._fmcsa_pool = None
 
 
 def _execute_sql(database_url: str, statements: list[str]) -> None:
@@ -261,26 +285,24 @@ def _setup_real_table(database_url: str, *, table_name: str, create_sql: str) ->
     )
 
 
-def test_get_fmcsa_direct_postgres_connection_uses_database_url(
+def test_get_fmcsa_direct_postgres_connection_uses_pool(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    captured: dict[str, object] = {}
+    mock_conn = object()
 
-    def _connect(database_url: str):
-        captured["database_url"] = database_url
-        return object()
+    class _MockPool:
+        def getconn(self):
+            return mock_conn
 
-    monkeypatch.setattr(fmcsa_daily_diff_common, "connect", _connect)
     monkeypatch.setattr(
         fmcsa_daily_diff_common,
-        "get_settings",
-        lambda: type("Settings", (), {"database_url": "postgresql://fmcsa:test@localhost:5432/app"})(),
+        "_get_fmcsa_connection_pool",
+        lambda: _MockPool(),
     )
 
     connection = fmcsa_daily_diff_common.get_fmcsa_direct_postgres_connection()
 
-    assert connection is not None
-    assert captured["database_url"] == "postgresql://fmcsa:test@localhost:5432/app"
+    assert connection is mock_conn
 
 
 def test_copy_payload_serialization_preserves_null_empty_and_special_characters():
@@ -2890,10 +2912,15 @@ def test_direct_postgres_failures_surface_without_fake_success(
         def cursor(self):
             return _FailingCursor()
 
+    class _FailingPool:
+        def connection(self):
+            return _FailingConnection()
+
+    fmcsa_daily_diff_common._get_table_columns.cache_clear()
     monkeypatch.setattr(
         fmcsa_daily_diff_common,
-        "get_fmcsa_direct_postgres_connection",
-        lambda: _FailingConnection(),
+        "_get_fmcsa_connection_pool",
+        lambda: _FailingPool(),
     )
 
     with pytest.raises(RuntimeError, match="direct postgres write failed"):
