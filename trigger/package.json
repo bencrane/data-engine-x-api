@@ -9,7 +9,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "@trigger.dev/sdk": "^4.4.3",
-    "csv-parse": "^6.1.0"
+    "csv-parse": "^6.1.0",
+    "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

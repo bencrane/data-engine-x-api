@@ -5,6 +5,7 @@ import { gzipSync } from "node:zlib";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { parse as createCsvStreamParser } from "csv-parse";
 import { parse as parseCsvSync } from "csv-parse/sync";
+import { Upload as TusUpload } from "tus-js-client";
 
 import {
   createInternalApiClient,
@@ -490,8 +491,35 @@ function createStorageClient(dependencies: FmcsaDailyDiffWorkflowDependencies): 
   const client = createSupabaseClient(supabaseUrl, supabaseServiceKey);
   return {
     async upload(bucket: string, path: string, data: Uint8Array, options?: { contentType?: string; upsert?: boolean }) {
-      const { error } = await client.storage.from(bucket).upload(path, data, options);
-      return { error };
+      // Use TUS resumable upload protocol — standard uploads are only reliable up to 6MB,
+      // and most FMCSA artifacts exceed that (Company Census gzips to ~56MB).
+      const uploadUrl = `${supabaseUrl}/storage/v1/upload/resumable`;
+      const buffer = Buffer.from(data);
+      return new Promise<{ error: Error | null }>((resolve) => {
+        const tusUpload = new TusUpload(buffer, {
+          endpoint: uploadUrl,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: `Bearer ${supabaseServiceKey}`,
+            apikey: supabaseServiceKey,
+          },
+          chunkSize: 6 * 1024 * 1024, // 6MB chunks
+          metadata: {
+            bucketName: bucket,
+            objectName: path,
+            contentType: options?.contentType ?? "application/octet-stream",
+            cacheControl: "3600",
+          },
+          uploadSize: buffer.length,
+          onError: (error) => {
+            resolve({ error: new Error(`TUS upload failed for ${bucket}/${path}: ${error.message}`) });
+          },
+          onSuccess: () => {
+            resolve({ error: null });
+          },
+        });
+        tusUpload.start();
+      });
     },
     async remove(bucket: string, paths: string[]) {
       const { error } = await client.storage.from(bucket).remove(paths);
