@@ -9,10 +9,11 @@ export const fmcsaSmsCPassPropertyDaily = schedules.task({
   id: FMCSA_SMS_C_PASSPROPERTY_FEED.taskId,
   machine: "medium-2x",
   maxDuration: 43200,
-  cron: {
-    pattern: "43 11 * * *",
-    timezone: "America/New_York",
-  },
+  // cron disabled pending temp-file OOM fix validation
+  // cron: {
+  //   pattern: "43 11 * * *",
+  //   timezone: "America/New_York",
+  // },
   run: async (payload) => {
     return runFmcsaDailyDiffWorkflow({
       feed: FMCSA_SMS_C_PASSPROPERTY_FEED,

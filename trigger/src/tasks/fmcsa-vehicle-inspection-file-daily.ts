@@ -9,10 +9,11 @@ export const fmcsaVehicleInspectionFileDaily = schedules.task({
   id: FMCSA_VEHICLE_INSPECTION_FILE_FEED.taskId,
   machine: "large-2x",
   maxDuration: 10800,
-  cron: {
-    pattern: "35 13 * * *",
-    timezone: "America/New_York",
-  },
+  // cron disabled pending temp-file OOM fix validation
+  // cron: {
+  //   pattern: "35 13 * * *",
+  //   timezone: "America/New_York",
+  // },
   run: async (payload) => {
     return runFmcsaDailyDiffWorkflow({
       feed: FMCSA_VEHICLE_INSPECTION_FILE_FEED,

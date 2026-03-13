@@ -9,10 +9,11 @@ export const fmcsaSmsInputViolationDaily = schedules.task({
   id: FMCSA_SMS_INPUT_VIOLATION_FEED.taskId,
   machine: "large-2x",
   maxDuration: 43200,
-  cron: {
-    pattern: "50 11 * * *",
-    timezone: "America/New_York",
-  },
+  // cron disabled pending temp-file OOM fix validation
+  // cron: {
+  //   pattern: "50 11 * * *",
+  //   timezone: "America/New_York",
+  // },
   run: async (payload) => {
     return runFmcsaDailyDiffWorkflow({
       feed: FMCSA_SMS_INPUT_VIOLATION_FEED,

@@ -9,10 +9,11 @@ export const fmcsaSpecialStudiesDaily = schedules.task({
   id: FMCSA_SPECIAL_STUDIES_FEED.taskId,
   machine: "medium-2x",
   maxDuration: 43200,
-  cron: {
-    pattern: "46 12 * * *",
-    timezone: "America/New_York",
-  },
+  // cron disabled pending temp-file OOM fix validation
+  // cron: {
+  //   pattern: "46 12 * * *",
+  //   timezone: "America/New_York",
+  // },
   run: async (payload) => {
     return runFmcsaDailyDiffWorkflow({
       feed: FMCSA_SPECIAL_STUDIES_FEED,

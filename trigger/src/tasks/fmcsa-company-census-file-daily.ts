@@ -9,10 +9,11 @@ export const fmcsaCompanyCensusFileDaily = schedules.task({
   id: FMCSA_COMPANY_CENSUS_FILE_FEED.taskId,
   machine: "large-2x",
   maxDuration: 10800,
-  cron: {
-    pattern: "28 13 * * *",
-    timezone: "America/New_York",
-  },
+  // cron disabled pending temp-file OOM fix validation
+  // cron: {
+  //   pattern: "28 13 * * *",
+  //   timezone: "America/New_York",
+  // },
   run: async (payload) => {
     return runFmcsaDailyDiffWorkflow({
       feed: FMCSA_COMPANY_CENSUS_FILE_FEED,
