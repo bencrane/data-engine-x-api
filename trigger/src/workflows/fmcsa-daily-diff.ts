@@ -782,8 +782,15 @@ async function parseAndPersistStreamedCsv(
       rowsDownloaded += 1;
       rowsParsed += 1;
       const line = JSON.stringify(normalizeCsvRow(payload.feed, values, rowNumber));
-      ndjsonFileStream.write(line + "\n");
+      const canContinue = ndjsonFileStream.write(line + "\n");
       rowsAccepted += 1;
+
+      // Respect backpressure: if the write stream's internal buffer is full,
+      // wait for it to drain before writing more. This prevents unbounded
+      // memory accumulation for large feeds (2M+ rows).
+      if (!canContinue) {
+        await new Promise<void>((resolve) => ndjsonFileStream.once("drain", resolve));
+      }
 
       if (rowsDownloaded % 500_000 === 0) {
         logger.info("fmcsa streaming parse progress", {
