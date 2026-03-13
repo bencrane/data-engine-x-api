@@ -1,5 +1,8 @@
 import { logger } from "@trigger.dev/sdk/v3";
+import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
+import { gzipSync } from "node:zlib";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { parse as createCsvStreamParser } from "csv-parse";
 import { parse as parseCsvSync } from "csv-parse/sync";
 
@@ -13,6 +16,8 @@ import {
   PersistenceConfirmationError,
   writeDedicatedTableConfirmed,
 } from "./persistence.js";
+
+export const FMCSA_ARTIFACTS_BUCKET = "fmcsa-artifacts";
 
 type FmcsaFeedName =
   | "AuthHist"
@@ -90,6 +95,7 @@ export interface FmcsaDailyDiffWorkflowPayload {
 export interface FmcsaDailyDiffWorkflowDependencies {
   client?: InternalApiClient;
   fetchImpl?: typeof fetch;
+  supabaseClient?: SupabaseStorageClient;
 }
 
 export interface FmcsaDailyDiffWorkflowResult {
@@ -111,6 +117,38 @@ interface FmcsaDailyDiffPersistenceResponse {
   rows_received: number;
   rows_written: number;
 }
+
+interface FmcsaArtifactIngestManifest {
+  feed_name: string;
+  feed_date: string;
+  download_url: string;
+  source_file_variant: FmcsaSourceFileVariant;
+  source_observed_at: string;
+  source_task_id: string;
+  source_schedule_id: string | null;
+  source_run_metadata: Record<string, unknown>;
+  artifact_bucket: string;
+  artifact_path: string;
+  row_count: number;
+  artifact_checksum: string;
+}
+
+interface FmcsaArtifactIngestConfirmation {
+  feed_name: string;
+  table_name: string;
+  feed_date: string;
+  rows_received: number;
+  rows_written: number;
+  checksum_verified: boolean;
+}
+
+interface SupabaseStorageClient {
+  upload(bucket: string, path: string, data: Uint8Array, options?: { contentType?: string; upsert?: boolean }): Promise<{ error: Error | null }>;
+  remove(bucket: string, paths: string[]): Promise<{ error: Error | null }>;
+  createBucket(name: string, options?: { public: boolean }): Promise<{ error: Error | null }>;
+}
+
+const MANIFEST_INGEST_TIMEOUT_MS = 1_800_000; // 30 minutes
 
 interface ParsedRowsResult {
   rowsDownloaded: number;
@@ -432,43 +470,150 @@ function createClient(
   );
 }
 
-async function persistDailyDiffRows(
+function createStorageClient(dependencies: FmcsaDailyDiffWorkflowDependencies): SupabaseStorageClient {
+  if (dependencies.supabaseClient) {
+    return dependencies.supabaseClient;
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set for artifact upload");
+  }
+
+  const client = createSupabaseClient(supabaseUrl, supabaseServiceKey);
+  return {
+    async upload(bucket: string, path: string, data: Uint8Array, options?: { contentType?: string; upsert?: boolean }) {
+      const { error } = await client.storage.from(bucket).upload(path, data, options);
+      return { error };
+    },
+    async remove(bucket: string, paths: string[]) {
+      const { error } = await client.storage.from(bucket).remove(paths);
+      return { error };
+    },
+    async createBucket(name: string, options?: { public: boolean }) {
+      const { error } = await client.storage.createBucket(name, options ?? { public: false });
+      return { error };
+    },
+  };
+}
+
+function buildNdjsonGzipped(rows: FmcsaDailyDiffRow[]): { gzippedBytes: Uint8Array; checksum: string } {
+  const ndjson = rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+  const gzippedBytes = gzipSync(Buffer.from(ndjson, "utf-8"));
+  const checksum = createHash("sha256").update(gzippedBytes).digest("hex");
+  return { gzippedBytes, checksum };
+}
+
+function resolveArtifactPath(feed: FmcsaDailyDiffFeedConfig, feedDate: string): string {
+  const sanitizedFeedName = feed.feedName.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const timestamp = Date.now();
+  return `${sanitizedFeedName}/${feedDate}/${timestamp}.ndjson.gz`;
+}
+
+async function ensureBucketExists(storage: SupabaseStorageClient): Promise<void> {
+  const { error } = await storage.createBucket(FMCSA_ARTIFACTS_BUCKET, { public: false });
+  if (error && !error.message?.includes("already exists")) {
+    throw new Error(`Failed to create bucket ${FMCSA_ARTIFACTS_BUCKET}: ${error.message}`);
+  }
+}
+
+async function uploadArtifactAndIngest(
   client: InternalApiClient,
+  storage: SupabaseStorageClient,
   payload: FmcsaDailyDiffWorkflowPayload,
   rows: FmcsaDailyDiffRow[],
   feedDate: string,
   observedAt: string,
-): Promise<FmcsaDailyDiffPersistenceResponse> {
-  const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, feedDate, observedAt);
+): Promise<FmcsaArtifactIngestConfirmation> {
+  await ensureBucketExists(storage);
 
-  return writeDedicatedTableConfirmed<FmcsaDailyDiffPersistenceResponse>(client, {
-    path: payload.feed.internalUpsertPath,
-    payload: {
-      feed_name: payload.feed.feedName,
-      feed_date: feedDate,
-      download_url: payload.feed.downloadUrl,
-      source_file_variant: payload.feed.sourceFileVariant,
-      source_observed_at: observedAt,
-      source_task_id: payload.feed.taskId,
-      source_schedule_id: payload.schedule?.scheduleId ?? null,
-      source_run_metadata: sourceRunMetadata,
-      records: rows,
-    },
-    timeoutMs: resolvePersistenceTimeoutMs(payload.feed),
+  const artifactPath = resolveArtifactPath(payload.feed, feedDate);
+  const { gzippedBytes, checksum } = buildNdjsonGzipped(rows);
+
+  logger.info("fmcsa artifact upload start", {
+    feed_name: payload.feed.feedName,
+    artifact_path: artifactPath,
+    row_count: rows.length,
+    artifact_size_bytes: gzippedBytes.length,
+  });
+
+  const { error: uploadError } = await storage.upload(
+    FMCSA_ARTIFACTS_BUCKET,
+    artifactPath,
+    gzippedBytes,
+    { contentType: "application/gzip", upsert: false },
+  );
+  if (uploadError) {
+    throw new Error(`Failed to upload artifact to ${FMCSA_ARTIFACTS_BUCKET}/${artifactPath}: ${uploadError.message}`);
+  }
+
+  logger.info("fmcsa artifact uploaded", {
+    feed_name: payload.feed.feedName,
+    artifact_path: artifactPath,
+    artifact_size_bytes: gzippedBytes.length,
+    checksum,
+  });
+
+  const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, feedDate, observedAt);
+  const manifest: FmcsaArtifactIngestManifest = {
+    feed_name: payload.feed.feedName,
+    feed_date: feedDate,
+    download_url: payload.feed.downloadUrl,
+    source_file_variant: payload.feed.sourceFileVariant,
+    source_observed_at: observedAt,
+    source_task_id: payload.feed.taskId,
+    source_schedule_id: payload.schedule?.scheduleId ?? null,
+    source_run_metadata: sourceRunMetadata,
+    artifact_bucket: FMCSA_ARTIFACTS_BUCKET,
+    artifact_path: artifactPath,
+    row_count: rows.length,
+    artifact_checksum: checksum,
+  };
+
+  const confirmation = await writeDedicatedTableConfirmed<FmcsaArtifactIngestConfirmation>(client, {
+    path: "/api/internal/fmcsa/ingest-artifact",
+    payload: manifest,
+    timeoutMs: MANIFEST_INGEST_TIMEOUT_MS,
     validate: (response) =>
       isRecord(response) &&
-      response.feed_name === payload.feed.feedName &&
-      response.feed_date === feedDate &&
+      response.checksum_verified === true &&
       typeof response.rows_received === "number" &&
       typeof response.rows_written === "number" &&
       response.rows_received === rows.length &&
       response.rows_written >= 0,
-    confirmationErrorMessage: `${payload.feed.feedName} persistence write could not be confirmed`,
+    confirmationErrorMessage: `${payload.feed.feedName} artifact ingest confirmation failed`,
   });
+
+  logger.info("fmcsa artifact ingest confirmed", {
+    feed_name: confirmation.feed_name,
+    table_name: confirmation.table_name,
+    rows_received: confirmation.rows_received,
+    rows_written: confirmation.rows_written,
+  });
+
+  // Clean up artifact after confirmed success
+  try {
+    const { error: deleteError } = await storage.remove(FMCSA_ARTIFACTS_BUCKET, [artifactPath]);
+    if (deleteError) {
+      logger.warn("fmcsa artifact delete failed (non-fatal)", {
+        artifact_path: artifactPath,
+        error: deleteError.message,
+      });
+    }
+  } catch (deleteErr) {
+    logger.warn("fmcsa artifact delete failed (non-fatal)", {
+      artifact_path: artifactPath,
+      error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+    });
+  }
+
+  return confirmation;
 }
 
 async function parseAndPersistStreamedCsv(
   client: InternalApiClient,
+  storage: SupabaseStorageClient,
   payload: FmcsaDailyDiffWorkflowPayload,
   feedDate: string,
   observedAt: string,
@@ -488,35 +633,12 @@ async function parseAndPersistStreamedCsv(
   const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
-  const batchSize = payload.feed.writeBatchSize ?? 5000;
   let headerValidated = false;
   let rowNumber = 0;
   let rowsDownloaded = 0;
   let rowsParsed = 0;
   let rowsAccepted = 0;
-  let rowsWritten = 0;
-  let flushCount = 0;
-  let batch: FmcsaDailyDiffRow[] = [];
-
-  const flushBatch = async () => {
-    if (batch.length === 0) {
-      return;
-    }
-    flushCount += 1;
-    if (flushCount === 1 || flushCount % 25 === 0) {
-      logger.info("fmcsa streaming batch persist", {
-        feed_name: payload.feed.feedName,
-        feed_date: feedDate,
-        batch_size: batch.length,
-        rows_downloaded: rowsDownloaded,
-        rows_written_so_far: rowsWritten,
-        flush_count: flushCount,
-      });
-    }
-    const persistence = await persistDailyDiffRows(client, payload, batch, feedDate, observedAt);
-    rowsWritten += persistence.rows_written;
-    batch = [];
-  };
+  const allRows: FmcsaDailyDiffRow[] = [];
 
   try {
     for await (const record of parser) {
@@ -530,11 +652,15 @@ async function parseAndPersistStreamedCsv(
       rowNumber += 1;
       rowsDownloaded += 1;
       rowsParsed += 1;
-      batch.push(normalizeCsvRow(payload.feed, values, rowNumber));
+      allRows.push(normalizeCsvRow(payload.feed, values, rowNumber));
       rowsAccepted += 1;
 
-      if (batch.length >= batchSize) {
-        await flushBatch();
+      if (rowsDownloaded % 500_000 === 0) {
+        logger.info("fmcsa streaming parse progress", {
+          feed_name: payload.feed.feedName,
+          rows_downloaded: rowsDownloaded,
+          rows_accepted: rowsAccepted,
+        });
       }
     }
   } catch (error) {
@@ -551,7 +677,7 @@ async function parseAndPersistStreamedCsv(
     throw new Error(`${payload.feed.feedName} download contained no parseable rows`);
   }
 
-  await flushBatch();
+  const confirmation = await uploadArtifactAndIngest(client, storage, payload, allRows, feedDate, observedAt);
 
   return {
     feed_name: payload.feed.feedName,
@@ -563,7 +689,7 @@ async function parseAndPersistStreamedCsv(
     rows_parsed: rowsParsed,
     rows_accepted: rowsAccepted,
     rows_rejected: 0,
-    rows_written: rowsWritten,
+    rows_written: confirmation.rows_written,
   };
 }
 
@@ -572,6 +698,7 @@ export async function runFmcsaDailyDiffWorkflow(
   dependencies: FmcsaDailyDiffWorkflowDependencies = {},
 ): Promise<FmcsaDailyDiffWorkflowResult> {
   const client = createClient(payload, dependencies);
+  const storage = createStorageClient(dependencies);
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const observedAt = normalizeObservedAt(payload.schedule);
   const feedDate = resolveFeedDate(observedAt, payload.schedule);
@@ -591,6 +718,7 @@ export async function runFmcsaDailyDiffWorkflow(
     const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
     const result = await parseAndPersistStreamedCsv(
       client,
+      storage,
       payload,
       feedDate,
       observedAt,
@@ -602,7 +730,7 @@ export async function runFmcsaDailyDiffWorkflow(
 
   const rawBody = await downloadDailyDiffText(fetchImpl, payload.feed);
   const parsed = parseDailyDiffBody(payload.feed, rawBody);
-  const persistence = await persistDailyDiffRows(client, payload, parsed.rows, feedDate, observedAt);
+  const confirmation = await uploadArtifactAndIngest(client, storage, payload, parsed.rows, feedDate, observedAt);
 
   const result: FmcsaDailyDiffWorkflowResult = {
     feed_name: payload.feed.feedName,
@@ -614,7 +742,7 @@ export async function runFmcsaDailyDiffWorkflow(
     rows_parsed: parsed.rowsParsed,
     rows_accepted: parsed.rowsAccepted,
     rows_rejected: parsed.rowsRejected,
-    rows_written: persistence.rows_written,
+    rows_written: confirmation.rows_written,
   };
 
   logger.info("fmcsa snapshot workflow succeeded", { ...result });

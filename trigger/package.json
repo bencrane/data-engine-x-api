@@ -7,6 +7,7 @@
     "deploy": "npx trigger.dev@latest deploy"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "@trigger.dev/sdk": "^4.4.3",
     "csv-parse": "^6.1.0"
   },
