@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import io
 import json
 import logging
 import time
@@ -169,12 +170,6 @@ def ingest_artifact(
             f"expected {artifact_checksum}, got {actual_checksum}"
         )
 
-    # Decompress and parse
-    decompress_start = time.monotonic()
-    decompressed = gzip.decompress(gzipped_bytes)
-    rows = parse_ndjson_rows(decompressed)
-    artifact_decompress_parse_ms = (time.monotonic() - decompress_start) * 1000
-
     # Build source context
     source_context: FmcsaSourceContext = {
         "feed_name": feed_name,
@@ -187,15 +182,60 @@ def ingest_artifact(
         "source_run_metadata": source_run_metadata,
     }
 
-    # Process in chunks
+    # Streaming decompress → parse → persist in chunks.
+    # Instead of materializing the entire decompressed artifact + full row list,
+    # we stream lines from GzipFile and persist each chunk as it fills.
+    total_rows_parsed = 0
     total_rows_written = 0
     chunks_processed = 0
-    persist_start = time.monotonic()
+    chunk: list[FmcsaDailyDiffRow] = []
 
-    for chunk_start in range(0, len(rows), chunk_size):
-        chunk = rows[chunk_start : chunk_start + chunk_size]
+    stream_start = time.monotonic()
+    total_persist_ms = 0.0
+
+    bio = io.BytesIO(gzipped_bytes)
+    with gzip.GzipFile(fileobj=bio) as gzip_file:
+        for line in gzip_file:
+            line = line.strip()
+            if not line:
+                continue
+            chunk.append(json.loads(line))
+            total_rows_parsed += 1
+
+            if len(chunk) == chunk_size:
+                chunk_number = chunks_processed + 1
+                persist_chunk_start = time.monotonic()
+                try:
+                    result = upsert_func(
+                        source_context=source_context,
+                        rows=chunk,
+                    )
+                    total_rows_written += result.get("rows_written", 0)
+                    chunks_processed += 1
+                except Exception as exc:
+                    logger.error(
+                        "fmcsa_artifact_ingest_chunk_failed",
+                        extra={
+                            "feed_name": feed_name,
+                            "feed_date": feed_date,
+                            "table_name": table_name,
+                            "artifact_path": artifact_path,
+                            "chunk_number": chunk_number,
+                            "rows_processed_so_far": total_rows_written,
+                            "error": str(exc),
+                        },
+                    )
+                    raise RuntimeError(
+                        f"FMCSA artifact ingest failed at chunk {chunk_number} "
+                        f"(rows {total_rows_parsed - len(chunk)}-{total_rows_parsed}) for {feed_name}: {exc}"
+                    ) from exc
+                total_persist_ms += (time.monotonic() - persist_chunk_start) * 1000
+                chunk = []
+
+    # Flush remaining partial chunk
+    if chunk:
         chunk_number = chunks_processed + 1
-
+        persist_chunk_start = time.monotonic()
         try:
             result = upsert_func(
                 source_context=source_context,
@@ -218,10 +258,11 @@ def ingest_artifact(
             )
             raise RuntimeError(
                 f"FMCSA artifact ingest failed at chunk {chunk_number} "
-                f"(rows {chunk_start}-{chunk_start + len(chunk)}) for {feed_name}: {exc}"
+                f"(rows {total_rows_parsed - len(chunk)}-{total_rows_parsed}) for {feed_name}: {exc}"
             ) from exc
+        total_persist_ms += (time.monotonic() - persist_chunk_start) * 1000
 
-    total_persist_ms = (time.monotonic() - persist_start) * 1000
+    artifact_decompress_parse_ms = (time.monotonic() - stream_start) * 1000
     total_ms = (time.monotonic() - total_start) * 1000
 
     logger.info(
@@ -231,7 +272,7 @@ def ingest_artifact(
             "feed_date": feed_date,
             "table_name": table_name,
             "artifact_path": artifact_path,
-            "total_rows_received": len(rows),
+            "total_rows_received": total_rows_parsed,
             "total_rows_written": total_rows_written,
             "chunks_processed": chunks_processed,
             "artifact_download_ms": round(artifact_download_ms, 1),
@@ -245,7 +286,7 @@ def ingest_artifact(
         "feed_name": feed_name,
         "table_name": table_name,
         "feed_date": feed_date,
-        "rows_received": len(rows),
+        "rows_received": total_rows_parsed,
         "rows_written": total_rows_written,
         "checksum_verified": True,
     }
