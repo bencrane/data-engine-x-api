@@ -323,6 +323,21 @@ class InternalUpsertFmcsaDailyDiffBatchRequest(BaseModel):
     records: list[InternalFmcsaDailyDiffRow]
 
 
+class InternalFmcsaArtifactIngestRequest(BaseModel):
+    feed_name: str
+    feed_date: str
+    download_url: str
+    source_file_variant: Literal["daily diff", "daily", "all_with_history", "csv_export"]
+    source_observed_at: str
+    source_task_id: str
+    source_schedule_id: str | None = None
+    source_run_metadata: dict[str, Any]
+    artifact_bucket: str
+    artifact_path: str
+    row_count: int
+    artifact_checksum: str
+
+
 class InternalEvaluateClientAutomationSchedulesRequest(BaseModel):
     max_schedules: int = 100
     scheduler_task_id: str | None = None
@@ -997,6 +1012,40 @@ async def internal_upsert_insurance_filing_rejections(
         rows=[row.model_dump() for row in payload.records],
     )
     return DataEnvelope(data=result)
+
+
+@router.post("/fmcsa/ingest-artifact", response_model=DataEnvelope)
+async def internal_fmcsa_ingest_artifact(
+    payload: InternalFmcsaArtifactIngestRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.fmcsa_artifact_ingest import (
+        ChecksumMismatchError,
+        ingest_artifact,
+    )
+
+    try:
+        result = ingest_artifact(
+            feed_name=payload.feed_name,
+            feed_date=payload.feed_date,
+            download_url=payload.download_url,
+            source_file_variant=payload.source_file_variant,
+            source_observed_at=payload.source_observed_at,
+            source_task_id=payload.source_task_id,
+            source_schedule_id=payload.source_schedule_id,
+            source_run_metadata=payload.source_run_metadata,
+            artifact_bucket=payload.artifact_bucket,
+            artifact_path=payload.artifact_path,
+            row_count=payload.row_count,
+            artifact_checksum=payload.artifact_checksum,
+        )
+        return DataEnvelope(data=result)
+    except ChecksumMismatchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/pipeline-runs/get", response_model=DataEnvelope, responses={404: {"model": ErrorEnvelope}})
