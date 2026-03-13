@@ -1976,6 +1976,7 @@ export const FMCSA_SMS_FEED_CORRECTIONS = {
 } as const;
 
 export const __testables = {
+  buildNdjsonGzipped,
   formatStreamingWorkflowError,
   parseDailyDiffBody,
   resolveFeedDate,
