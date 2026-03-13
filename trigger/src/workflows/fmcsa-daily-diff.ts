@@ -594,15 +594,37 @@ async function uploadArtifactAndIngest(
   feedDate: string,
   observedAt: string,
 ): Promise<FmcsaArtifactIngestConfirmation> {
+  const { gzippedBytes, checksum } = buildNdjsonGzipped(rows);
+  return uploadPrebuiltArtifactAndIngest(
+    client,
+    storage,
+    payload,
+    gzippedBytes,
+    checksum,
+    rows.length,
+    feedDate,
+    observedAt,
+  );
+}
+
+async function uploadPrebuiltArtifactAndIngest(
+  client: InternalApiClient,
+  storage: SupabaseStorageClient,
+  payload: FmcsaDailyDiffWorkflowPayload,
+  gzippedBytes: Uint8Array,
+  checksum: string,
+  rowCount: number,
+  feedDate: string,
+  observedAt: string,
+): Promise<FmcsaArtifactIngestConfirmation> {
   await ensureBucketExists(storage);
 
   const artifactPath = resolveArtifactPath(payload.feed, feedDate);
-  const { gzippedBytes, checksum } = buildNdjsonGzipped(rows);
 
   logger.info("fmcsa artifact upload start", {
     feed_name: payload.feed.feedName,
     artifact_path: artifactPath,
-    row_count: rows.length,
+    row_count: rowCount,
     artifact_size_bytes: gzippedBytes.length,
   });
 
@@ -635,7 +657,7 @@ async function uploadArtifactAndIngest(
     source_run_metadata: sourceRunMetadata,
     artifact_bucket: FMCSA_ARTIFACTS_BUCKET,
     artifact_path: artifactPath,
-    row_count: rows.length,
+    row_count: rowCount,
     artifact_checksum: checksum,
   };
 
@@ -648,7 +670,7 @@ async function uploadArtifactAndIngest(
       response.checksum_verified === true &&
       typeof response.rows_received === "number" &&
       typeof response.rows_written === "number" &&
-      response.rows_received === rows.length &&
+      response.rows_received === rowCount &&
       response.rows_written >= 0,
     confirmationErrorMessage: `${payload.feed.feedName} artifact ingest confirmation failed`,
   });
@@ -709,7 +731,9 @@ async function parseAndPersistStreamedCsv(
   let rowsDownloaded = 0;
   let rowsParsed = 0;
   let rowsAccepted = 0;
-  const allRows: FmcsaDailyDiffRow[] = [];
+  // Accumulate NDJSON lines as strings instead of structured JS objects to avoid OOM
+  // on large feeds (e.g. 8.2M rows × 147 columns). Flat strings are ~3-5x smaller.
+  const ndjsonLines: string[] = [];
 
   try {
     for await (const record of parser) {
@@ -723,7 +747,7 @@ async function parseAndPersistStreamedCsv(
       rowNumber += 1;
       rowsDownloaded += 1;
       rowsParsed += 1;
-      allRows.push(normalizeCsvRow(payload.feed, values, rowNumber));
+      ndjsonLines.push(JSON.stringify(normalizeCsvRow(payload.feed, values, rowNumber)));
       rowsAccepted += 1;
 
       if (rowsDownloaded % 500_000 === 0) {
@@ -748,7 +772,14 @@ async function parseAndPersistStreamedCsv(
     throw new Error(`${payload.feed.feedName} download contained no parseable rows`);
   }
 
-  const confirmation = await uploadArtifactAndIngest(client, storage, payload, allRows, feedDate, observedAt);
+  // Build gzipped NDJSON artifact from accumulated string lines
+  const ndjsonString = ndjsonLines.join("\n") + "\n";
+  const gzippedBytes = gzipSync(Buffer.from(ndjsonString, "utf-8"));
+  const checksum = createHash("sha256").update(gzippedBytes).digest("hex");
+
+  const confirmation = await uploadPrebuiltArtifactAndIngest(
+    client, storage, payload, gzippedBytes, checksum, rowsAccepted, feedDate, observedAt,
+  );
 
   return {
     feed_name: payload.feed.feedName,
