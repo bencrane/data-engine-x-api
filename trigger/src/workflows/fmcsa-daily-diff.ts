@@ -142,10 +142,16 @@ interface FmcsaArtifactIngestConfirmation {
   checksum_verified: boolean;
 }
 
+interface StorageFileObject {
+  name: string;
+  created_at: string;
+}
+
 interface SupabaseStorageClient {
   upload(bucket: string, path: string, data: Uint8Array, options?: { contentType?: string; upsert?: boolean }): Promise<{ error: Error | null }>;
   remove(bucket: string, paths: string[]): Promise<{ error: Error | null }>;
   createBucket(name: string, options?: { public: boolean }): Promise<{ error: Error | null }>;
+  list(bucket: string, path: string): Promise<{ data: StorageFileObject[] | null; error: Error | null }>;
 }
 
 const MANIFEST_INGEST_TIMEOUT_MS = 1_800_000; // 30 minutes
@@ -495,6 +501,10 @@ function createStorageClient(dependencies: FmcsaDailyDiffWorkflowDependencies): 
       const { error } = await client.storage.createBucket(name, options ?? { public: false });
       return { error };
     },
+    async list(bucket: string, path: string) {
+      const { data, error } = await client.storage.from(bucket).list(path);
+      return { data: data as StorageFileObject[] | null, error };
+    },
   };
 }
 
@@ -515,6 +525,64 @@ async function ensureBucketExists(storage: SupabaseStorageClient): Promise<void>
   const { error } = await storage.createBucket(FMCSA_ARTIFACTS_BUCKET, { public: false });
   if (error && !error.message?.includes("already exists")) {
     throw new Error(`Failed to create bucket ${FMCSA_ARTIFACTS_BUCKET}: ${error.message}`);
+  }
+}
+
+const ARTIFACT_TTL_DAYS = 7;
+
+async function cleanupOldArtifacts(
+  storage: SupabaseStorageClient,
+  feed: FmcsaDailyDiffFeedConfig,
+): Promise<void> {
+  const sanitizedFeedName = feed.feedName.replace(/[^a-zA-Z0-9_-]/g, "_");
+  try {
+    // List date directories for this feed
+    const { data: dateDirs, error: listError } = await storage.list(FMCSA_ARTIFACTS_BUCKET, sanitizedFeedName);
+    if (listError || !dateDirs) {
+      logger.warn("fmcsa artifact ttl list failed (non-fatal)", {
+        feed_name: feed.feedName,
+        error: listError?.message ?? "no data returned",
+      });
+      return;
+    }
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - ARTIFACT_TTL_DAYS);
+
+    const expiredPaths: string[] = [];
+    for (const dir of dateDirs) {
+      const created = new Date(dir.created_at);
+      if (created < cutoff) {
+        // List files inside the expired date directory
+        const { data: files } = await storage.list(FMCSA_ARTIFACTS_BUCKET, `${sanitizedFeedName}/${dir.name}`);
+        if (files) {
+          for (const file of files) {
+            expiredPaths.push(`${sanitizedFeedName}/${dir.name}/${file.name}`);
+          }
+        }
+      }
+    }
+
+    if (expiredPaths.length > 0) {
+      const { error: removeError } = await storage.remove(FMCSA_ARTIFACTS_BUCKET, expiredPaths);
+      if (removeError) {
+        logger.warn("fmcsa artifact ttl cleanup failed (non-fatal)", {
+          feed_name: feed.feedName,
+          expired_count: expiredPaths.length,
+          error: removeError.message,
+        });
+      } else {
+        logger.info("fmcsa artifact ttl cleanup", {
+          feed_name: feed.feedName,
+          expired_artifacts_removed: expiredPaths.length,
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn("fmcsa artifact ttl cleanup error (non-fatal)", {
+      feed_name: feed.feedName,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -607,6 +675,9 @@ async function uploadArtifactAndIngest(
       error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
     });
   }
+
+  // TTL cleanup: remove artifacts older than 7 days for this feed
+  await cleanupOldArtifacts(storage, payload.feed);
 
   return confirmation;
 }
