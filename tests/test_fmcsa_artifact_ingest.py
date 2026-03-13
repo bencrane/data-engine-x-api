@@ -259,6 +259,39 @@ class TestIngestArtifact:
                 artifact_checksum=checksum,
             )
 
+    def test_streaming_chunked_processing_large_batch(self) -> None:
+        """Verify streaming decompression processes 105 rows in 11 chunks (10+10+...+5)."""
+        rows = _make_rows(105)
+        download_patch, checksum = self._patch_download(rows)
+        call_log: list[int] = []
+
+        def _mock(*, source_context: Any, rows: Any) -> dict[str, Any]:
+            call_log.append(len(rows))
+            return {"rows_written": len(rows)}
+
+        with download_patch, _patch_registry("AuthHist", _mock):
+            result = ingest_artifact(
+                feed_name="AuthHist",
+                feed_date="2026-03-10",
+                download_url="https://example.com/feed.csv",
+                source_file_variant="daily diff",
+                source_observed_at="2026-03-10T12:00:00Z",
+                source_task_id="test-task",
+                source_schedule_id=None,
+                source_run_metadata={},
+                artifact_bucket="fmcsa-artifacts",
+                artifact_path="AuthHist/2026-03-10/test.ndjson.gz",
+                row_count=105,
+                artifact_checksum=checksum,
+                chunk_size=10,
+            )
+
+        # 105 rows / 10 per chunk = 11 chunks (10×10 + 1×5)
+        assert len(call_log) == 11
+        assert call_log == [10] * 10 + [5]
+        assert result["rows_received"] == 105
+        assert result["rows_written"] == 105
+
     def test_chunk_failure_stops_processing(self) -> None:
         rows = _make_rows(25)
         download_patch, checksum = self._patch_download(rows)
