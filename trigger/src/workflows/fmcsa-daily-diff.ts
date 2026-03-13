@@ -1,10 +1,10 @@
 import { logger } from "@trigger.dev/sdk/v3";
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, unlinkSync } from "node:fs";
+import { createReadStream, createWriteStream, statSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { createGzip, gzipSync } from "node:zlib";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { parse as createCsvStreamParser } from "csv-parse";
@@ -825,31 +825,41 @@ async function parseAndPersistStreamedCsv(
     throw new Error(`${payload.feed.feedName} download contained no parseable rows`);
   }
 
-  // Gzip the NDJSON file on disk via streaming pipeline — no full file in memory
+  // Gzip the NDJSON file on disk via streaming pipeline with incremental checksum.
+  // The hash transform computes SHA-256 on the compressed bytes as they flow through,
+  // eliminating the need to re-read the gzipped file afterward.
   const gzippedTmpPath = ndjsonTmpPath + ".gz";
+  const hash = createHash("sha256");
+  const hashPassthrough = new Transform({
+    transform(chunk, _encoding, callback) {
+      hash.update(chunk);
+      callback(null, chunk);
+    },
+  });
   try {
     await pipeline(
       createReadStream(ndjsonTmpPath),
       createGzip(),
+      hashPassthrough,
       createWriteStream(gzippedTmpPath),
     );
   } finally {
     cleanupTmpFile(ndjsonTmpPath);
   }
+  const checksum = hash.digest("hex");
 
-  // Read the gzipped file and compute checksum — gzipped files are much smaller than raw NDJSON
-  const { readFile } = await import("node:fs/promises");
-  const gzippedBytes = await readFile(gzippedTmpPath);
-  const checksum = createHash("sha256").update(gzippedBytes).digest("hex");
+  const gzippedFileSize = statSync(gzippedTmpPath).size;
 
   logger.info("fmcsa artifact built on disk", {
     feed_name: payload.feed.feedName,
     rows_accepted: rowsAccepted,
-    gzipped_size_mb: Math.round(gzippedBytes.length / 1_048_576 * 100) / 100,
+    gzipped_size_mb: Math.round(gzippedFileSize / 1_048_576 * 100) / 100,
   });
 
   let confirmation: FmcsaArtifactIngestConfirmation;
   try {
+    const { readFile } = await import("node:fs/promises");
+    const gzippedBytes = await readFile(gzippedTmpPath);
     confirmation = await uploadPrebuiltArtifactAndIngest(
       client, storage, payload, gzippedBytes, checksum, rowsAccepted, feedDate, observedAt,
     );
