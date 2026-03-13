@@ -1,6 +1,6 @@
 import { logger } from "@trigger.dev/sdk/v3";
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, statSync, unlinkSync } from "node:fs";
+import { createReadStream, createWriteStream, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -154,7 +154,6 @@ interface StorageFileObject {
 
 interface SupabaseStorageClient {
   upload(bucket: string, path: string, data: Uint8Array, options?: { contentType?: string; upsert?: boolean }): Promise<{ error: Error | null }>;
-  uploadFile(bucket: string, path: string, filePath: string, fileSize: number, options?: { contentType?: string; upsert?: boolean }): Promise<{ error: Error | null }>;
   remove(bucket: string, paths: string[]): Promise<{ error: Error | null }>;
   createBucket(name: string, options?: { public: boolean }): Promise<{ error: Error | null }>;
   list(bucket: string, path: string): Promise<{ data: StorageFileObject[] | null; error: Error | null }>;
@@ -526,42 +525,6 @@ function createStorageClient(dependencies: FmcsaDailyDiffWorkflowDependencies): 
         tusUpload.start();
       });
     },
-    async uploadFile(bucket: string, path: string, filePath: string, fileSize: number, options?: { contentType?: string; upsert?: boolean }) {
-      // Stream-from-file TUS upload — avoids loading the entire artifact into memory.
-      // tus-js-client accepts Pick<ReadableStreamDefaultReader, 'read'>, so we convert
-      // the Node ReadStream to a web ReadableStream and grab its reader. Peak memory
-      // stays at chunkSize (6MB) instead of the full artifact.
-      const uploadUrl = `${supabaseUrl}/storage/v1/upload/resumable`;
-      const fileStream = createReadStream(filePath);
-      const webStream = Readable.toWeb(fileStream) as ReadableStream<Uint8Array>;
-      const reader = webStream.getReader();
-      return new Promise<{ error: Error | null }>((resolve) => {
-        const tusUpload = new TusUpload(reader, {
-          endpoint: uploadUrl,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          headers: {
-            authorization: `Bearer ${supabaseServiceKey}`,
-            apikey: supabaseServiceKey,
-          },
-          chunkSize: 6 * 1024 * 1024, // 6MB chunks
-          metadata: {
-            bucketName: bucket,
-            objectName: path,
-            contentType: options?.contentType ?? "application/octet-stream",
-            cacheControl: "3600",
-          },
-          uploadSize: fileSize,
-          onError: (error) => {
-            reader.cancel().catch(() => {});
-            resolve({ error: new Error(`TUS upload failed for ${bucket}/${path}: ${error.message}`) });
-          },
-          onSuccess: () => {
-            resolve({ error: null });
-          },
-        });
-        tusUpload.start();
-      });
-    },
     async remove(bucket: string, paths: string[]) {
       const { error } = await client.storage.from(bucket).remove(paths);
       return { error };
@@ -773,104 +736,6 @@ async function uploadPrebuiltArtifactAndIngest(
   return confirmation;
 }
 
-async function uploadArtifactFromFileAndIngest(
-  client: InternalApiClient,
-  storage: SupabaseStorageClient,
-  payload: FmcsaDailyDiffWorkflowPayload,
-  gzippedFilePath: string,
-  gzippedFileSize: number,
-  checksum: string,
-  rowCount: number,
-  feedDate: string,
-  observedAt: string,
-): Promise<FmcsaArtifactIngestConfirmation> {
-  await ensureBucketExists(storage);
-
-  const artifactPath = resolveArtifactPath(payload.feed, feedDate);
-
-  logger.info("fmcsa artifact upload start", {
-    feed_name: payload.feed.feedName,
-    artifact_path: artifactPath,
-    row_count: rowCount,
-    artifact_size_bytes: gzippedFileSize,
-  });
-
-  const { error: uploadError } = await storage.uploadFile(
-    FMCSA_ARTIFACTS_BUCKET,
-    artifactPath,
-    gzippedFilePath,
-    gzippedFileSize,
-    { contentType: "application/gzip", upsert: false },
-  );
-  if (uploadError) {
-    throw new Error(`Failed to upload artifact to ${FMCSA_ARTIFACTS_BUCKET}/${artifactPath}: ${uploadError.message}`);
-  }
-
-  logger.info("fmcsa artifact uploaded", {
-    feed_name: payload.feed.feedName,
-    artifact_path: artifactPath,
-    artifact_size_bytes: gzippedFileSize,
-    checksum,
-  });
-
-  const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, feedDate, observedAt);
-  const manifest: FmcsaArtifactIngestManifest = {
-    feed_name: payload.feed.feedName,
-    feed_date: feedDate,
-    download_url: payload.feed.downloadUrl,
-    source_file_variant: payload.feed.sourceFileVariant,
-    source_observed_at: observedAt,
-    source_task_id: payload.feed.taskId,
-    source_schedule_id: payload.schedule?.scheduleId ?? null,
-    source_run_metadata: sourceRunMetadata,
-    artifact_bucket: FMCSA_ARTIFACTS_BUCKET,
-    artifact_path: artifactPath,
-    row_count: rowCount,
-    artifact_checksum: checksum,
-  };
-
-  const confirmation = await writeDedicatedTableConfirmed<FmcsaArtifactIngestConfirmation>(client, {
-    path: "/api/internal/fmcsa/ingest-artifact",
-    payload: manifest,
-    timeoutMs: MANIFEST_INGEST_TIMEOUT_MS,
-    validate: (response) =>
-      isRecord(response) &&
-      response.checksum_verified === true &&
-      typeof response.rows_received === "number" &&
-      typeof response.rows_written === "number" &&
-      response.rows_received === rowCount &&
-      response.rows_written >= 0,
-    confirmationErrorMessage: `${payload.feed.feedName} artifact ingest confirmation failed`,
-  });
-
-  logger.info("fmcsa artifact ingest confirmed", {
-    feed_name: confirmation.feed_name,
-    table_name: confirmation.table_name,
-    rows_received: confirmation.rows_received,
-    rows_written: confirmation.rows_written,
-  });
-
-  // Clean up artifact after confirmed success
-  try {
-    const { error: deleteError } = await storage.remove(FMCSA_ARTIFACTS_BUCKET, [artifactPath]);
-    if (deleteError) {
-      logger.warn("fmcsa artifact delete failed (non-fatal)", {
-        artifact_path: artifactPath,
-        error: deleteError.message,
-      });
-    }
-  } catch (deleteErr) {
-    logger.warn("fmcsa artifact delete failed (non-fatal)", {
-      artifact_path: artifactPath,
-      error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
-    });
-  }
-
-  // TTL cleanup: remove artifacts older than 7 days for this feed
-  await cleanupOldArtifacts(storage, payload.feed);
-
-  return confirmation;
-}
 
 async function parseAndPersistStreamedCsv(
   client: InternalApiClient,
@@ -984,22 +849,22 @@ async function parseAndPersistStreamedCsv(
   }
   const checksum = hash.digest("hex");
 
-  const gzippedFileSize = statSync(gzippedTmpPath).size;
+  // Read gzipped file into memory for upload. Gzipped artifacts are much smaller
+  // than raw NDJSON (~10-20x compression), so this is safe even for large feeds.
+  // E.g. 2M rows raw NDJSON ~1GB → gzipped ~50-100MB.
+  const { readFile } = await import("node:fs/promises");
+  const gzippedBytes = await readFile(gzippedTmpPath);
+  cleanupTmpFile(gzippedTmpPath);
 
   logger.info("fmcsa artifact built on disk", {
     feed_name: payload.feed.feedName,
     rows_accepted: rowsAccepted,
-    gzipped_size_mb: Math.round(gzippedFileSize / 1_048_576 * 100) / 100,
+    gzipped_size_mb: Math.round(gzippedBytes.length / 1_048_576 * 100) / 100,
   });
 
-  let confirmation: FmcsaArtifactIngestConfirmation;
-  try {
-    confirmation = await uploadArtifactFromFileAndIngest(
-      client, storage, payload, gzippedTmpPath, gzippedFileSize, checksum, rowsAccepted, feedDate, observedAt,
-    );
-  } finally {
-    cleanupTmpFile(gzippedTmpPath);
-  }
+  const confirmation = await uploadPrebuiltArtifactAndIngest(
+    client, storage, payload, gzippedBytes, checksum, rowsAccepted, feedDate, observedAt,
+  );
 
   return {
     feed_name: payload.feed.feedName,
