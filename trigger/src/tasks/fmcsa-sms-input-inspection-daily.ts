@@ -7,6 +7,7 @@ import {
 
 export const fmcsaSmsInputInspectionDaily = schedules.task({
   id: FMCSA_SMS_INPUT_INSPECTION_FEED.taskId,
+  machine: "large-2x",
   maxDuration: 43200,
   cron: {
     pattern: "57 11 * * *",

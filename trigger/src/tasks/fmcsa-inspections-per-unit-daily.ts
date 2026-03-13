@@ -7,7 +7,7 @@ import {
 
 export const fmcsaInspectionsPerUnitDaily = schedules.task({
   id: FMCSA_INSPECTIONS_PER_UNIT_FEED.taskId,
-  machine: "medium-2x",
+  machine: "large-2x",
   maxDuration: 43200,
   cron: {
     pattern: "39 12 * * *",

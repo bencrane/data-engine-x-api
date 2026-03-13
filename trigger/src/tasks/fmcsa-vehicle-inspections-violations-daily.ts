@@ -7,7 +7,7 @@ import {
 
 export const fmcsaVehicleInspectionsViolationsDaily = schedules.task({
   id: FMCSA_VEHICLE_INSPECTIONS_AND_VIOLATIONS_FEED.taskId,
-  machine: "small-2x",
+  machine: "large-2x",
   maxDuration: 43200,
   cron: {
     pattern: "21 13 * * *",

@@ -7,6 +7,7 @@ import {
 
 export const fmcsaSmsMotorCarrierCensusDaily = schedules.task({
   id: FMCSA_SMS_MOTOR_CARRIER_CENSUS_FEED.taskId,
+  machine: "large-2x",
   maxDuration: 43200,
   cron: {
     pattern: "4 12 * * *",
