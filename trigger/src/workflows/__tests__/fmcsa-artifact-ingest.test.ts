@@ -40,6 +40,9 @@ function createMockStorageClient(opts?: { uploadError?: Error; removeError?: Err
         uploads.push({ bucket, path, data, options });
         return { error: opts?.uploadError ?? null };
       },
+      async uploadFile(_bucket: string, _path: string, _filePath: string, _fileSize: number, _options?: { contentType?: string; upsert?: boolean }) {
+        return { error: opts?.uploadError ?? null };
+      },
       async remove(bucket: string, paths: string[]) {
         removes.push({ bucket, paths });
         return { error: opts?.removeError ?? null };
