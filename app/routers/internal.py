@@ -307,7 +307,6 @@ class InternalUpsertPersonIntelBriefingsRequest(BaseModel):
 
 class InternalFmcsaDailyDiffRow(BaseModel):
     row_number: int
-    raw_values: list[str]
     raw_fields: dict[str, str]
 
 

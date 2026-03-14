@@ -27,7 +27,6 @@ def _sample_rows(count: int = 2):
     return [
         {
             "row_number": i,
-            "raw_values": [f"val{i}"],
             "raw_fields": {"DOT_NUMBER": str(1000 + i)},
         }
         for i in range(1, count + 1)

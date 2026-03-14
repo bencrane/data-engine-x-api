@@ -39,7 +39,7 @@ from app.services.vehicle_inspection_units import upsert_vehicle_inspection_unit
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CHUNK_SIZE = 10_000
+DEFAULT_CHUNK_SIZE = 50_000
 
 # Type for per-feed upsert functions: takes source_context + rows, returns result dict
 FmcsaUpsertFunc = Callable[..., dict[str, Any]]
@@ -144,6 +144,7 @@ def ingest_artifact(
     row_count: int,
     artifact_checksum: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
+    use_snapshot_replace: bool | None = None,
 ) -> dict[str, Any]:
     """
     Download artifact from Supabase Storage, verify checksum, decompress,
@@ -170,6 +171,9 @@ def ingest_artifact(
             f"expected {artifact_checksum}, got {actual_checksum}"
         )
 
+    if use_snapshot_replace is None:
+        use_snapshot_replace = source_file_variant == "csv_export"
+
     # Build source context
     source_context: FmcsaSourceContext = {
         "feed_name": feed_name,
@@ -180,6 +184,7 @@ def ingest_artifact(
         "source_task_id": source_task_id,
         "source_schedule_id": source_schedule_id,
         "source_run_metadata": source_run_metadata,
+        "use_snapshot_replace": use_snapshot_replace,
     }
 
     # Streaming decompress → parse → persist in chunks.
@@ -205,6 +210,7 @@ def ingest_artifact(
             if len(chunk) == chunk_size:
                 chunk_number = chunks_processed + 1
                 persist_chunk_start = time.monotonic()
+                source_context["is_first_chunk"] = (chunks_processed == 0)
                 try:
                     result = upsert_func(
                         source_context=source_context,
@@ -236,6 +242,7 @@ def ingest_artifact(
     if chunk:
         chunk_number = chunks_processed + 1
         persist_chunk_start = time.monotonic()
+        source_context["is_first_chunk"] = (chunks_processed == 0)
         try:
             result = upsert_func(
                 source_context=source_context,

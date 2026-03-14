@@ -26,7 +26,6 @@ def _make_rows(count: int) -> list[dict[str, Any]]:
     return [
         {
             "row_number": i + 1,
-            "raw_values": [f"val{i}_0", f"val{i}_1"],
             "raw_fields": {"col0": f"val{i}_0", "col1": f"val{i}_1"},
         }
         for i in range(count)
@@ -112,7 +111,7 @@ class TestParseNdjsonRows:
         assert parsed[2]["row_number"] == 3
 
     def test_skips_blank_lines(self) -> None:
-        ndjson = json.dumps({"row_number": 1, "raw_values": [], "raw_fields": {}}) + "\n\n\n"
+        ndjson = json.dumps({"row_number": 1, "raw_fields": {}}) + "\n\n\n"
         parsed = parse_ndjson_rows(ndjson.encode("utf-8"))
         assert len(parsed) == 1
 

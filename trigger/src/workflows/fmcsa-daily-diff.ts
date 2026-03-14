@@ -70,7 +70,6 @@ export interface FmcsaScheduledPayload {
 
 export interface FmcsaDailyDiffRow {
   row_number: number;
-  raw_values: string[];
   raw_fields: Record<string, string>;
 }
 
@@ -415,7 +414,6 @@ function normalizeCsvRow(
 
   return {
     row_number: rowNumber,
-    raw_values: values,
     raw_fields: rawFields,
   };
 }

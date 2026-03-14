@@ -9,7 +9,7 @@ import time
 from uuid import uuid4
 from collections.abc import Callable
 from datetime import date, datetime, timezone
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import threading
 
@@ -51,7 +51,6 @@ _COPY_ROW_DELIMITER = "\n"
 
 class FmcsaDailyDiffRow(TypedDict):
     row_number: int
-    raw_values: list[str]
     raw_fields: dict[str, str]
 
 
@@ -64,7 +63,8 @@ class FmcsaSourceContext(TypedDict):
     source_task_id: str
     source_schedule_id: str | None
     source_run_metadata: dict[str, Any]
-
+    use_snapshot_replace: NotRequired[bool]
+    is_first_chunk: NotRequired[bool]
 
 def _get_fmcsa_connection_pool() -> ConnectionPool:
     global _fmcsa_pool
@@ -259,9 +259,18 @@ def _build_fmcsa_bulk_merge_sql(
     temp_table_name: str,
     columns: list[str],
     conflict_columns: tuple[str, ...],
+    use_snapshot_replace: bool = False,
 ) -> str:
     quoted_columns = ", ".join(_quote_identifier(column_name) for column_name in columns)
     projected_columns = ", ".join(_quote_identifier(column_name) for column_name in columns)
+    
+    if use_snapshot_replace:
+        return (
+            f"INSERT INTO {_quote_qualified_identifier(FMCSA_ENTITIES_SCHEMA, table_name)} "
+            f"({quoted_columns}) SELECT {projected_columns} "
+            f"FROM {_quote_identifier(temp_table_name)}"
+        )
+
     quoted_conflict_columns = ", ".join(_quote_identifier(column_name) for column_name in conflict_columns)
 
     update_assignments = [
@@ -402,7 +411,6 @@ def upsert_fmcsa_daily_diff_rows(
                 "source_run_metadata": source_context["source_run_metadata"],
                 "raw_source_row": {
                     "row_number": row["row_number"],
-                    "raw_values": row["raw_values"],
                     "raw_fields": row["raw_fields"],
                 },
                 "updated_at": now,
@@ -454,11 +462,15 @@ def upsert_fmcsa_daily_diff_rows(
             else FMCSA_CONFLICT_COLUMNS
         )
         temp_table_name = _build_temp_table_name(table_name)
+        use_snapshot_replace = source_context.get("use_snapshot_replace", False)
+        is_first_chunk = source_context.get("is_first_chunk", False)
+        
         upsert_sql = _build_fmcsa_bulk_merge_sql(
             table_name=table_name,
             temp_table_name=temp_table_name,
             columns=columns,
             conflict_columns=conflict_columns,
+            use_snapshot_replace=use_snapshot_replace,
         )
 
         pool = _get_fmcsa_connection_pool()
@@ -467,6 +479,16 @@ def upsert_fmcsa_daily_diff_rows(
             phases["connection_acquire_ms"] = round((time.perf_counter() - t_conn_start) * 1000, 1)
             try:
                 with connection.cursor() as cursor:
+                    if use_snapshot_replace and is_first_chunk:
+                        t_delete = time.perf_counter()
+                        cursor.execute(
+                            f"DELETE FROM {_quote_qualified_identifier(FMCSA_ENTITIES_SCHEMA, table_name)} "
+                            f"WHERE {_quote_identifier('feed_date')} = %s "
+                            f"AND {_quote_identifier('source_feed_name')} = %s",
+                            (source_context["feed_date"], source_context["feed_name"]),
+                        )
+                        phases["delete_ms"] = round((time.perf_counter() - t_delete) * 1000, 1)
+
                     t_temp = time.perf_counter()
                     _create_temp_staging_table(
                         cursor=cursor,

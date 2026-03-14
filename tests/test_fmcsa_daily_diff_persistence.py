@@ -376,17 +376,6 @@ def test_top5_tables_fall_back_to_live_legacy_columns_when_snapshot_columns_abse
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "MC123456",
-                    "12345678",
-                    "0001",
-                    "Common",
-                    "Granted",
-                    "03/10/2024",
-                    "Revoked",
-                    "03/09/2026",
-                    "03/10/2026",
-                ],
                 "raw_fields": {
                     "Docket Number": "MC123456",
                     "USDOT Number": "12345678",
@@ -449,25 +438,6 @@ def test_top5_tables_use_record_fingerprint_conflict_when_live_schema_is_legacy(
 
     first_row = {
         "row_number": 3,
-        "raw_values": [
-            "MC333333",
-            "33334444",
-            "91X",
-            "Cancelled",
-            "35",
-            " ",
-            "BIPD/Primary",
-            "TP404896",
-            "750",
-            "P",
-            "09/01/1991",
-            "0",
-            "1000",
-            "09/01/1995",
-            "CANCEL",
-            "00",
-            "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
-        ],
         "raw_fields": {
             "Docket Number": "MC333333",
             "USDOT Number": "33334444",
@@ -518,51 +488,6 @@ def test_upsert_carrier_registrations_preserves_snapshot_row(fake_client: _FakeD
         rows=[
             {
                 "row_number": 4,
-                "raw_values": [
-                    "MC444444",
-                    "12345678",
-                    "",
-                    "",
-                    "A",
-                    "N",
-                    "I",
-                    "N",
-                    "N",
-                    "Y",
-                    "N",
-                    "N",
-                    "Y",
-                    "Y",
-                    "N",
-                    "N",
-                    "N",
-                    "Y",
-                    "00750",
-                    "N",
-                    "Y",
-                    "01000",
-                    "N",
-                    "Y",
-                    "Y",
-                    "ACME LOGISTICS",
-                    "ACME LOGISTICS LLC",
-                    "123 MAIN ST",
-                    "",
-                    "AUSTIN",
-                    "TX",
-                    "US",
-                    "78701",
-                    "5125550101",
-                    "",
-                    "PO BOX 5",
-                    "",
-                    "AUSTIN",
-                    "TX",
-                    "US",
-                    "78702",
-                    "5125550102",
-                    "",
-                ],
                 "raw_fields": {
                     "Docket Number": "MC444444",
                     "USDOT Number": "12345678",
@@ -626,67 +551,6 @@ def test_upsert_commercial_vehicle_crashes_persists_typed_row(fake_client: _Fake
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "19901102 0000",
-                    "195291",
-                    "VA",
-                    "VA00000875",
-                    "19900118",
-                    "0900",
-                    "1",
-                    "12345678",
-                    "C",
-                    "19900120",
-                    "I-95",
-                    "00000",
-                    "RICHMOND",
-                    "VA",
-                    "001",
-                    "T",
-                    "1",
-                    "1",
-                    "1",
-                    "3",
-                    "3",
-                    "VIN12345678901234",
-                    "ABC1234",
-                    "VA",
-                    "Y",
-                    "1",
-                    "9",
-                    "1",
-                    "N",
-                    "STATE POLICE",
-                    "2",
-                    "0",
-                    "1",
-                    "Y",
-                    "Y",
-                    "Y",
-                    "1.0",
-                    "1234",
-                    "A",
-                    "19900119 1015",
-                    "0",
-                    "12345678",
-                    "Y",
-                    "19900119 1100",
-                    "19900119 1115",
-                    "999",
-                    "ACME CARRIER",
-                    "1 MAIN ST",
-                    "RICHMOND",
-                    "00000",
-                    "VA",
-                    "23219",
-                    "",
-                    "MC123456",
-                    "Y",
-                    "",
-                    "",
-                    "",
-                    "1:13:Collision involving motor vehicle in transport",
-                ],
                 "raw_fields": {
                     "CHANGE_DATE": "19901102 0000",
                     "CRASH_ID": "195291",
@@ -764,51 +628,6 @@ def test_shared_carrier_registration_table_keeps_daily_and_all_history_rows_sepa
 ):
     row = {
         "row_number": 1,
-        "raw_values": [
-            "MC012892",
-            "02217388",
-            "",
-            "",
-            "N",
-            "A",
-            "N",
-            "N",
-            "N",
-            "N",
-            "N",
-            "N",
-            "N",
-            "Y",
-            "N",
-            "N",
-            "N",
-            "N",
-            "00750",
-            "N",
-            "N",
-            "00750",
-            "N",
-            "N",
-            "Y",
-            "",
-            "ACME CARRIER LLC",
-            "1 MAIN ST",
-            "",
-            "AUSTIN",
-            "TX",
-            "US",
-            "78701",
-            "5125550000",
-            "",
-            "1 MAIN ST",
-            "",
-            "AUSTIN",
-            "TX",
-            "US",
-            "78701",
-            "5125550000",
-            "",
-        ],
         "raw_fields": {
             "Docket Number": "MC012892",
             "USDOT Number": "02217388",
@@ -881,7 +700,6 @@ def test_upsert_process_agent_filings_same_day_rerun_updates_same_feed_slot(
 ):
     first_row = {
         "row_number": 1,
-        "raw_values": ["MC555555", "55556666", "AGENT ONE", "LEGAL", "1 MAIN", "AUSTIN", "TX", "USA", "78701"],
         "raw_fields": {
             "Docket Number": "MC555555",
             "USDOT Number": "55556666",
@@ -896,7 +714,6 @@ def test_upsert_process_agent_filings_same_day_rerun_updates_same_feed_slot(
     }
     second_row = {
         "row_number": 1,
-        "raw_values": ["MC555555", "55556666", "AGENT TWO", "LEGAL", "1 MAIN", "AUSTIN", "TX", "USA", "78701"],
         "raw_fields": {
             "Docket Number": "MC555555",
             "USDOT Number": "55556666",
@@ -934,29 +751,6 @@ def test_upsert_carrier_safety_basic_measures_keeps_ab_and_c_rows_distinct(
 ):
     row = {
         "row_number": 1,
-        "raw_values": [
-            "10000",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "N",
-            "0",
-            "0",
-            "N",
-            "0",
-            "0",
-            "N",
-            "0",
-            "0",
-            "N",
-            "0",
-            "0",
-            "N",
-        ],
         "raw_fields": {
             "DOT_NUMBER": "10000",
             "INSP_TOTAL": "0",
@@ -1017,44 +811,6 @@ def test_upsert_carrier_safety_basic_percentiles_persists_typed_row(fake_client:
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "100115",
-                    "68",
-                    "52",
-                    "0",
-                    "51",
-                    "1",
-                    "3",
-                    ".03",
-                    "0%",
-                    "N",
-                    "N",
-                    "N",
-                    "2",
-                    ".02",
-                    "1%",
-                    "N",
-                    "N",
-                    "N",
-                    "1",
-                    ".01",
-                    "2%",
-                    "N",
-                    "N",
-                    "N",
-                    "0",
-                    "0",
-                    "0%",
-                    "N",
-                    "N",
-                    "N",
-                    "4",
-                    ".25",
-                    "15%",
-                    "Y",
-                    "N",
-                    "Y",
-                ],
                 "raw_fields": {
                     "DOT_NUMBER": "100115",
                     "INSP_TOTAL": "68",
@@ -1110,21 +866,6 @@ def test_upsert_carrier_inspection_violations_preserves_feed_date_snapshots(
 ):
     row = {
         "row_number": 1,
-        "raw_values": [
-            "726403509",
-            "30-JAN-24",
-            "1926619",
-            "3922SLLS4",
-            "Unsafe Driving",
-            "false",
-            "0",
-            "10",
-            "1",
-            "10",
-            "Failing to obey traffic control device",
-            "Traffic Control",
-            "D",
-        ],
         "raw_fields": {
             "Unique_ID": "726403509",
             "Insp_Date": "30-JAN-24",
@@ -1177,20 +918,6 @@ def test_upsert_carrier_inspection_violations_supports_vehicle_inspection_feed(
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "20230504 2141",
-                    "78529074",
-                    "252617929",
-                    "2",
-                    "393",
-                    "393.75A",
-                    "1",
-                    "194662753",
-                    "12",
-                    "Y",
-                    "1",
-                    "CIT-1",
-                ],
                 "raw_fields": {
                     "CHANGE_DATE": "20230504 2141",
                     "INSPECTION_ID": "78529074",
@@ -1227,47 +954,6 @@ def test_upsert_carrier_inspections_persists_typed_row(fake_client: _FakeDirectP
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "726403509",
-                    "1147001995",
-                    "CT",
-                    "1926619",
-                    "30-JAN-24",
-                    "3",
-                    "CT",
-                    "1",
-                    "0",
-                    "0",
-                    "0",
-                    "0",
-                    "0",
-                    "false",
-                    "Truck Tractor",
-                    "Freightliner",
-                    "ABC123",
-                    "CT",
-                    "VINMAIN",
-                    "DECAL1",
-                    "Trailer",
-                    "Utility",
-                    "XYZ987",
-                    "CT",
-                    "VIN2",
-                    "DECAL2",
-                    "true",
-                    "false",
-                    "false",
-                    "false",
-                    "true",
-                    "false",
-                    "2",
-                    "1",
-                    "0",
-                    "0",
-                    "0",
-                    "1",
-                    "0",
-                ],
                 "raw_fields": {
                     "Unique_ID": "726403509",
                     "Report_Number": "1147001995",
@@ -1333,71 +1019,6 @@ def test_upsert_carrier_inspections_supports_vehicle_inspection_file_feed(
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "20230327 2139",
-                    "78058162",
-                    "3129666",
-                    "CT",
-                    "3079001925",
-                    "20230323",
-                    "0920",
-                    "0935",
-                    "20230324",
-                    "1",
-                    "C",
-                    "4",
-                    "I-95 NORTHBOUND",
-                    "CT",
-                    "003",
-                    "2",
-                    "EA",
-                    "5",
-                    "R",
-                    "",
-                    "",
-                    "",
-                    "N",
-                    "4.0",
-                    "20230327 2000",
-                    "N",
-                    "N",
-                    "0",
-                    "N",
-                    "N",
-                    "N",
-                    "Y",
-                    "20230327 2139",
-                    "N",
-                    "80000",
-                    "1",
-                    "0",
-                    "1",
-                    "0",
-                    "0",
-                    "0",
-                    "0",
-                    "0",
-                    "1111",
-                    "A",
-                    "20230327 2100",
-                    "20230327 2105",
-                    "0",
-                    "3129666",
-                    "M",
-                    "20230327 2103",
-                    "20230327 2050",
-                    "CT001",
-                    "20230327 2139",
-                    "ACME HAULING",
-                    "1 MAIN ST",
-                    "HARTFORD",
-                    "CT",
-                    "06103",
-                    "",
-                    "MC123456",
-                    "Y",
-                    "STATE-1",
-                ],
                 "raw_fields": {
                     "CHANGE_DATE": "20230327 2139",
                     "INSPECTION_ID": "78058162",
@@ -1480,50 +1101,6 @@ def test_upsert_motor_carrier_census_records_same_day_rerun_updates_same_feed_sl
 ):
     first_row = {
         "row_number": 1,
-        "raw_values": [
-            "1",
-            "FEDERAL MOTOR CARRIER SAFETY ADMINISTRATION",
-            "FMCSA TECHNOLOGY DIVISION",
-            "C",
-            "false",
-            "false",
-            "1200 NEW JERSEY AVENUE SE",
-            "WASHINGTON",
-            "DC",
-            "20590",
-            "US",
-            "1200 NEW JERSEY AVENUE SE",
-            "WASHINGTON",
-            "DC",
-            "20590",
-            "US",
-            "2023664000",
-            "",
-            "first@example.com",
-            "01-JAN-24",
-            "1000",
-            "2023",
-            "01-JAN-20",
-            "DC",
-            "5",
-            "10",
-            "2000",
-            "2024",
-            "1",
-            "false",
-            "true",
-            "false",
-            "false",
-            "false",
-            "false",
-            "false",
-            "false",
-            "false",
-            "false",
-            "false",
-            "false",
-            "",
-        ],
         "raw_fields": {
             "DOT_NUMBER": "1",
             "LEGAL_NAME": "FEDERAL MOTOR CARRIER SAFETY ADMINISTRATION",
@@ -1570,8 +1147,7 @@ def test_upsert_motor_carrier_census_records_same_day_rerun_updates_same_feed_sl
         },
     }
     second_row = {
-        **first_row,
-        "raw_values": [*first_row["raw_values"][:18], "second@example.com", *first_row["raw_values"][19:]],
+        "row_number": 1,
         "raw_fields": {**first_row["raw_fields"], "EMAIL_ADDRESS": "second@example.com"},
     }
 
@@ -1611,7 +1187,6 @@ def test_upsert_motor_carrier_census_records_supports_company_census_file(
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [],
                 "raw_fields": {
                     "MCS150_DATE": "20240101",
                     "ADD_DATE": "20200115",
@@ -1779,25 +1354,6 @@ def test_shared_table_keeps_daily_and_all_history_rows_separate_on_same_feed_dat
 ):
     row = {
         "row_number": 1,
-        "raw_values": [
-            "MC333333",
-            "33334444",
-            "91X",
-            "Cancelled",
-            "35",
-            " ",
-            "BIPD/Primary",
-            "TP404896",
-            "750",
-            "P",
-            "09/01/1991",
-            "0",
-            "1000",
-            "09/01/1995",
-            "CANCEL",
-            "00",
-            "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
-        ],
         "raw_fields": {
             "Docket Number": "MC333333",
             "USDOT Number": "33334444",
@@ -1844,7 +1400,6 @@ def test_upsert_vehicle_inspection_units_preserves_multiple_rows_for_same_inspec
 ):
     row_one = {
         "row_number": 1,
-        "raw_values": ["20230501 1045", "78487801", "194662753", "9", "1", "UTILITY", "A1", "ABC123", "TX", "VIN1", "Y", "D1"],
         "raw_fields": {
             "CHANGE_DATE": "20230501 1045",
             "INSPECTION_ID": "78487801",
@@ -1863,7 +1418,6 @@ def test_upsert_vehicle_inspection_units_preserves_multiple_rows_for_same_inspec
     row_two = {
         **row_one,
         "row_number": 2,
-        "raw_values": ["20230501 1045", "78487801", "194662754", "11", "2", "FREIGHTLINER", "A2", "XYZ987", "TX", "VIN2", "N", "D2"],
         "raw_fields": {**row_one["raw_fields"], "INSP_UNIT_ID": "194662754", "INSP_UNIT_NUMBER": "2", "INSP_UNIT_MAKE": "FREIGHTLINER", "INSP_UNIT_COMPANY": "A2", "INSP_UNIT_LICENSE": "XYZ987", "INSP_UNIT_VEHICLE_ID_NUMBER": "VIN2", "INSP_UNIT_DECAL": "N", "INSP_UNIT_DECAL_NUMBER": "D2"},
     }
 
@@ -1881,7 +1435,6 @@ def test_upsert_vehicle_inspection_special_studies_persists_typed_row(fake_clien
         rows=[
             {
                 "row_number": 1,
-                "raw_values": ["20230518 2144", "78668161", "16892759", "MORGAN LEWIS", "4"],
                 "raw_fields": {
                     "CHANGE_DATE": "20230518 2144",
                     "INSPECTION_ID": "78668161",
@@ -1905,7 +1458,6 @@ def test_upsert_vehicle_inspection_citations_persists_typed_row(fake_client: _Fa
         rows=[
             {
                 "row_number": 1,
-                "raw_values": ["20240220 2141", "78058442", "2", "1", "3", "Paid"],
                 "raw_fields": {
                     "CHANGE_DATE": "20240220 2141",
                     "INSPECTION_ID": "78058442",
@@ -1930,7 +1482,6 @@ def test_upsert_out_of_service_orders_persists_typed_row(fake_client: _FakeDirec
         rows=[
             {
                 "row_number": 1,
-                "raw_values": ["1438", "AUSTIN URETHANE INC", "", "2022-07-09", "Unsatisfactory = Unfit", "ACTIVE", "2022-08-01"],
                 "raw_fields": {
                     "DOT_NUMBER": "1438",
                     "LEGAL_NAME": "AUSTIN URETHANE INC",
@@ -1956,23 +1507,6 @@ def test_upsert_insurance_filing_rejections_persists_typed_row(fake_client: _Fak
         rows=[
             {
                 "row_number": 5,
-                "raw_values": [
-                    "MC888888",
-                    "88889999",
-                    "82",
-                    "BI&PD",
-                    "POL-888",
-                    "03/01/2026",
-                    "P",
-                    " ",
-                    "0",
-                    "750",
-                    "03/03/2026",
-                    "07",
-                    "ACME INSURANCE",
-                    "Policy is already cancelled",
-                    "750",
-                ],
                 "raw_fields": {
                     "Docket Number": "MC888888",
                     "USDOT Number": "88889999",
@@ -2007,17 +1541,6 @@ def test_upsert_operating_authority_histories_persists_typed_row(fake_client: _F
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [
-                    "MC123456",
-                    "12345678",
-                    "0001",
-                    "Common",
-                    "Granted",
-                    "03/10/2024",
-                    "Revoked",
-                    "03/09/2026",
-                    "03/10/2026",
-                ],
                 "raw_fields": {
                     "Docket Number": "MC123456",
                     "USDOT Number": "12345678",
@@ -2045,14 +1568,6 @@ def test_upsert_operating_authority_revocations_stores_one_row_per_feed_date(
 ):
     row = {
         "row_number": 1,
-        "raw_values": [
-            "MC999999",
-            "87654321",
-            "Broker",
-            "03/08/2026",
-            "Insurance",
-            "03/10/2026",
-        ],
         "raw_fields": {
             "Docket Number": "MC999999",
             "USDOT Number": "87654321",
@@ -2086,7 +1601,6 @@ def test_upsert_operating_authority_revocations_same_day_rerun_updates_same_posi
 ):
     first_row = {
         "row_number": 1,
-        "raw_values": ["MC999999", "87654321", "Broker", "03/08/2026", "Insurance", "03/10/2026"],
         "raw_fields": {
             "Docket Number": "MC999999",
             "USDOT Number": "87654321",
@@ -2098,7 +1612,6 @@ def test_upsert_operating_authority_revocations_same_day_rerun_updates_same_posi
     }
     second_row = {
         "row_number": 1,
-        "raw_values": ["MC999999", "87654321", "Broker", "03/08/2026", "Safety", "03/10/2026"],
         "raw_fields": {
             "Docket Number": "MC999999",
             "USDOT Number": "87654321",
@@ -2138,7 +1651,6 @@ def test_upsert_insurance_policies_preserves_blank_row_removal_signal(
         rows=[
             {
                 "row_number": 7,
-                "raw_values": ["MC111111", "", "", "00000", "00000", "", "", "", ""],
                 "raw_fields": {
                     "Docket Number": "MC111111",
                     "Insurance Type": "",
@@ -2168,19 +1680,6 @@ def test_upsert_insurance_policy_filings_persists_typed_row(fake_client: _FakeDi
         rows=[
             {
                 "row_number": 2,
-                "raw_values": [
-                    "MC222222",
-                    "22223333",
-                    "82",
-                    "BI&PD",
-                    "Acme Insurance",
-                    "POL-123",
-                    "03/01/2026",
-                    "0",
-                    "1000",
-                    "03/10/2026",
-                    "04/10/2026",
-                ],
                 "raw_fields": {
                     "Docket Number": "MC222222",
                     "USDOT Number": "22223333",
@@ -2210,25 +1709,6 @@ def test_upsert_insurance_policy_history_events_persists_typed_row(fake_client: 
         rows=[
             {
                 "row_number": 3,
-                "raw_values": [
-                    "MC333333",
-                    "33334444",
-                    "91X",
-                    "Cancelled",
-                    "35",
-                    " ",
-                    "BIPD/Primary",
-                    "TP404896",
-                    "750",
-                    "P",
-                    "09/01/1991",
-                    "0",
-                    "1000",
-                    "09/01/1995",
-                    "CANCEL",
-                    "00",
-                    "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
-                ],
                 "raw_fields": {
                     "Docket Number": "MC333333",
                     "USDOT Number": "33334444",
@@ -2293,7 +1773,6 @@ def test_real_postgres_carrier_registrations_copy_round_trips_jsonb_and_special_
         rows=[
             {
                 "row_number": 4,
-                "raw_values": [],
                 "raw_fields": {
                     "Docket Number": "MC444444",
                     "USDOT Number": "12345678",
@@ -2401,25 +1880,6 @@ def test_real_postgres_legacy_record_fingerprint_conflict_preserves_insert_only_
 
     first_row = {
         "row_number": 3,
-        "raw_values": [
-            "MC333333",
-            "33334444",
-            "91X",
-            "Cancelled",
-            "35",
-            " ",
-            "BIPD/Primary",
-            "TP404896",
-            "750",
-            "P",
-            "09/01/1991",
-            "0",
-            "1000",
-            "09/01/1995",
-            "CANCEL",
-            "00",
-            "FIRE & CASUALTY INSURANCE CO. OF CONNECTICUT",
-        ],
         "raw_fields": {
             "Docket Number": "MC333333",
             "USDOT Number": "33334444",
@@ -2523,7 +1983,6 @@ def test_real_postgres_shared_carrier_inspections_preserve_sparse_and_wide_feed_
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [],
                 "raw_fields": {
                     "Unique_ID": "726403509",
                     "Report_Number": "1147001995",
@@ -2577,7 +2036,6 @@ def test_real_postgres_shared_carrier_inspections_preserve_sparse_and_wide_feed_
         rows=[
             {
                 "row_number": 1,
-                "raw_values": [],
                 "raw_fields": {
                     "CHANGE_DATE": "20230327 2139",
                     "INSPECTION_ID": "78058162",
@@ -2714,7 +2172,6 @@ def test_real_postgres_copy_failure_rolls_back_without_partial_commit(
             rows=[
                 {
                     "row_number": 1,
-                    "raw_values": [],
                     "raw_fields": {
                         "Docket Number": "MC123456",
                         "USDOT Number": "12345678",
@@ -2810,7 +2267,6 @@ def test_real_postgres_merge_failure_rolls_back_without_partial_commit(
             rows=[
                 {
                     "row_number": 1,
-                    "raw_values": [],
                     "raw_fields": {
                         "Docket Number": "MC123456",
                         "USDOT Number": "12345678",
@@ -2929,17 +2385,6 @@ def test_direct_postgres_failures_surface_without_fake_success(
             rows=[
                 {
                     "row_number": 1,
-                    "raw_values": [
-                        "MC555555",
-                        "55556666",
-                        "AGENT ONE",
-                        "LEGAL",
-                        "1 MAIN",
-                        "AUSTIN",
-                        "TX",
-                        "USA",
-                        "78701",
-                    ],
                     "raw_fields": {
                         "Docket Number": "MC555555",
                         "USDOT Number": "55556666",
@@ -2989,14 +2434,6 @@ async def test_internal_operating_authority_revocations_endpoint_passes_batch_to
         records=[
             internal.InternalFmcsaDailyDiffRow(
                 row_number=1,
-                raw_values=[
-                    "MC999999",
-                    "87654321",
-                    "Broker",
-                    "03/08/2026",
-                    "Insurance",
-                    "03/10/2026",
-                ],
                 raw_fields={
                     "Docket Number": "MC999999",
                     "USDOT Number": "87654321",
@@ -3059,17 +2496,6 @@ async def test_internal_process_agent_filings_endpoint_passes_batch_to_service(
         records=[
             internal.InternalFmcsaDailyDiffRow(
                 row_number=1,
-                raw_values=[
-                    "MC999111",
-                    "11119999",
-                    "AGENT CO",
-                    "LEGAL",
-                    "1 MAIN",
-                    "AUSTIN",
-                    "TX",
-                    "USA",
-                    "78701",
-                ],
                 raw_fields={
                     "Docket Number": "MC999111",
                     "USDOT Number": "11119999",
@@ -3135,23 +2561,6 @@ async def test_internal_insurance_filing_rejections_endpoint_passes_batch_to_ser
         records=[
             internal.InternalFmcsaDailyDiffRow(
                 row_number=1,
-                raw_values=[
-                    "MC111000",
-                    "00011122",
-                    "82",
-                    "BI&PD",
-                    "POL-22",
-                    "03/01/2026",
-                    "P",
-                    " ",
-                    "0",
-                    "750",
-                    "03/04/2026",
-                    "01",
-                    "ACME INS",
-                    "Missing signature",
-                    "750",
-                ],
                 raw_fields={
                     "Docket Number": "MC111000",
                     "USDOT Number": "00011122",

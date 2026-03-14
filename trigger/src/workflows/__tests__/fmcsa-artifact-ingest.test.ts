@@ -99,8 +99,8 @@ function createManifestCapturingFetch(params: {
 
 test("buildNdjsonGzipped produces valid gzipped NDJSON with correct checksum", () => {
   const rows: FmcsaDailyDiffRow[] = [
-    { row_number: 1, raw_values: ["a", "b"], raw_fields: { col1: "a", col2: "b" } },
-    { row_number: 2, raw_values: ["c", "d"], raw_fields: { col1: "c", col2: "d" } },
+    { row_number: 1, raw_fields: { col1: "a", col2: "b" } },
+    { row_number: 2, raw_fields: { col1: "c", col2: "d" } },
   ];
 
   const { gzippedBytes, checksum } = buildNdjsonGzipped(rows);
@@ -116,12 +116,10 @@ test("buildNdjsonGzipped produces valid gzipped NDJSON with correct checksum", (
 
   const parsed0 = JSON.parse(lines[0]);
   assert.equal(parsed0.row_number, 1);
-  assert.deepEqual(parsed0.raw_values, ["a", "b"]);
   assert.deepEqual(parsed0.raw_fields, { col1: "a", col2: "b" });
 
   const parsed1 = JSON.parse(lines[1]);
   assert.equal(parsed1.row_number, 2);
-  assert.deepEqual(parsed1.raw_values, ["c", "d"]);
 });
 
 test("workflow uploads artifact and sends manifest POST with correct fields", async () => {
@@ -185,7 +183,6 @@ test("workflow uploads artifact and sends manifest POST with correct fields", as
   assert.equal(lines.length, 2);
   const row0 = JSON.parse(lines[0]);
   assert.equal(row0.row_number, 1);
-  assert.ok(Array.isArray(row0.raw_values));
   assert.ok(typeof row0.raw_fields === "object");
 
   // Verify manifest POST was sent to correct path
