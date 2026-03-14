@@ -5,7 +5,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app.services.external_ingest import (
-    ingest_entities,
+    ingest_entity,
     map_company_payload,
     map_person_payload,
 )
@@ -127,30 +127,44 @@ class TestMapPersonPayload:
 
 
 # ---------------------------------------------------------------------------
-# 8-11: Service tests (mock DB calls)
+# 8-10: Service tests (mock DB calls)
 # ---------------------------------------------------------------------------
 
-class TestIngestEntities:
+class TestIngestEntity:
     @patch("app.services.external_ingest.upsert_company_entity")
     def test_company_ingest_creates_entity(self, mock_upsert):
         mock_upsert.return_value = {"entity_id": "e1", "record_version": 1}
 
-        summary = ingest_entities(
+        result = ingest_entity(
             org_id="org1",
             company_id=None,
             entity_type="company",
             source_provider="clay",
-            payloads=[{"domain": "example.com", "name": "Example"}],
+            payload={"domain": "example.com", "name": "Example"},
         )
 
-        assert summary["created"] == 1
-        assert summary["updated"] == 0
-        assert summary["total_submitted"] == 1
+        assert result["action"] == "created"
+        assert result["entity_id"] == "e1"
         mock_upsert.assert_called_once()
         call_kwargs = mock_upsert.call_args.kwargs
         assert call_kwargs["org_id"] == "org1"
         assert call_kwargs["last_operation_id"] == "external.ingest.clay"
         assert call_kwargs["last_run_id"] is None
+
+    @patch("app.services.external_ingest.upsert_company_entity")
+    def test_company_ingest_updates_entity(self, mock_upsert):
+        mock_upsert.return_value = {"entity_id": "e1", "record_version": 2}
+
+        result = ingest_entity(
+            org_id="org1",
+            company_id=None,
+            entity_type="company",
+            source_provider="clay",
+            payload={"domain": "example.com"},
+        )
+
+        assert result["action"] == "updated"
+        assert result["entity_id"] == "e1"
 
     @patch("app.services.external_ingest._resolve_company_by_domain")
     @patch("app.services.external_ingest.record_entity_relationship")
@@ -162,18 +176,18 @@ class TestIngestEntities:
         mock_resolve.return_value = "c1"
         mock_record_rel.return_value = {"id": "rel1"}
 
-        summary = ingest_entities(
+        result = ingest_entity(
             org_id="org1",
             company_id=None,
             entity_type="person",
             source_provider="clay",
-            payloads=[CLAY_PERSON_FULL],
+            payload=CLAY_PERSON_FULL,
         )
 
-        assert summary["created"] == 1
-        assert summary["relationships_created"] == 1
-        assert summary["relationships_matched"] == 1
-        assert summary["relationships_unmatched"] == 0
+        assert result["action"] == "created"
+        assert result["entity_id"] == "p1"
+        assert result["relationship_created"] is True
+        assert result["relationship_matched"] is True
 
         mock_record_rel.assert_called_once()
         rel_kwargs = mock_record_rel.call_args.kwargs
@@ -184,64 +198,34 @@ class TestIngestEntities:
         assert rel_kwargs["metadata"]["source_provider"] == "clay"
 
     @patch("app.services.external_ingest.upsert_company_entity")
-    def test_batch_error_handling(self, mock_upsert):
-        mock_upsert.side_effect = [
-            {"entity_id": "e1", "record_version": 1},
-            RuntimeError("DB connection failed"),
-            {"entity_id": "e3", "record_version": 1},
-        ]
-
-        summary = ingest_entities(
-            org_id="org1",
-            company_id=None,
-            entity_type="company",
-            source_provider="clay",
-            payloads=[
-                {"domain": "a.com"},
-                {"domain": "b.com"},
-                {"domain": "c.com"},
-            ],
-        )
-
-        assert summary["created"] == 2
-        assert summary["errors"] == 1
-        assert len(summary["error_details"]) == 1
-        assert summary["error_details"][0]["index"] == 1
-        assert "DB connection failed" in summary["error_details"][0]["error"]
-
-    @patch("app.services.external_ingest.upsert_company_entity")
-    def test_version_conflict_counted_as_skipped(self, mock_upsert):
+    def test_version_conflict_raises(self, mock_upsert):
         mock_upsert.side_effect = EntityStateVersionError("version conflict")
 
-        summary = ingest_entities(
-            org_id="org1",
-            company_id=None,
-            entity_type="company",
-            source_provider="clay",
-            payloads=[{"domain": "example.com"}],
-        )
-
-        assert summary["skipped"] == 1
-        assert summary["created"] == 0
-        assert summary["errors"] == 0
+        try:
+            ingest_entity(
+                org_id="org1",
+                company_id=None,
+                entity_type="company",
+                source_provider="clay",
+                payload={"domain": "example.com"},
+            )
+            assert False, "Expected EntityStateVersionError"
+        except EntityStateVersionError:
+            pass  # expected — caller (endpoint) handles this
 
 
 # ---------------------------------------------------------------------------
-# 12-14: Endpoint tests (mock service)
+# 11-13: Endpoint tests (mock service)
 # ---------------------------------------------------------------------------
 
-class TestBulkEntityIngestEndpoint:
-    @patch("app.routers.entities_v1.ingest_entities")
+class TestEntityIngestEndpoint:
+    @patch("app.routers.entities_v1.ingest_entity")
     def test_tenant_auth_uses_auth_org_id(self, mock_ingest):
         mock_ingest.return_value = {
             "entity_type": "company",
             "source_provider": "clay",
-            "total_submitted": 1,
-            "created": 1,
-            "updated": 0,
-            "skipped": 0,
-            "errors": 0,
-            "error_details": [],
+            "action": "created",
+            "entity_id": "e1",
         }
 
         from fastapi.testclient import TestClient
@@ -264,7 +248,7 @@ class TestBulkEntityIngestEndpoint:
                 json={
                     "entity_type": "company",
                     "source_provider": "clay",
-                    "payloads": [{"domain": "example.com"}],
+                    "payload": {"domain": "example.com"},
                 },
             )
             assert response.status_code == 200
@@ -274,17 +258,13 @@ class TestBulkEntityIngestEndpoint:
         finally:
             app.dependency_overrides.pop(_resolve_flexible_auth, None)
 
-    @patch("app.routers.entities_v1.ingest_entities")
+    @patch("app.routers.entities_v1.ingest_entity")
     def test_super_admin_org_id_override(self, mock_ingest):
         mock_ingest.return_value = {
             "entity_type": "company",
             "source_provider": "clay",
-            "total_submitted": 1,
-            "created": 1,
-            "updated": 0,
-            "skipped": 0,
-            "errors": 0,
-            "error_details": [],
+            "action": "created",
+            "entity_id": "e1",
         }
 
         from fastapi.testclient import TestClient
@@ -301,7 +281,7 @@ class TestBulkEntityIngestEndpoint:
                 json={
                     "entity_type": "company",
                     "source_provider": "clay",
-                    "payloads": [{"domain": "example.com"}],
+                    "payload": {"domain": "example.com"},
                     "org_id": "override-org",
                     "company_id": "override-co",
                 },
@@ -328,10 +308,44 @@ class TestBulkEntityIngestEndpoint:
                 json={
                     "entity_type": "company",
                     "source_provider": "clay",
-                    "payloads": [{"domain": "example.com"}],
+                    "payload": {"domain": "example.com"},
                 },
             )
             assert response.status_code == 400
             assert "org_id" in response.json()["error"]
+        finally:
+            app.dependency_overrides.pop(_resolve_flexible_auth, None)
+
+    @patch("app.routers.entities_v1.ingest_entity")
+    def test_version_conflict_returns_skipped(self, mock_ingest):
+        mock_ingest.side_effect = EntityStateVersionError("version conflict")
+
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.auth import AuthContext
+        from app.routers.entities_v1 import _resolve_flexible_auth
+
+        tenant_auth = AuthContext(
+            org_id="org1",
+            company_id="co1",
+            user_id="u1",
+            role="org_admin",
+            auth_method="api_token",
+        )
+        app.dependency_overrides[_resolve_flexible_auth] = lambda: tenant_auth
+        try:
+            client = TestClient(app)
+            response = client.post(
+                "/api/v1/entities/ingest",
+                json={
+                    "entity_type": "company",
+                    "source_provider": "clay",
+                    "payload": {"domain": "example.com"},
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()["data"]
+            assert data["action"] == "skipped"
+            assert data["entity_id"] is None
         finally:
             app.dependency_overrides.pop(_resolve_flexible_auth, None)

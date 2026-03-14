@@ -16,7 +16,8 @@ from app.services.company_customers import query_company_customers
 from app.services.company_intel_briefings import query_company_intel_briefings
 from app.services.company_entity_associations import list_associated_entity_ids
 from app.services.entity_relationships import query_entity_relationships
-from app.services.external_ingest import ingest_entities
+from app.services.entity_state import EntityStateVersionError
+from app.services.external_ingest import ingest_entity
 from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
@@ -720,10 +721,10 @@ async def query_person_intel_briefings_rows(
     return DataEnvelope(data=results)
 
 
-class BulkEntityIngestRequest(BaseModel):
+class EntityIngestRequest(BaseModel):
     entity_type: Literal["company", "person"]
     source_provider: str = Field(..., min_length=1, max_length=100)
-    payloads: list[dict[str, Any]] = Field(..., min_length=1, max_length=1000)
+    payload: dict[str, Any]
     # Super-admin override
     org_id: str | None = None
     company_id: str | None = None
@@ -790,8 +791,8 @@ async def query_leads_endpoint(
     response_model=DataEnvelope,
     responses={400: {"model": ErrorEnvelope}},
 )
-async def bulk_entity_ingest(
-    payload: BulkEntityIngestRequest,
+async def entity_ingest(
+    payload: EntityIngestRequest,
     auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
     is_super_admin = isinstance(auth, SuperAdminContext)
@@ -804,11 +805,20 @@ async def bulk_entity_ingest(
         org_id = auth.org_id
         company_id = auth.company_id
 
-    summary = ingest_entities(
-        org_id=org_id,
-        company_id=company_id,
-        entity_type=payload.entity_type,
-        source_provider=payload.source_provider,
-        payloads=payload.payloads,
-    )
-    return DataEnvelope(data=summary)
+    try:
+        result = ingest_entity(
+            org_id=org_id,
+            company_id=company_id,
+            entity_type=payload.entity_type,
+            source_provider=payload.source_provider,
+            payload=payload.payload,
+        )
+    except EntityStateVersionError:
+        result = {
+            "entity_type": payload.entity_type,
+            "source_provider": payload.source_provider,
+            "action": "skipped",
+            "entity_id": None,
+        }
+
+    return DataEnvelope(data=result)

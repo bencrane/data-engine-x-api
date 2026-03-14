@@ -1,4 +1,4 @@
-"""External ingest — maps external payloads to canonical fields and bulk-upserts entities."""
+"""External ingest — maps external payloads to canonical fields and upserts entities."""
 from __future__ import annotations
 
 import logging
@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from app.database import get_supabase_client
 from app.services.entity_relationships import record_entity_relationship
 from app.services.entity_state import (
-    EntityStateVersionError,
     upsert_company_entity,
     upsert_person_entity,
 )
@@ -93,124 +92,101 @@ def _normalize_domain(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Bulk ingest service
+# Single-record ingest service
 # ---------------------------------------------------------------------------
 
-def ingest_entities(
+def ingest_entity(
     *,
     org_id: str,
     company_id: str | None,
     entity_type: str,
     source_provider: str,
-    payloads: list[dict],
+    payload: dict,
 ) -> dict:
-    """Ingest a batch of external entity payloads.
+    """Ingest a single external entity payload.
 
-    Returns a summary dict with counts of created/updated/skipped/errored records.
+    Returns a result dict with the action taken and entity_id.
+    Raises EntityStateVersionError on version conflict (caller handles).
     """
-    created = 0
-    updated = 0
-    skipped = 0
-    errors = 0
-    error_details: list[dict[str, Any]] = []
-
-    # Person-only relationship counters
-    relationships_created = 0
-    relationships_matched = 0
-    relationships_unmatched = 0
-    relationships_skipped_no_identifier = 0
-
     operation_id = f"external.ingest.{source_provider}"
 
-    for i, raw_payload in enumerate(payloads):
-        try:
-            if entity_type == "company":
-                mapped = map_company_payload(raw_payload, source_provider)
-                record = upsert_company_entity(
-                    org_id=org_id,
-                    company_id=company_id,
-                    canonical_fields=mapped,
-                    last_operation_id=operation_id,
-                    last_run_id=None,
-                )
-            else:
-                mapped = map_person_payload(raw_payload, source_provider)
-                record = upsert_person_entity(
-                    org_id=org_id,
-                    company_id=company_id,
-                    canonical_fields=mapped,
-                    last_operation_id=operation_id,
-                    last_run_id=None,
-                )
+    if entity_type == "company":
+        mapped = map_company_payload(payload, source_provider)
+        record = upsert_company_entity(
+            org_id=org_id,
+            company_id=company_id,
+            canonical_fields=mapped,
+            last_operation_id=operation_id,
+            last_run_id=None,
+        )
+    else:
+        mapped = map_person_payload(payload, source_provider)
+        record = upsert_person_entity(
+            org_id=org_id,
+            company_id=company_id,
+            canonical_fields=mapped,
+            last_operation_id=operation_id,
+            last_run_id=None,
+        )
 
-            if record.get("record_version", 1) == 1:
-                created += 1
-            else:
-                updated += 1
+    action = "created" if record.get("record_version", 1) == 1 else "updated"
 
-            # Person: create works_at edge
-            if entity_type == "person":
-                company_domain_raw = mapped.get("current_company_domain")
-                if company_domain_raw and isinstance(company_domain_raw, str) and company_domain_raw.strip():
-                    # Determine source_identifier
-                    source_identifier = mapped.get("linkedin_url") or mapped.get("work_email")
-                    if not source_identifier or not isinstance(source_identifier, str) or not source_identifier.strip():
-                        relationships_skipped_no_identifier += 1
-                    else:
-                        source_identifier = source_identifier.strip()
-                        normalized_domain = _normalize_domain(company_domain_raw)
-
-                        # Try to match company entity
-                        target_entity_id = _resolve_company_by_domain(org_id, normalized_domain)
-
-                        record_entity_relationship(
-                            org_id=org_id,
-                            source_entity_type="person",
-                            source_entity_id=record["entity_id"],
-                            source_identifier=source_identifier,
-                            relationship="works_at",
-                            target_entity_type="company",
-                            target_entity_id=target_entity_id,
-                            target_identifier=normalized_domain,
-                            metadata={"source": "external_ingest", "source_provider": source_provider},
-                            source_operation_id=operation_id,
-                        )
-                        relationships_created += 1
-                        if target_entity_id:
-                            relationships_matched += 1
-                        else:
-                            relationships_unmatched += 1
-
-        except EntityStateVersionError:
-            skipped += 1
-        except Exception as exc:  # noqa: BLE001
-            errors += 1
-            logger.exception(
-                "External ingest failed for payload at index %d",
-                i,
-                extra={"org_id": org_id, "source_provider": source_provider, "index": i},
-            )
-            if len(error_details) < 10:
-                error_details.append({"index": i, "error": str(exc)})
-
-    summary: dict[str, Any] = {
+    result: dict[str, Any] = {
         "entity_type": entity_type,
         "source_provider": source_provider,
-        "total_submitted": len(payloads),
-        "created": created,
-        "updated": updated,
-        "skipped": skipped,
-        "errors": errors,
-        "error_details": error_details,
+        "action": action,
+        "entity_id": record["entity_id"],
     }
 
+    # Person: create works_at edge
     if entity_type == "person":
-        summary["relationships_created"] = relationships_created
-        summary["relationships_matched"] = relationships_matched
-        summary["relationships_unmatched"] = relationships_unmatched
-        summary["relationships_skipped_no_identifier"] = relationships_skipped_no_identifier
+        rel_created, rel_matched = _create_works_at_edge(
+            org_id=org_id,
+            mapped=mapped,
+            person_entity_id=record["entity_id"],
+            source_provider=source_provider,
+            operation_id=operation_id,
+        )
+        result["relationship_created"] = rel_created
+        result["relationship_matched"] = rel_matched
 
-    return summary
+    return result
+
+
+def _create_works_at_edge(
+    *,
+    org_id: str,
+    mapped: dict,
+    person_entity_id: str,
+    source_provider: str,
+    operation_id: str,
+) -> tuple[bool, bool]:
+    """Attempt to create a works_at relationship edge. Returns (created, matched)."""
+    company_domain_raw = mapped.get("current_company_domain")
+    if not company_domain_raw or not isinstance(company_domain_raw, str) or not company_domain_raw.strip():
+        return False, False
+
+    source_identifier = mapped.get("linkedin_url") or mapped.get("work_email")
+    if not source_identifier or not isinstance(source_identifier, str) or not source_identifier.strip():
+        return False, False
+
+    source_identifier = source_identifier.strip()
+    normalized_domain = _normalize_domain(company_domain_raw)
+    target_entity_id = _resolve_company_by_domain(org_id, normalized_domain)
+
+    record_entity_relationship(
+        org_id=org_id,
+        source_entity_type="person",
+        source_entity_id=person_entity_id,
+        source_identifier=source_identifier,
+        relationship="works_at",
+        target_entity_type="company",
+        target_entity_id=target_entity_id,
+        target_identifier=normalized_domain,
+        metadata={"source": "external_ingest", "source_provider": source_provider},
+        source_operation_id=operation_id,
+    )
+    return True, target_entity_id is not None
 
 
 def _resolve_company_by_domain(org_id: str, canonical_domain: str) -> str | None:
