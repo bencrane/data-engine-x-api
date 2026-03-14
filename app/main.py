@@ -1,6 +1,7 @@
 # app/main.py — FastAPI app entry point
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.middleware.gzip_request import GzipRequestMiddleware
@@ -31,6 +32,16 @@ app = FastAPI(
     version="0.1.0",
 )
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://app.dataengine.run",
+    ] + [f"http://localhost:{p}" for p in range(3000, 3011)],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.add_middleware(GzipRequestMiddleware)
 
