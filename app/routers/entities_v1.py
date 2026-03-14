@@ -17,10 +17,12 @@ from app.services.entity_relationships import query_entity_relationships
 from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
+from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
 
 router = APIRouter()
 entity_relationships_router = APIRouter()
+leads_router = APIRouter()
 _security = HTTPBearer(auto_error=False)
 
 
@@ -709,6 +711,62 @@ async def query_person_intel_briefings_rows(
         person_linkedin_url=payload.person_linkedin_url,
         person_current_company_name=payload.person_current_company_name,
         client_company_name=payload.client_company_name,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+class LeadsQueryRequest(BaseModel):
+    # Company filters
+    industry: str | None = None
+    employee_range: str | None = None
+    hq_country: str | None = None
+    canonical_domain: str | None = None
+    company_name: str | None = None
+    # Person filters
+    title: str | None = None
+    seniority: str | None = None
+    department: str | None = None
+    email_status: str | None = None
+    has_email: bool | None = None
+    has_phone: bool | None = None
+    # Pagination
+    limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+    # Super-admin override
+    org_id: str | None = None
+
+
+@leads_router.post(
+    "/leads/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_leads_endpoint(
+    payload: LeadsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    if is_super_admin:
+        org_id = payload.org_id
+        if not org_id:
+            return error_response("org_id is required for super-admin leads queries", 400)
+    else:
+        org_id = auth.org_id
+
+    filters = {}
+    for key in (
+        "industry", "employee_range", "hq_country", "canonical_domain", "company_name",
+        "title", "seniority", "department", "email_status", "has_email", "has_phone",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = query_leads(
+        org_id=org_id,
+        filters=filters,
         limit=payload.limit,
         offset=payload.offset,
     )
