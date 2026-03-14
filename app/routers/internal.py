@@ -320,6 +320,8 @@ class InternalUpsertFmcsaDailyDiffBatchRequest(BaseModel):
     source_schedule_id: str | None = None
     source_run_metadata: dict[str, Any]
     records: list[InternalFmcsaDailyDiffRow]
+    use_snapshot_replace: bool = False
+    is_first_chunk: bool = False
 
 
 class InternalFmcsaArtifactIngestRequest(BaseModel):
@@ -466,6 +468,8 @@ def _build_fmcsa_source_context(
         "source_task_id": payload.source_task_id,
         "source_schedule_id": payload.source_schedule_id,
         "source_run_metadata": payload.source_run_metadata,
+        "use_snapshot_replace": payload.use_snapshot_replace,
+        "is_first_chunk": payload.is_first_chunk,
     }
 
 
