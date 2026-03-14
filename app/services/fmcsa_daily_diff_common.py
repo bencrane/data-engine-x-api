@@ -479,6 +479,11 @@ def upsert_fmcsa_daily_diff_rows(
             phases["connection_acquire_ms"] = round((time.perf_counter() - t_conn_start) * 1000, 1)
             try:
                 with connection.cursor() as cursor:
+                    # Bulk FMCSA operations (especially snapshot DELETE) can be slow
+                    # on large tables. Set a generous statement timeout (10 min) to
+                    # avoid hitting the Supabase/Postgres server default.
+                    cursor.execute("SET LOCAL statement_timeout = '600s'")
+
                     if use_snapshot_replace and is_first_chunk:
                         t_delete = time.perf_counter()
                         cursor.execute(
