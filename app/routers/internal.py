@@ -337,6 +337,8 @@ class InternalFmcsaArtifactIngestRequest(BaseModel):
     artifact_path: str
     row_count: int
     artifact_checksum: str
+    use_snapshot_replace: bool | None = None
+    is_first_chunk: bool | None = None
 
 
 class InternalEvaluateClientAutomationSchedulesRequest(BaseModel):
@@ -1041,6 +1043,8 @@ async def internal_fmcsa_ingest_artifact(
             artifact_path=payload.artifact_path,
             row_count=payload.row_count,
             artifact_checksum=payload.artifact_checksum,
+            use_snapshot_replace=payload.use_snapshot_replace,
+            is_first_chunk=payload.is_first_chunk,
         )
         return DataEnvelope(data=result)
     except ChecksumMismatchError as exc:

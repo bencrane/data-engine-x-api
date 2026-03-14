@@ -145,6 +145,7 @@ def ingest_artifact(
     artifact_checksum: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     use_snapshot_replace: bool | None = None,
+    is_first_chunk: bool | None = None,
 ) -> dict[str, Any]:
     """
     Download artifact from Supabase Storage, verify checksum, decompress,
@@ -190,6 +191,13 @@ def ingest_artifact(
     # Streaming decompress → parse → persist in chunks.
     # Instead of materializing the entire decompressed artifact + full row list,
     # we stream lines from GzipFile and persist each chunk as it fills.
+    #
+    # When is_first_chunk is supplied by the caller (streaming chunked uploads from
+    # Trigger), we honour it for the first internal sub-chunk only, and set False
+    # for all subsequent sub-chunks. When not supplied, we fall back to the original
+    # behaviour (first internal chunk = True).
+    caller_is_first_chunk = is_first_chunk
+
     total_rows_parsed = 0
     total_rows_written = 0
     chunks_processed = 0
@@ -210,7 +218,10 @@ def ingest_artifact(
             if len(chunk) == chunk_size:
                 chunk_number = chunks_processed + 1
                 persist_chunk_start = time.monotonic()
-                source_context["is_first_chunk"] = (chunks_processed == 0)
+                if caller_is_first_chunk is not None:
+                    source_context["is_first_chunk"] = caller_is_first_chunk and (chunks_processed == 0)
+                else:
+                    source_context["is_first_chunk"] = (chunks_processed == 0)
                 try:
                     result = upsert_func(
                         source_context=source_context,
@@ -242,7 +253,10 @@ def ingest_artifact(
     if chunk:
         chunk_number = chunks_processed + 1
         persist_chunk_start = time.monotonic()
-        source_context["is_first_chunk"] = (chunks_processed == 0)
+        if caller_is_first_chunk is not None:
+            source_context["is_first_chunk"] = caller_is_first_chunk and (chunks_processed == 0)
+        else:
+            source_context["is_first_chunk"] = (chunks_processed == 0)
         try:
             result = upsert_func(
                 source_context=source_context,
