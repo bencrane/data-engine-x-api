@@ -1,11 +1,7 @@
 import { logger } from "@trigger.dev/sdk/v3";
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { Readable, Transform } from "node:stream";
-import { createGzip, gzipSync } from "node:zlib";
+import { Readable } from "node:stream";
+import { gzipSync } from "node:zlib";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { parse as createCsvStreamParser } from "csv-parse";
 import { parse as parseCsvSync } from "csv-parse/sync";
@@ -735,9 +731,10 @@ async function uploadPrebuiltArtifactAndIngest(
 }
 
 
+const STREAMING_DIRECT_POST_CHUNK_SIZE = 10_000;
+
 async function parseAndPersistStreamedCsv(
   client: InternalApiClient,
-  storage: SupabaseStorageClient,
   payload: FmcsaDailyDiffWorkflowPayload,
   feedDate: string,
   observedAt: string,
@@ -763,10 +760,51 @@ async function parseAndPersistStreamedCsv(
   let rowsParsed = 0;
   let rowsAccepted = 0;
 
-  // Write NDJSON lines to a temp file on disk instead of accumulating in memory.
-  // This keeps memory usage O(1) regardless of feed size (critical for 2M+ row feeds).
-  const ndjsonTmpPath = join(tmpdir(), `fmcsa-${payload.feed.feedName}-${Date.now()}.ndjson`);
-  const ndjsonFileStream = createWriteStream(ndjsonTmpPath, { encoding: "utf-8" });
+  let chunk: FmcsaDailyDiffRow[] = [];
+  let chunksProcessed = 0;
+  let totalRowsWritten = 0;
+  const chunkSize = payload.feed.writeBatchSize ?? STREAMING_DIRECT_POST_CHUNK_SIZE;
+  const useSnapshotReplace = true; // All streaming feeds are complete snapshots
+  const postTimeoutMs = payload.feed.persistenceTimeoutMs ?? 300_000;
+  const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, feedDate, observedAt);
+
+  const flushChunk = async (): Promise<void> => {
+    if (chunk.length === 0) return;
+    const chunkNumber = chunksProcessed + 1;
+    const startRow = chunk[0].row_number;
+    const endRow = chunk[chunk.length - 1].row_number;
+
+    try {
+      const result = await writeDedicatedTableConfirmed<FmcsaDailyDiffPersistenceResponse>(client, {
+        path: payload.feed.internalUpsertPath,
+        payload: {
+          feed_name: payload.feed.feedName,
+          feed_date: feedDate,
+          download_url: payload.feed.downloadUrl,
+          source_file_variant: payload.feed.sourceFileVariant,
+          source_observed_at: observedAt,
+          source_task_id: payload.feed.taskId,
+          source_schedule_id: payload.schedule?.scheduleId ?? null,
+          source_run_metadata: sourceRunMetadata,
+          records: chunk,
+          use_snapshot_replace: useSnapshotReplace,
+          is_first_chunk: chunksProcessed === 0,
+        },
+        timeoutMs: postTimeoutMs,
+        validate: (r) => typeof r.rows_written === "number" && r.rows_written >= 0,
+        confirmationErrorMessage: `${payload.feed.feedName} chunk ${chunkNumber} persistence confirmation failed`,
+      });
+
+      totalRowsWritten += result.rows_written;
+    } catch (error) {
+      throw new Error(
+        `${payload.feed.feedName} chunk ${chunkNumber} failed (rows ${startRow}-${endRow}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    chunksProcessed += 1;
+    chunk = [];
+  };
 
   try {
     for await (const record of parser) {
@@ -780,15 +818,11 @@ async function parseAndPersistStreamedCsv(
       rowNumber += 1;
       rowsDownloaded += 1;
       rowsParsed += 1;
-      const line = JSON.stringify(normalizeCsvRow(payload.feed, values, rowNumber));
-      const canContinue = ndjsonFileStream.write(line + "\n");
+      chunk.push(normalizeCsvRow(payload.feed, values, rowNumber));
       rowsAccepted += 1;
 
-      // Respect backpressure: if the write stream's internal buffer is full,
-      // wait for it to drain before writing more. This prevents unbounded
-      // memory accumulation for large feeds (2M+ rows).
-      if (!canContinue) {
-        await new Promise<void>((resolve) => ndjsonFileStream.once("drain", resolve));
+      if (chunk.length === chunkSize) {
+        await flushChunk();
       }
 
       if (rowsDownloaded % 500_000 === 0) {
@@ -796,73 +830,34 @@ async function parseAndPersistStreamedCsv(
           feed_name: payload.feed.feedName,
           rows_downloaded: rowsDownloaded,
           rows_accepted: rowsAccepted,
+          chunks_processed: chunksProcessed,
+          total_rows_written: totalRowsWritten,
         });
       }
     }
   } catch (error) {
-    ndjsonFileStream.end();
-    cleanupTmpFile(ndjsonTmpPath);
     throw formatStreamingWorkflowError(payload.feed, error);
   }
 
-  // Close the NDJSON file stream and wait for flush
-  await new Promise<void>((resolve, reject) => {
-    ndjsonFileStream.end(() => resolve());
-    ndjsonFileStream.on("error", reject);
-  });
-
   if (payload.feed.headerRow && !headerValidated) {
-    cleanupTmpFile(ndjsonTmpPath);
     throw new Error(`${payload.feed.feedName} download contained no parseable header row`);
   }
   if (payload.feed.headerRow && rowsDownloaded === 0) {
-    cleanupTmpFile(ndjsonTmpPath);
     throw new Error(`${payload.feed.feedName} download contained a header row but no data rows`);
   }
   if (!payload.feed.headerRow && rowsDownloaded === 0) {
-    cleanupTmpFile(ndjsonTmpPath);
     throw new Error(`${payload.feed.feedName} download contained no parseable rows`);
   }
 
-  // Gzip the NDJSON file on disk via streaming pipeline with incremental checksum.
-  // The hash transform computes SHA-256 on the compressed bytes as they flow through,
-  // eliminating the need to re-read the gzipped file afterward.
-  const gzippedTmpPath = ndjsonTmpPath + ".gz";
-  const hash = createHash("sha256");
-  const hashPassthrough = new Transform({
-    transform(chunk, _encoding, callback) {
-      hash.update(chunk);
-      callback(null, chunk);
-    },
-  });
-  try {
-    await pipeline(
-      createReadStream(ndjsonTmpPath),
-      createGzip(),
-      hashPassthrough,
-      createWriteStream(gzippedTmpPath),
-    );
-  } finally {
-    cleanupTmpFile(ndjsonTmpPath);
-  }
-  const checksum = hash.digest("hex");
+  // Flush remaining partial chunk
+  await flushChunk();
 
-  // Read gzipped file into memory for upload. Gzipped artifacts are much smaller
-  // than raw NDJSON (~10-20x compression), so this is safe even for large feeds.
-  // E.g. 2M rows raw NDJSON ~1GB → gzipped ~50-100MB.
-  const { readFile } = await import("node:fs/promises");
-  const gzippedBytes = await readFile(gzippedTmpPath);
-  cleanupTmpFile(gzippedTmpPath);
-
-  logger.info("fmcsa artifact built on disk", {
+  logger.info("fmcsa streaming direct POST complete", {
     feed_name: payload.feed.feedName,
+    chunks_processed: chunksProcessed,
+    total_rows_written: totalRowsWritten,
     rows_accepted: rowsAccepted,
-    gzipped_size_mb: Math.round(gzippedBytes.length / 1_048_576 * 100) / 100,
   });
-
-  const confirmation = await uploadPrebuiltArtifactAndIngest(
-    client, storage, payload, gzippedBytes, checksum, rowsAccepted, feedDate, observedAt,
-  );
 
   return {
     feed_name: payload.feed.feedName,
@@ -874,16 +869,8 @@ async function parseAndPersistStreamedCsv(
     rows_parsed: rowsParsed,
     rows_accepted: rowsAccepted,
     rows_rejected: 0,
-    rows_written: confirmation.rows_written,
+    rows_written: totalRowsWritten,
   };
-}
-
-function cleanupTmpFile(path: string): void {
-  try {
-    unlinkSync(path);
-  } catch {
-    // File may not exist if cleanup already happened
-  }
 }
 
 export async function runFmcsaDailyDiffWorkflow(
@@ -911,7 +898,6 @@ export async function runFmcsaDailyDiffWorkflow(
     const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
     const result = await parseAndPersistStreamedCsv(
       client,
-      storage,
       payload,
       feedDate,
       observedAt,
