@@ -1,5 +1,7 @@
 # app/routers/entities_v1.py — Tenant entity intelligence query endpoints
 
+from typing import Any, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -14,6 +16,7 @@ from app.services.company_customers import query_company_customers
 from app.services.company_intel_briefings import query_company_intel_briefings
 from app.services.company_entity_associations import list_associated_entity_ids
 from app.services.entity_relationships import query_entity_relationships
+from app.services.external_ingest import ingest_entities
 from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
@@ -717,6 +720,15 @@ async def query_person_intel_briefings_rows(
     return DataEnvelope(data=results)
 
 
+class BulkEntityIngestRequest(BaseModel):
+    entity_type: Literal["company", "person"]
+    source_provider: str = Field(..., min_length=1, max_length=100)
+    payloads: list[dict[str, Any]] = Field(..., min_length=1, max_length=1000)
+    # Super-admin override
+    org_id: str | None = None
+    company_id: str | None = None
+
+
 class LeadsQueryRequest(BaseModel):
     # Company filters
     industry: str | None = None
@@ -771,3 +783,32 @@ async def query_leads_endpoint(
         offset=payload.offset,
     )
     return DataEnvelope(data=results)
+
+
+@leads_router.post(
+    "/entities/ingest",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def bulk_entity_ingest(
+    payload: BulkEntityIngestRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    if is_super_admin:
+        org_id = payload.org_id
+        if not org_id:
+            return error_response("org_id is required for super-admin ingest requests", 400)
+        company_id = payload.company_id
+    else:
+        org_id = auth.org_id
+        company_id = auth.company_id
+
+    summary = ingest_entities(
+        org_id=org_id,
+        company_id=company_id,
+        entity_type=payload.entity_type,
+        source_provider=payload.source_provider,
+        payloads=payload.payloads,
+    )
+    return DataEnvelope(data=summary)
