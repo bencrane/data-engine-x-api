@@ -43,7 +43,7 @@ def query_leads(
             rpc_params[param_name] = value
 
     client = get_supabase_client()
-    result = client.rpc("query_leads", rpc_params).execute()
+    result = client.schema("entities").rpc("query_leads", rpc_params).execute()
     rows = result.data or []
 
     # Extract total_matched from the window function in the first row

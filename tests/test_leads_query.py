@@ -78,6 +78,10 @@ def _mock_rpc(monkeypatch: pytest.MonkeyPatch, rows: list[dict]):
             return SimpleNamespace(data=rows)
 
     class _Client:
+        def schema(self, name):
+            self.last_schema = name
+            return self
+
         def rpc(self, fn_name, params):
             self.last_fn = fn_name
             self.last_params = params
