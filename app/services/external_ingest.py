@@ -193,7 +193,7 @@ def _resolve_company_by_domain(org_id: str, canonical_domain: str) -> str | None
     """Look up a company entity by canonical_domain within the org. Returns entity_id or None."""
     client = get_supabase_client()
     result = (
-        client.table("company_entities")
+        client.schema("entities").table("company_entities")
         .select("entity_id")
         .eq("org_id", org_id)
         .eq("canonical_domain", canonical_domain)

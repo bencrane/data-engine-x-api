@@ -188,7 +188,7 @@ async def list_company_entities(
     auth: AuthContext = Depends(get_current_auth),
 ):
     client = get_supabase_client()
-    query = client.table("company_entities").select("*").eq("org_id", auth.org_id)
+    query = client.schema("entities").table("company_entities").select("*").eq("org_id", auth.org_id)
 
     if auth.role in {"company_admin", "member"}:
         if not auth.company_id:
@@ -249,7 +249,7 @@ async def list_person_entities(
     auth: AuthContext = Depends(get_current_auth),
 ):
     client = get_supabase_client()
-    query = client.table("person_entities").select("*").eq("org_id", auth.org_id)
+    query = client.schema("entities").table("person_entities").select("*").eq("org_id", auth.org_id)
 
     if auth.role in {"company_admin", "member"}:
         if not auth.company_id:
@@ -327,7 +327,7 @@ async def list_job_posting_entities(
         return error_response("org_id is required for super-admin job posting entity queries", 400)
 
     client = get_supabase_client()
-    query = client.table("job_posting_entities").select("*").eq("org_id", org_id)
+    query = client.schema("entities").table("job_posting_entities").select("*").eq("org_id", org_id)
 
     if not is_super_admin and auth.role in {"company_admin", "member"}:
         if not auth.company_id:
@@ -420,7 +420,7 @@ async def get_entity_timeline(
     start = (payload.page - 1) * payload.per_page
     end = start + payload.per_page - 1
     query = (
-        client.table("entity_timeline")
+        client.schema("entities").table("entity_timeline")
         .select("*")
         .eq("org_id", org_id)
         .eq("entity_type", entity_type)
@@ -474,7 +474,7 @@ async def get_entity_snapshots(
 
     client = get_supabase_client()
     result = (
-        client.table("entity_snapshots")
+        client.schema("entities").table("entity_snapshots")
         .select("*")
         .eq("org_id", org_id)
         .eq("entity_type", entity_type)
