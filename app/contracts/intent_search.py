@@ -29,3 +29,4 @@ class IntentSearchOutput(BaseModel):
     enum_resolution: dict[str, EnumResolutionDetail]
     unresolved_fields: list[str]
     pagination: dict[str, Any] | None = None
+    provider_attempts: list[dict[str, Any]] = []

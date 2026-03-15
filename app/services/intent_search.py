@@ -242,8 +242,8 @@ async def _try_prospeo_people(
         api_key=settings.prospeo_api_key,
         query=query,
         page=page,
-        company_domain=None,
-        company_name=None,
+        company_domain=_str_val(pass_through.get("company_domain")),
+        company_name=_str_val(pass_through.get("company_name")),
         provider_filters={"prospeo": filters} if filters else None,
     )
     mapped = result.get("mapped") or {}
