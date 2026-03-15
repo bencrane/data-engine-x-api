@@ -150,7 +150,7 @@ async def resolve_email(
                         "search_id": search_id,
                         "raw_response": last_body,
                     },
-                    "mapped": {"email": resolved_email},
+                    "mapped": {"email": resolved_email, "provider_data": last_body},
                 }
             await asyncio.sleep(poll_interval_ms / 1000)
 

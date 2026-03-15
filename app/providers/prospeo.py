@@ -139,6 +139,7 @@ def canonical_person_result(
         "source_person_id": source_person_id,
         "source_provider": provider,
         "raw": raw,
+        "provider_data": raw,
     }
 
 

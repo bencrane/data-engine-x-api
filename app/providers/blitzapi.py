@@ -122,6 +122,7 @@ def canonical_person_result(
         "source_person_id": str(person.get("id")) if person.get("id") is not None else None,
         "source_provider": "blitzapi",
         "raw": raw,
+        "provider_data": raw,
     }
 
 

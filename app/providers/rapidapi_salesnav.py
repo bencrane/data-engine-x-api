@@ -62,6 +62,7 @@ def _map_person(raw: dict[str, Any]) -> dict[str, Any]:
         "tenure_at_company_years": tenure_company.get("numYears"),
         "tenure_at_company_months": tenure_company.get("numMonths"),
         "open_link": raw.get("openLink"),
+        "provider_data": raw,
     }
 
 

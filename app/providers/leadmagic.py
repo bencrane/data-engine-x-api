@@ -42,6 +42,7 @@ def _canonical_person_result(
         "source_person_id": None,
         "source_provider": "leadmagic",
         "raw": raw,
+        "provider_data": raw,
     }
 
 

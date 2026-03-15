@@ -124,6 +124,8 @@ def _canonical_company_from_prospeo(company: dict[str, Any]) -> dict[str, Any]:
         "follower_count": None,
         "logo_url": company.get("logo_url"),
         "source_company_id": company.get("company_id"),
+        "company_linkedin_id": company.get("linkedin_id"),
+        "provider_data": company,
     }
 
 
@@ -145,6 +147,7 @@ def _canonical_company_from_blitz(company: dict[str, Any]) -> dict[str, Any]:
         "description_raw": company.get("about"),
         "specialties": company.get("specialties"),
         "follower_count": company.get("followers"),
+        "provider_data": company,
     }
 
 
@@ -201,6 +204,7 @@ def _canonical_company_from_leadmagic(company: dict[str, Any]) -> dict[str, Any]
         "follower_count": company.get("followerCount"),
         "logo_url": company.get("logo_url"),
         "source_company_id": company.get("companyId"),
+        "provider_data": company,
     }
 
 
