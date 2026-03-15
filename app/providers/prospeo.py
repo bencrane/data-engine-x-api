@@ -313,6 +313,73 @@ async def search_people(
     }
 
 
+async def bulk_enrich_companies(
+    *,
+    api_key: str | None,
+    records: list[dict[str, Any]],
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "prospeo", "action": "bulk_company_enrich", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not records:
+        return {
+            "attempt": {"provider": "prospeo", "action": "bulk_company_enrich", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+    if len(records) > 50:
+        return {
+            "attempt": {"provider": "prospeo", "action": "bulk_company_enrich", "status": "failed", "error": "max_50_records_exceeded", "submitted_count": len(records)},
+            "mapped": None,
+        }
+
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        res = await client.post(
+            "https://api.prospeo.io/bulk-enrich-company",
+            headers={"X-KEY": api_key, "Content-Type": "application/json"},
+            json={"data": records},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400 or body.get("error") is True:
+        code = _as_str(body.get("error_code"))
+        return {
+            "attempt": {
+                "provider": "prospeo",
+                "action": "bulk_company_enrich",
+                "status": "failed",
+                "http_status": res.status_code,
+                "provider_status": code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    matched = _as_list(body.get("matched"))
+    not_matched = _as_list(body.get("not_matched"))
+    invalid_datapoints = _as_list(body.get("invalid_datapoints"))
+    total_cost = body.get("total_cost")
+
+    return {
+        "attempt": {
+            "provider": "prospeo",
+            "action": "bulk_company_enrich",
+            "status": "found" if matched else "not_found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "matched": matched,
+            "not_matched": not_matched,
+            "invalid_datapoints": invalid_datapoints,
+            "total_cost": total_cost,
+        },
+    }
+
+
 async def enrich_company(
     *,
     api_key: str | None,
