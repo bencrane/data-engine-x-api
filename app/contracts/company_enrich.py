@@ -47,6 +47,21 @@ class BulkCompanyEnrichOutput(BaseModel):
     source_provider: str = "prospeo"
 
 
+class BulkProfileEnrichItem(BaseModel):
+    identifier: str
+    status: str
+    company_profile: CompanyProfileOutput | None = None
+    source_providers: list[str] = []
+
+
+class BulkProfileEnrichOutput(BaseModel):
+    results: list[BulkProfileEnrichItem]
+    total_submitted: int
+    total_found: int
+    total_not_found: int
+    total_failed: int
+
+
 class BlitzAPICompanyEnrichOutput(BaseModel):
     company_name: str | None = None
     company_domain: str | None = None
