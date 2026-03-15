@@ -292,6 +292,7 @@ async def _try_blitzapi_companies(
     resolved_map: dict[str, list[ResolveResult]],
     pass_through: dict[str, str | list[str]],
     limit: int,
+    cursor: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None, dict[str, Any]]:
     settings = get_settings()
     company_filters = _build_blitzapi_company_filters(resolved_map, pass_through)
@@ -299,6 +300,7 @@ async def _try_blitzapi_companies(
         api_key=settings.blitzapi_api_key,
         company_filters=company_filters if company_filters else None,
         max_results=limit,
+        cursor=cursor,
     )
     mapped = result.get("mapped") or {}
     return mapped.get("results") or [], mapped.get("pagination"), result["attempt"]
@@ -311,6 +313,7 @@ async def execute_intent_search(
     provider: str | None,
     limit: int,
     page: int,
+    cursor: str | None = None,
 ) -> dict[str, Any]:
     # Separate criteria into enum and pass-through
     enum_criteria: dict[str, str | list[str]] = {}
@@ -364,7 +367,7 @@ async def execute_intent_search(
                     )
                 elif prov == "blitzapi":
                     results, pagination, attempt = await _try_blitzapi_companies(
-                        resolved_map, pass_through, limit
+                        resolved_map, pass_through, limit, cursor=cursor
                     )
                 else:
                     continue

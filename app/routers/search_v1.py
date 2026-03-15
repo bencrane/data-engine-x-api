@@ -7,7 +7,7 @@ from app.auth import AuthContext, get_current_auth
 from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.contracts.intent_search import IntentSearchOutput, IntentSearchRequest
-from app.routers._responses import DataEnvelope, error_response
+from app.routers._responses import DataEnvelope
 from app.services.intent_search import execute_intent_search
 
 router = APIRouter()
@@ -29,37 +29,30 @@ async def _resolve_flexible_auth(
 
 @router.post("/search")
 async def intent_search(
-    request: Request,
+    body: IntentSearchRequest,
     auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
-    body = await request.json()
-    try:
-        parsed = IntentSearchRequest.model_validate(body)
-    except Exception as exc:
-        return error_response(f"Invalid request: {exc}", status_code=422)
-
-    limit = max(1, min(parsed.limit, 100))
-    page = max(1, parsed.page)
-
-    if not parsed.criteria:
+    if not body.criteria:
         return DataEnvelope(data={
-            "search_type": parsed.search_type,
+            "search_type": body.search_type,
             "provider_used": "none",
             "results": [],
             "result_count": 0,
             "enum_resolution": {},
             "unresolved_fields": [],
             "pagination": None,
+            "provider_attempts": [],
             "status": "failed",
             "missing_inputs": ["criteria"],
         })
 
     result = await execute_intent_search(
-        search_type=parsed.search_type,
-        criteria=parsed.criteria,
-        provider=parsed.provider,
-        limit=limit,
-        page=page,
+        search_type=body.search_type,
+        criteria=body.criteria,
+        provider=body.provider,
+        limit=body.limit,
+        page=body.page,
+        cursor=body.cursor,
     )
 
     output = IntentSearchOutput.model_validate(result)
