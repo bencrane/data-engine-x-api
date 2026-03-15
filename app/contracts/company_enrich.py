@@ -32,6 +32,21 @@ class CompanyEnrichProfileOutput(BaseModel):
     source_providers: list[str]
 
 
+class BulkCompanyEnrichItem(BaseModel):
+    identifier: str
+    company_profile: CompanyProfileOutput | None
+
+
+class BulkCompanyEnrichOutput(BaseModel):
+    matched: list[BulkCompanyEnrichItem]
+    not_matched: list[str]
+    invalid_datapoints: list[str]
+    total_submitted: int
+    total_matched: int
+    total_cost: int | None = None
+    source_provider: str = "prospeo"
+
+
 class BlitzAPICompanyEnrichOutput(BaseModel):
     company_name: str | None = None
     company_domain: str | None = None
