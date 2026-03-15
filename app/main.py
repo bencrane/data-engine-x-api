@@ -15,6 +15,7 @@ from app.routers import (
     internal,
     providers_v1,
     registry_v1,
+    search_v1,
     super_admin_api,
     super_admin_auth,
     super_admin_client_automation,
@@ -146,6 +147,11 @@ app.include_router(
     providers_v1.router,
     prefix="/api/v1",
     tags=["providers-v1"],
+)
+app.include_router(
+    search_v1.router,
+    prefix="/api/v1",
+    tags=["search-v1"],
 )
 app.include_router(
     alumni_gtm.router,
