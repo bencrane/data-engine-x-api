@@ -108,6 +108,7 @@ COMPANY_LOCATION = ("hq_locality", "hq_country_code", "current_company_location"
 PERSON_LINKEDIN_URL = ("person_linkedin_url", "linkedin_url", "profile_url")
 PERSON_FULL_NAME = ("full_name", "person_full_name", "name")
 PERSON_EMAIL = ("work_email", "email")
+PERSON_PHONE = ("phone", "person_phone", "mobile_phone")
 PERSON_FIRST_NAME = ("first_name", "person_first_name")
 PERSON_LAST_NAME = ("last_name", "person_last_name")
 
@@ -157,6 +158,10 @@ def extract_person_full_name(input_data: dict[str, Any]) -> str | None:
 
 def extract_person_email(input_data: dict[str, Any]) -> str | None:
     return extract_str(input_data, PERSON_EMAIL)
+
+
+def extract_person_phone(input_data: dict[str, Any]) -> str | None:
+    return extract_str(input_data, PERSON_PHONE)
 
 
 def extract_person_first_name(input_data: dict[str, Any]) -> str | None:
