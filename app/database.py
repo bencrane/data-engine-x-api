@@ -30,6 +30,8 @@ OPS_TABLES = frozenset(
         "company_blueprint_schedules",
         "company_blueprint_schedule_runs",
         "company_entity_associations",
+        "lists",
+        "list_members",
     }
 )
 
