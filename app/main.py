@@ -13,6 +13,7 @@ from app.routers import (
     execute_v1,
     health,
     internal,
+    lists_v1,
     providers_v1,
     registry_v1,
     search_v1,
@@ -152,6 +153,11 @@ app.include_router(
     search_v1.router,
     prefix="/api/v1",
     tags=["search-v1"],
+)
+app.include_router(
+    lists_v1.router,
+    prefix="/api/v1",
+    tags=["lists-v1"],
 )
 app.include_router(
     alumni_gtm.router,
