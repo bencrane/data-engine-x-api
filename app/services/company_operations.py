@@ -6,6 +6,8 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.company_enrich import (
     BlitzAPICompanyEnrichOutput,
+    BulkCompanyEnrichItem,
+    BulkCompanyEnrichOutput,
     CardRevenueOutput,
     CompanyEnrichProfileOutput,
     EcommerceEnrichOutput,
@@ -868,6 +870,100 @@ async def execute_company_enrich_locations(
         "output": {
             **validated_output,
         },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_bulk_prospeo(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.bulk_prospeo"
+    attempts: list[dict[str, Any]] = []
+
+    companies = input_data.get("companies")
+    if not companies or not isinstance(companies, list):
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["companies"],
+            "provider_attempts": attempts,
+        }
+
+    records: list[dict[str, Any]] = []
+    for idx, company in enumerate(companies):
+        record: dict[str, Any] = {"identifier": str(idx)}
+        website = company.get("company_website") or company.get("company_domain")
+        if website:
+            record["company_website"] = website
+        if company.get("company_linkedin_url"):
+            record["company_linkedin_url"] = company["company_linkedin_url"]
+        if company.get("company_name"):
+            record["company_name"] = company["company_name"]
+        if company.get("company_id"):
+            record["company_id"] = company["company_id"]
+        records.append(record)
+
+    settings = get_settings()
+    result = await prospeo.bulk_enrich_companies(
+        api_key=settings.prospeo_api_key,
+        records=records,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = result.get("mapped")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": result["attempt"].get("status", "failed"),
+            "provider_attempts": attempts,
+        }
+
+    matched_items: list[dict[str, Any]] = []
+    for item in mapped.get("matched", []):
+        raw_company = item.get("company") or {}
+        canonical = _canonical_company_from_prospeo(raw_company)
+        matched_items.append({
+            "identifier": item.get("identifier", ""),
+            "company_profile": canonical,
+        })
+
+    not_matched = mapped.get("not_matched", [])
+    invalid_datapoints = mapped.get("invalid_datapoints", [])
+    total_cost = mapped.get("total_cost")
+
+    try:
+        output = BulkCompanyEnrichOutput.model_validate({
+            "matched": [
+                BulkCompanyEnrichItem.model_validate(m) for m in matched_items
+            ],
+            "not_matched": not_matched,
+            "invalid_datapoints": invalid_datapoints,
+            "total_submitted": len(records),
+            "total_matched": len(matched_items),
+            "total_cost": total_cost,
+            "source_provider": "prospeo",
+        }).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "found" if matched_items else "not_found",
+        "output": output,
         "provider_attempts": attempts,
     }
 
