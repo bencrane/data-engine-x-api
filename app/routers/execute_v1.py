@@ -45,6 +45,8 @@ from app.services.adyntel_operations import (
 )
 from app.services.blitzapi_person_operations import (
     execute_person_contact_resolve_email_blitzapi,
+    execute_person_resolve_from_email,
+    execute_person_resolve_from_phone,
     execute_person_search_employee_finder_blitzapi,
     execute_person_search_waterfall_icp_blitzapi,
 )
@@ -137,6 +139,8 @@ SUPPORTED_OPERATION_IDS = {
     "person.contact.resolve_email_blitzapi",
     "person.contact.resolve_mobile_phone",
     "person.contact.verify_email",
+    "person.resolve.from_phone",
+    "person.resolve.from_email",
     "person.resolve.linkedin_from_email",
     "person.search",
     "person.search.employee_finder_blitzapi",
@@ -324,6 +328,28 @@ async def execute_v1(
 
     if payload.operation_id == "person.contact.resolve_email_blitzapi":
         result = await execute_person_contact_resolve_email_blitzapi(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.resolve.from_phone":
+        result = await execute_person_resolve_from_phone(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "person.resolve.from_email":
+        result = await execute_person_resolve_from_email(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
