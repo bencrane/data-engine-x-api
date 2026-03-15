@@ -39,6 +39,7 @@ app.add_middleware(
         "https://app.dataengine.run",
         "https://outboundsolutions.com",
         "https://www.outboundsolutions.com",
+        "https://admin.outboundsolutions.com",
         "https://gtmdirect.com",
         "https://www.gtmdirect.com",
     ] + [f"http://localhost:{p}" for p in range(3000, 3011)],
