@@ -13,6 +13,7 @@ from app.routers import (
     execute_v1,
     health,
     internal,
+    providers_v1,
     registry_v1,
     super_admin_api,
     super_admin_auth,
@@ -140,6 +141,11 @@ app.include_router(
     registry_v1.router,
     prefix="/api/v1",
     tags=["registry-v1"],
+)
+app.include_router(
+    providers_v1.router,
+    prefix="/api/v1",
+    tags=["providers-v1"],
 )
 app.include_router(
     alumni_gtm.router,
