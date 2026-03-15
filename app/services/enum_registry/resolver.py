@@ -9,6 +9,7 @@ import difflib
 from typing import NamedTuple
 
 from app.services.enum_registry.field_mappings import FIELD_REGISTRY, get_field_mapping
+from app.services.enum_registry.values import VALUES_REGISTRY
 
 
 class ResolveResult(NamedTuple):
@@ -45,12 +46,12 @@ def resolve_enum(
         )
 
     provider_field = mapping.provider_field
-    values = mapping.values
     synonyms = mapping.synonyms
     input_lower = user_input.lower()
 
-    # Build reverse lookup on the fly (small cost, keeps resolver stateless)
-    lookup = {v.lower(): v for v in values}
+    # Use pre-built lookup structures from values.py
+    registry_key = (provider, generic_field)
+    values, lookup = VALUES_REGISTRY[registry_key]
 
     # 1. Exact match (case-insensitive)
     if input_lower in lookup:
@@ -71,9 +72,8 @@ def resolve_enum(
         )
 
     # 3. Fuzzy match
-    lower_values = [v.lower() for v in values]
     matches = difflib.get_close_matches(
-        input_lower, lower_values, n=fuzzy_max_results, cutoff=fuzzy_threshold
+        input_lower, list(lookup), n=fuzzy_max_results, cutoff=fuzzy_threshold
     )
     if matches:
         best_lower = matches[0]

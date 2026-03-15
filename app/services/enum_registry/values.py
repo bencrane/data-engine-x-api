@@ -1114,25 +1114,8 @@ BLITZAPI_COUNTRY_CODES: tuple[str, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# Lowercase frozensets (for case-insensitive membership checks)
-# ---------------------------------------------------------------------------
-
-_PROSPEO_SENIORITIES_LOWER = frozenset(v.lower() for v in PROSPEO_SENIORITIES)
-_PROSPEO_DEPARTMENTS_LOWER = frozenset(v.lower() for v in PROSPEO_DEPARTMENTS)
-_PROSPEO_INDUSTRIES_LOWER = frozenset(v.lower() for v in PROSPEO_INDUSTRIES)
-_PROSPEO_EMPLOYEE_RANGES_LOWER = frozenset(v.lower() for v in PROSPEO_EMPLOYEE_RANGES)
-
-_BLITZAPI_JOB_LEVELS_LOWER = frozenset(v.lower() for v in BLITZAPI_JOB_LEVELS)
-_BLITZAPI_JOB_FUNCTIONS_LOWER = frozenset(v.lower() for v in BLITZAPI_JOB_FUNCTIONS)
-_BLITZAPI_INDUSTRIES_LOWER = frozenset(v.lower() for v in BLITZAPI_INDUSTRIES)
-_BLITZAPI_EMPLOYEE_RANGES_LOWER = frozenset(v.lower() for v in BLITZAPI_EMPLOYEE_RANGES)
-_BLITZAPI_COMPANY_TYPES_LOWER = frozenset(v.lower() for v in BLITZAPI_COMPANY_TYPES)
-_BLITZAPI_CONTINENTS_LOWER = frozenset(v.lower() for v in BLITZAPI_CONTINENTS)
-_BLITZAPI_SALES_REGIONS_LOWER = frozenset(v.lower() for v in BLITZAPI_SALES_REGIONS)
-_BLITZAPI_COUNTRY_CODES_LOWER = frozenset(v.lower() for v in BLITZAPI_COUNTRY_CODES)
-
-# ---------------------------------------------------------------------------
 # Reverse lookup dicts (lowercase → original casing)
+# Used by the resolver for exact matching and fuzzy match reverse-mapping.
 # ---------------------------------------------------------------------------
 
 _PROSPEO_SENIORITIES_LOOKUP = {v.lower(): v for v in PROSPEO_SENIORITIES}
@@ -1150,21 +1133,21 @@ _BLITZAPI_SALES_REGIONS_LOOKUP = {v.lower(): v for v in BLITZAPI_SALES_REGIONS}
 _BLITZAPI_COUNTRY_CODES_LOOKUP = {v.lower(): v for v in BLITZAPI_COUNTRY_CODES}
 
 # ---------------------------------------------------------------------------
-# Registry mapping: (provider, field) → (values, frozenset, lookup)
+# Registry mapping: (provider, field) → (values, lookup)
 # Used by the resolver to avoid hard-coding provider/field → constant mappings.
 # ---------------------------------------------------------------------------
 
-VALUES_REGISTRY: dict[tuple[str, str], tuple[tuple[str, ...], frozenset, dict[str, str]]] = {
-    ("prospeo", "seniority"): (PROSPEO_SENIORITIES, _PROSPEO_SENIORITIES_LOWER, _PROSPEO_SENIORITIES_LOOKUP),
-    ("prospeo", "department"): (PROSPEO_DEPARTMENTS, _PROSPEO_DEPARTMENTS_LOWER, _PROSPEO_DEPARTMENTS_LOOKUP),
-    ("prospeo", "industry"): (PROSPEO_INDUSTRIES, _PROSPEO_INDUSTRIES_LOWER, _PROSPEO_INDUSTRIES_LOOKUP),
-    ("prospeo", "employee_range"): (PROSPEO_EMPLOYEE_RANGES, _PROSPEO_EMPLOYEE_RANGES_LOWER, _PROSPEO_EMPLOYEE_RANGES_LOOKUP),
-    ("blitzapi", "seniority"): (BLITZAPI_JOB_LEVELS, _BLITZAPI_JOB_LEVELS_LOWER, _BLITZAPI_JOB_LEVELS_LOOKUP),
-    ("blitzapi", "department"): (BLITZAPI_JOB_FUNCTIONS, _BLITZAPI_JOB_FUNCTIONS_LOWER, _BLITZAPI_JOB_FUNCTIONS_LOOKUP),
-    ("blitzapi", "industry"): (BLITZAPI_INDUSTRIES, _BLITZAPI_INDUSTRIES_LOWER, _BLITZAPI_INDUSTRIES_LOOKUP),
-    ("blitzapi", "employee_range"): (BLITZAPI_EMPLOYEE_RANGES, _BLITZAPI_EMPLOYEE_RANGES_LOWER, _BLITZAPI_EMPLOYEE_RANGES_LOOKUP),
-    ("blitzapi", "company_type"): (BLITZAPI_COMPANY_TYPES, _BLITZAPI_COMPANY_TYPES_LOWER, _BLITZAPI_COMPANY_TYPES_LOOKUP),
-    ("blitzapi", "continent"): (BLITZAPI_CONTINENTS, _BLITZAPI_CONTINENTS_LOWER, _BLITZAPI_CONTINENTS_LOOKUP),
-    ("blitzapi", "sales_region"): (BLITZAPI_SALES_REGIONS, _BLITZAPI_SALES_REGIONS_LOWER, _BLITZAPI_SALES_REGIONS_LOOKUP),
-    ("blitzapi", "country_code"): (BLITZAPI_COUNTRY_CODES, _BLITZAPI_COUNTRY_CODES_LOWER, _BLITZAPI_COUNTRY_CODES_LOOKUP),
+VALUES_REGISTRY: dict[tuple[str, str], tuple[tuple[str, ...], dict[str, str]]] = {
+    ("prospeo", "seniority"): (PROSPEO_SENIORITIES, _PROSPEO_SENIORITIES_LOOKUP),
+    ("prospeo", "department"): (PROSPEO_DEPARTMENTS, _PROSPEO_DEPARTMENTS_LOOKUP),
+    ("prospeo", "industry"): (PROSPEO_INDUSTRIES, _PROSPEO_INDUSTRIES_LOOKUP),
+    ("prospeo", "employee_range"): (PROSPEO_EMPLOYEE_RANGES, _PROSPEO_EMPLOYEE_RANGES_LOOKUP),
+    ("blitzapi", "seniority"): (BLITZAPI_JOB_LEVELS, _BLITZAPI_JOB_LEVELS_LOOKUP),
+    ("blitzapi", "department"): (BLITZAPI_JOB_FUNCTIONS, _BLITZAPI_JOB_FUNCTIONS_LOOKUP),
+    ("blitzapi", "industry"): (BLITZAPI_INDUSTRIES, _BLITZAPI_INDUSTRIES_LOOKUP),
+    ("blitzapi", "employee_range"): (BLITZAPI_EMPLOYEE_RANGES, _BLITZAPI_EMPLOYEE_RANGES_LOOKUP),
+    ("blitzapi", "company_type"): (BLITZAPI_COMPANY_TYPES, _BLITZAPI_COMPANY_TYPES_LOOKUP),
+    ("blitzapi", "continent"): (BLITZAPI_CONTINENTS, _BLITZAPI_CONTINENTS_LOOKUP),
+    ("blitzapi", "sales_region"): (BLITZAPI_SALES_REGIONS, _BLITZAPI_SALES_REGIONS_LOOKUP),
+    ("blitzapi", "country_code"): (BLITZAPI_COUNTRY_CODES, _BLITZAPI_COUNTRY_CODES_LOOKUP),
 }
