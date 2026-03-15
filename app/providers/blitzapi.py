@@ -749,6 +749,106 @@ async def find_work_email(
     }
 
 
+async def phone_to_person(
+    *,
+    api_key: str | None,
+    phone: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "phone_to_person", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not phone:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "phone_to_person", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/enrichment/phone-to-person",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"phone": phone},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "phone_to_person",
+                "status": "not_found" if res.status_code == 404 else "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+    person_wrapper = _as_dict(body.get("person"))
+    person = _as_dict(person_wrapper.get("person"))
+    if body.get("found") and person:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "phone_to_person", "status": "found", "duration_ms": now_ms() - start_ms, "raw_response": body},
+            "mapped": canonical_person_result(person=person, raw=body),
+        }
+    return {
+        "attempt": {"provider": "blitzapi", "action": "phone_to_person", "status": "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
+        "mapped": None,
+    }
+
+
+async def email_to_person(
+    *,
+    api_key: str | None,
+    email: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "email_to_person", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not email:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "email_to_person", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/enrichment/email-to-person",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"email": email},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "email_to_person",
+                "status": "not_found" if res.status_code == 404 else "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+    person_wrapper = _as_dict(body.get("person"))
+    person = _as_dict(person_wrapper.get("person"))
+    if body.get("found") and person:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "email_to_person", "status": "found", "duration_ms": now_ms() - start_ms, "raw_response": body},
+            "mapped": canonical_person_result(person=person, raw=body),
+        }
+    return {
+        "attempt": {"provider": "blitzapi", "action": "email_to_person", "status": "not_found", "duration_ms": now_ms() - start_ms, "raw_response": body},
+        "mapped": None,
+    }
+
+
 async def enrich_company(
     *,
     api_key: str | None,
