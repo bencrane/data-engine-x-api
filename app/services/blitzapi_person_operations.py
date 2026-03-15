@@ -4,9 +4,9 @@ import uuid
 from typing import Any
 
 from app.config import get_settings
-from app.contracts.blitzapi_person import EmployeeFinderOutput, FindWorkEmailOutput, WaterfallIcpSearchOutput
+from app.contracts.blitzapi_person import EmployeeFinderOutput, FindWorkEmailOutput, ReversePersonLookupOutput, WaterfallIcpSearchOutput
 from app.providers import blitzapi
-from app.services._input_extraction import extract_company_linkedin_url, extract_person_linkedin_url
+from app.services._input_extraction import extract_company_linkedin_url, extract_person_email, extract_person_linkedin_url, extract_person_phone
 
 _DEFAULT_WATERFALL_CASCADE: list[dict[str, Any]] = [
     {
@@ -226,6 +226,122 @@ async def execute_person_contact_resolve_email_blitzapi(
                 "source_provider": "blitzapi",
             }
         ).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {"code": "output_validation_failed", "message": str(exc)},
+        }
+
+    status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_person_resolve_from_phone(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "person.resolve.from_phone"
+    attempts: list[dict[str, Any]] = []
+
+    phone = extract_person_phone(input_data)
+    if not phone:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["phone"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    provider_result = await blitzapi.phone_to_person(
+        api_key=settings.blitzapi_api_key,
+        phone=phone,
+    )
+    attempt = provider_result.get("attempt", {})
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = provider_result.get("mapped")
+
+    if not isinstance(mapped, dict):
+        status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    output_data = {k: v for k, v in mapped.items() if k != "raw"}
+    try:
+        output = ReversePersonLookupOutput.model_validate(output_data).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {"code": "output_validation_failed", "message": str(exc)},
+        }
+
+    status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_person_resolve_from_email(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "person.resolve.from_email"
+    attempts: list[dict[str, Any]] = []
+
+    email = extract_person_email(input_data)
+    if not email:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["email"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    provider_result = await blitzapi.email_to_person(
+        api_key=settings.blitzapi_api_key,
+        email=email,
+    )
+    attempt = provider_result.get("attempt", {})
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = provider_result.get("mapped")
+
+    if not isinstance(mapped, dict):
+        status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    output_data = {k: v for k, v in mapped.items() if k != "raw"}
+    try:
+        output = ReversePersonLookupOutput.model_validate(output_data).model_dump()
     except Exception as exc:  # noqa: BLE001
         return {
             "run_id": run_id,
