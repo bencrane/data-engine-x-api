@@ -6,6 +6,8 @@ import httpx
 
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
 
+_ACCOUNT_INFO_URL = "https://api.prospeo.io/account-information"
+
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -138,6 +140,25 @@ def canonical_person_result(
         "source_provider": provider,
         "raw": raw,
     }
+
+
+async def get_account_information(*, api_key: str | None) -> dict[str, Any]:
+    if not api_key:
+        return {"error": True, "error_message": "missing_provider_api_key"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        res = await client.get(
+            _ACCOUNT_INFO_URL,
+            headers={"X-KEY": api_key},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400 or body.get("error") is True:
+        code = _as_str(body.get("error_code"))
+        return {"error": True, "error_code": code, "http_status": res.status_code}
+
+    response_data = body.get("response", {})
+    return {"error": False, **response_data}
 
 
 async def search_companies(
