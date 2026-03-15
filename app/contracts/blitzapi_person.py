@@ -22,3 +22,18 @@ class FindWorkEmailOutput(BaseModel):
     work_email: str | None = None
     all_emails: list[Any] | None = None
     source_provider: str = "blitzapi"
+
+
+class ReversePersonLookupOutput(BaseModel):
+    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    linkedin_url: str | None = None
+    headline: str | None = None
+    current_title: str | None = None
+    current_company_name: str | None = None
+    current_company_domain: str | None = None
+    location_name: str | None = None
+    country_code: str | None = None
+    source_person_id: str | None = None
+    source_provider: str = "blitzapi"
