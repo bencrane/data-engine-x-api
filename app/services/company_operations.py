@@ -8,6 +8,8 @@ from app.contracts.company_enrich import (
     BlitzAPICompanyEnrichOutput,
     BulkCompanyEnrichItem,
     BulkCompanyEnrichOutput,
+    BulkProfileEnrichItem,
+    BulkProfileEnrichOutput,
     CardRevenueOutput,
     CompanyEnrichProfileOutput,
     EcommerceEnrichOutput,
@@ -965,5 +967,178 @@ async def execute_company_enrich_bulk_prospeo(
         "status": "found" if matched_items else "not_found",
         "output": output,
         "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_bulk_profile(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.bulk_profile"
+
+    companies = input_data.get("companies")
+    if not companies or not isinstance(companies, list):
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["companies"],
+            "provider_attempts": [],
+        }
+
+    if len(companies) > 50:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "error": {"code": "max_50_companies_exceeded", "submitted_count": len(companies)},
+            "provider_attempts": [],
+        }
+
+    # ── Step 1: Prospeo bulk leg ──────────────────────────────────────
+    settings = get_settings()
+    records: list[dict[str, Any]] = []
+    for idx, company in enumerate(companies):
+        record: dict[str, Any] = {"identifier": str(idx)}
+        website = company.get("company_website") or company.get("company_domain")
+        if website:
+            record["company_website"] = website
+        if company.get("company_linkedin_url"):
+            record["company_linkedin_url"] = company["company_linkedin_url"]
+        if company.get("company_name"):
+            record["company_name"] = company["company_name"]
+        if company.get("company_id"):
+            record["company_id"] = company["company_id"]
+        records.append(record)
+
+    prospeo_result = await prospeo.bulk_enrich_companies(
+        api_key=settings.prospeo_api_key,
+        records=records,
+    )
+    prospeo_bulk_attempt = prospeo_result["attempt"]
+
+    # Build lookup: identifier -> raw company dict
+    prospeo_lookup: dict[str, dict[str, Any]] = {}
+    mapped = prospeo_result.get("mapped")
+    if mapped:
+        for item in mapped.get("matched", []):
+            prospeo_lookup[item.get("identifier", "")] = item.get("company") or {}
+
+    # ── Step 2: Per-company waterfall continuation ────────────────────
+    provider_order = _provider_order()
+    # Determine which providers come after prospeo
+    remaining_providers_list: list[str] = []
+    found_prospeo = False
+    for p in provider_order:
+        if p == "prospeo":
+            found_prospeo = True
+            continue
+        if found_prospeo or "prospeo" not in provider_order:
+            remaining_providers_list.append(p)
+    # If prospeo is not in the provider order at all, use all providers
+    if not found_prospeo:
+        remaining_providers_list = provider_order
+
+    provider_adapters: dict[str, Any] = {
+        "blitzapi": _blitzapi_company_enrich,
+        "companyenrich": _companyenrich_company_enrich,
+        "leadmagic": _leadmagic_company_enrich,
+    }
+    mapper: dict[str, Any] = {
+        "prospeo": _canonical_company_from_prospeo,
+        "blitzapi": _canonical_company_from_blitz,
+        "companyenrich": _canonical_company_from_companyenrich,
+        "leadmagic": _canonical_company_from_leadmagic,
+    }
+
+    result_items: list[dict[str, Any]] = []
+
+    for idx, company in enumerate(companies):
+        identifier = str(idx)
+        profile: dict[str, Any] = {}
+        sources: list[str] = []
+
+        current_input: dict[str, Any] = {
+            "company_domain": extract_domain(company),
+            "company_website": extract_company_website(company),
+            "company_linkedin_url": extract_company_linkedin_url(company),
+            "company_name": extract_company_name(company),
+            "source_company_id": _as_non_empty_str(company.get("source_company_id")),
+        }
+
+        # Apply Prospeo result if matched
+        raw_prospeo = prospeo_lookup.get(identifier)
+        if raw_prospeo:
+            profile = _merge_company_profile(profile, _canonical_company_from_prospeo(raw_prospeo))
+            sources.append("prospeo")
+            current_input = {
+                **current_input,
+                "company_name": current_input.get("company_name") or _as_non_empty_str(profile.get("company_name")),
+                "company_domain": current_input.get("company_domain") or _as_non_empty_str(profile.get("company_domain")),
+                "company_website": current_input.get("company_website") or _as_non_empty_str(profile.get("company_website")),
+                "company_linkedin_url": current_input.get("company_linkedin_url") or _as_non_empty_str(profile.get("company_linkedin_url")),
+                "source_company_id": current_input.get("source_company_id") or _as_non_empty_str(profile.get("source_company_id")),
+            }
+
+        # Continue waterfall with remaining providers
+        company_attempts: list[dict[str, Any]] = []
+        for provider_name in remaining_providers_list:
+            adapter = provider_adapters.get(provider_name)
+            if not adapter:
+                continue
+            raw_company = await adapter(input_data=current_input, attempts=company_attempts)
+            if not raw_company:
+                continue
+            profile = _merge_company_profile(profile, mapper[provider_name](raw_company))
+            sources.append(provider_name)
+            current_input = {
+                **current_input,
+                "company_name": current_input.get("company_name") or _as_non_empty_str(profile.get("company_name")),
+                "company_domain": current_input.get("company_domain") or _as_non_empty_str(profile.get("company_domain")),
+                "company_website": current_input.get("company_website") or _as_non_empty_str(profile.get("company_website")),
+                "company_linkedin_url": current_input.get("company_linkedin_url") or _as_non_empty_str(profile.get("company_linkedin_url")),
+                "source_company_id": current_input.get("source_company_id") or _as_non_empty_str(profile.get("source_company_id")),
+            }
+
+        item_status = "found" if profile else "not_found"
+        result_items.append({
+            "identifier": identifier,
+            "status": item_status,
+            "company_profile": profile or None,
+            "source_providers": sources,
+        })
+
+    # ── Step 3: Build output ──────────────────────────────────────────
+    total_found = sum(1 for r in result_items if r["status"] == "found")
+    total_not_found = sum(1 for r in result_items if r["status"] == "not_found")
+    total_failed = sum(1 for r in result_items if r["status"] == "failed")
+
+    try:
+        output = BulkProfileEnrichOutput.model_validate({
+            "results": [BulkProfileEnrichItem.model_validate(r) for r in result_items],
+            "total_submitted": len(companies),
+            "total_found": total_found,
+            "total_not_found": total_not_found,
+            "total_failed": total_failed,
+        }).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": [prospeo_bulk_attempt],
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "found" if total_found > 0 else "not_found",
+        "output": output,
+        "provider_attempts": [prospeo_bulk_attempt],
     }
 
