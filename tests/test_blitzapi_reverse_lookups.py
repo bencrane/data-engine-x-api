@@ -95,6 +95,15 @@ async def test_phone_to_person_not_found():
 
 
 @pytest.mark.asyncio
+async def test_phone_to_person_missing_input():
+    result = await phone_to_person(api_key="test-key", phone=None)
+
+    assert result["attempt"]["status"] == "skipped"
+    assert result["attempt"]["skip_reason"] == "missing_required_inputs"
+    assert result["mapped"] is None
+
+
+@pytest.mark.asyncio
 async def test_email_to_person_found():
     mock_resp = _mock_response(_MOCK_PERSON_RESPONSE)
     with patch("app.providers.blitzapi._blitzapi_request_with_retry", new_callable=AsyncMock, return_value=mock_resp):
@@ -107,6 +116,16 @@ async def test_email_to_person_found():
     assert mapped["full_name"] == "Antoine Blitz"
     assert mapped["linkedin_url"] == "https://www.linkedin.com/in/antoine-blitz-5581b7373"
     assert mapped["source_provider"] == "blitzapi"
+
+
+@pytest.mark.asyncio
+async def test_email_to_person_not_found():
+    mock_resp = _mock_response(_MOCK_NOT_FOUND_RESPONSE)
+    with patch("app.providers.blitzapi._blitzapi_request_with_retry", new_callable=AsyncMock, return_value=mock_resp):
+        result = await email_to_person(api_key="test-key", email="nobody@example.com")
+
+    assert result["attempt"]["status"] == "not_found"
+    assert result["mapped"] is None
 
 
 @pytest.mark.asyncio
