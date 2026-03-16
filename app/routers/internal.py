@@ -1557,3 +1557,34 @@ async def internal_sam_gov_entities_ingest(
         raise HTTPException(status_code=422, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── USASpending.gov Contract Ingest ────────────────────────────────────────
+
+
+class InternalUsaspendingIngestRequest(BaseModel):
+    zip_file_path: str
+    extract_date: str
+    extract_type: str
+    chunk_size: int = 50_000
+
+
+@router.post("/usaspending-contracts/ingest", response_model=DataEnvelope)
+async def internal_usaspending_contracts_ingest(
+    payload: InternalUsaspendingIngestRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.usaspending_extract_ingest import ingest_usaspending_zip
+
+    try:
+        result = ingest_usaspending_zip(
+            zip_file_path=payload.zip_file_path,
+            extract_date=payload.extract_date,
+            extract_type=payload.extract_type,
+            chunk_size=payload.chunk_size,
+        )
+        return DataEnvelope(data=result)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
