@@ -162,14 +162,15 @@ def test_numeric_range_exact_bucket_match():
 
 def test_numeric_range_close_fit():
     result = resolve_enum("blitzapi", "employee_range", "50-200")
+    # BlitzAPI "51-200" covers nearly all of 50-200; "11-50" overlap is trivial (1 unit)
     assert result.value == "51-200"
     assert result.match_type == "numeric"
 
 
 def test_numeric_range_partial_overlap():
     result = resolve_enum("blitzapi", "employee_range", "100-300")
-    # 51-200 overlap = 101, 201-500 overlap = 100 → picks 51-200
-    assert result.value in ("51-200", "201-500")
+    # Spans two BlitzAPI buckets: "51-200" (overlap 101) and "201-500" (overlap 100)
+    assert result.value == ["51-200", "201-500"]
     assert result.match_type == "numeric"
 
 
@@ -191,11 +192,11 @@ def test_numeric_range_with_word_suffix():
     assert result.match_type == "numeric"
 
 
-def test_numeric_range_prospeo_different_buckets():
+def test_numeric_range_prospeo_multi_bucket():
     # Prospeo has finer buckets: 51-100, 101-200
     result = resolve_enum("prospeo", "employee_range", "50-200")
-    # User range 50-200 spans two Prospeo buckets; 101-200 has more overlap (100) than 51-100 (50)
-    assert result.value in ("51-100", "101-200")
+    # User range 50-200 spans both Prospeo buckets
+    assert result.value == ["51-100", "101-200"]
     assert result.match_type == "numeric"
 
 

@@ -62,12 +62,19 @@ def _resolve_enum_criteria(
         if field_results:
             resolved_map[field] = field_results
             first = field_results[0]
+            # Flatten resolved values for the detail summary
+            all_resolved: list[str] = []
+            for r in field_results:
+                if isinstance(r.value, list):
+                    all_resolved.extend(r.value)
+                elif r.value:
+                    all_resolved.append(r.value)
             resolution_details[field] = EnumResolutionDetail(
                 input_value=values[0] if len(values) == 1 else str(values),
                 resolved_value=(
-                    first.value
-                    if len(field_results) == 1
-                    else str([r.value for r in field_results])
+                    all_resolved[0]
+                    if len(all_resolved) == 1
+                    else str(all_resolved)
                 ),
                 provider_field=first.provider_field,
                 match_type=first.match_type,
@@ -92,11 +99,21 @@ def _resolved_values(
     resolved_map: dict[str, list[ResolveResult]],
     field: str,
 ) -> list[str] | None:
-    """Get the list of resolved string values for a field, or None."""
+    """Get the list of resolved string values for a field, or None.
+
+    Flattens list-valued ResolveResults (e.g. numeric range spanning
+    multiple buckets) into a single flat list.
+    """
     results = resolved_map.get(field)
     if not results:
         return None
-    return [r.value for r in results if r.value]
+    out: list[str] = []
+    for r in results:
+        if isinstance(r.value, list):
+            out.extend(r.value)
+        elif r.value:
+            out.append(r.value)
+    return out or None
 
 
 def _resolved_single(

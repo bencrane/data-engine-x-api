@@ -15,7 +15,7 @@ from app.services.enum_registry.values import VALUES_REGISTRY
 
 
 class ResolveResult(NamedTuple):
-    value: str | None  # the resolved provider-specific enum value, or None
+    value: str | list[str] | None  # resolved value(s), or None
     provider_field: str | None  # the provider's API parameter name
     match_type: str  # "exact", "synonym", "numeric", "fuzzy", "none"
     confidence: float  # 1.0 for exact/synonym, 0.0-1.0 for fuzzy/numeric, 0.0 for none
@@ -119,20 +119,28 @@ def _resolve_numeric_range(
             confidence=1.0,
         )
 
-    # 2. Best overlap
-    best_overlap_val = 0.0
-    best_overlap_bucket: str | None = None
+    # 2. All overlapping buckets (sorted by bucket min for deterministic order)
+    #    Filter out buckets with trivial overlap (<10% of user range or bucket span)
+    user_span = _range_span(u_min, u_max)
+    overlapping: list[tuple[str, int, float, float]] = []  # (bucket_str, b_min, b_max, overlap)
     for bucket_str, b_min, b_max in parsed_buckets:
         overlap = _range_overlap(u_min, u_max, b_min, b_max)
-        if overlap > best_overlap_val:
-            best_overlap_val = overlap
-            best_overlap_bucket = bucket_str
+        if overlap > 0:
+            bucket_span = _range_span(b_min, b_max)
+            overlap_ratio = max(
+                overlap / user_span if user_span > 0 else 0,
+                overlap / bucket_span if bucket_span > 0 else 0,
+            )
+            if overlap_ratio >= 0.1:
+                overlapping.append((bucket_str, b_min, b_max, overlap))
 
-    if best_overlap_bucket is not None and best_overlap_val > 0:
-        user_span = _range_span(u_min, u_max)
-        confidence = round(min(best_overlap_val / user_span, 1.0), 4) if user_span > 0 else 0.5
+    if overlapping:
+        overlapping.sort(key=lambda x: x[1])  # sort by bucket min
+        total_overlap = sum(o[3] for o in overlapping)
+        confidence = round(min(total_overlap / user_span, 1.0), 4) if user_span > 0 else 0.5
+        bucket_values = [o[0] for o in overlapping]
         return ResolveResult(
-            value=best_overlap_bucket,
+            value=bucket_values[0] if len(bucket_values) == 1 else bucket_values,
             provider_field=provider_field,
             match_type="numeric",
             confidence=confidence,
