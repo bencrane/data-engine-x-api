@@ -67,11 +67,12 @@ def ingest_sam_gov_extract(
             # Skip BOF header line (first non-empty line starting with "BOF")
             if not bof_skipped and stripped.startswith("BOF"):
                 bof_skipped = True
-                # Parse expected record count from BOF (5th space-separated token)
+                # Parse expected record count from BOF (6th space-separated token, index 5)
+                # BOF line format: BOF PUBLIC V2 00000000 20260301 0874709 0008190
                 bof_tokens = stripped.split()
-                if len(bof_tokens) >= 5:
+                if len(bof_tokens) >= 6:
                     try:
-                        expected_record_count = int(bof_tokens[4])
+                        expected_record_count = int(bof_tokens[5])
                     except ValueError:
                         pass
                 logger.info(

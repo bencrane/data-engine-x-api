@@ -171,13 +171,19 @@ def upsert_sam_gov_entities(
     }
 
     try:
-        # Phase 1: Build typed rows
+        # Phase 1: Build typed rows and deduplicate by conflict key
         t_row_builder_start = time.perf_counter()
-        upsert_rows: list[dict[str, Any]] = []
+        dedup: dict[tuple[str, ...], dict[str, Any]] = {}
         for row in rows:
             typed_row = build_sam_gov_entity_row(row, source_context)
-            upsert_rows.append(typed_row)
+            conflict_key = tuple(
+                str(typed_row.get(c, "")) for c in SAM_GOV_CONFLICT_COLUMNS
+            )
+            dedup[conflict_key] = typed_row  # last occurrence wins
+        upsert_rows = list(dedup.values())
+        rows_deduped = len(rows) - len(upsert_rows)
         phases["row_builder_ms"] = round((time.perf_counter() - t_row_builder_start) * 1000, 1)
+        phases["rows_deduped"] = rows_deduped
 
         if not upsert_rows:
             phases["total_ms"] = round((time.perf_counter() - t_total_start) * 1000, 1)
