@@ -1,8 +1,12 @@
-BEGIN;
-
 -- Materialized view: Federal Contract Leads
 -- Joins USASpending contracts with SAM.gov entity registrations on UEI.
 -- Uses latest snapshot from each source table.
+--
+-- NOTE: No BEGIN/COMMIT wrapper. CREATE MATERIALIZED VIEW populates the view
+-- on creation, and that join is too heavy for Supabase's default statement_timeout
+-- inside a transaction. Run with: SET statement_timeout = '0'; before executing.
+
+SET statement_timeout = '0';
 
 CREATE MATERIALIZED VIEW entities.mv_federal_contract_leads AS
 WITH
@@ -128,7 +132,5 @@ CREATE INDEX idx_mv_fcl_biz_size
 CREATE INDEX idx_mv_fcl_obligation
     ON entities.mv_federal_contract_leads (federal_action_obligation);
 
-COMMIT;
-
--- Populate the view (outside transaction — materialized view refresh cannot run inside BEGIN/COMMIT)
-REFRESH MATERIALIZED VIEW entities.mv_federal_contract_leads;
+-- Reset statement timeout to default
+RESET statement_timeout;
