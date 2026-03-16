@@ -26,6 +26,8 @@ from app.services.enum_registry.synonyms import (
     BLITZAPI_JOB_FUNCTION_SYNONYMS,
     PROSPEO_EMPLOYEE_RANGE_SYNONYMS,
     BLITZAPI_EMPLOYEE_RANGE_SYNONYMS,
+    PROSPEO_INDUSTRY_SYNONYMS,
+    BLITZAPI_INDUSTRY_SYNONYMS,
 )
 
 
@@ -64,12 +66,12 @@ FIELD_REGISTRY: dict[str, dict[str, FieldMapping]] = {
         "prospeo": FieldMapping(
             provider_field="company_industry",
             values=PROSPEO_INDUSTRIES,
-            synonyms=None,
+            synonyms=PROSPEO_INDUSTRY_SYNONYMS,
         ),
         "blitzapi": FieldMapping(
             provider_field="industry",
             values=BLITZAPI_INDUSTRIES,
-            synonyms=None,
+            synonyms=BLITZAPI_INDUSTRY_SYNONYMS,
         ),
     },
     "employee_range": {
