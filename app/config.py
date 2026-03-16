@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     theirstack_api_key: str | None = None
     enigma_api_key: str | None = None
     fmcsa_api_key: str | None = None
+    sam_gov_api_key: str | None = None
     socrata_api_key_id: str | None = None
     socrata_api_key_secret: str | None = None
     courtlistener_api_key: str | None = None
