@@ -43,7 +43,7 @@ class SamGovSourceContext(TypedDict):
 class SamGovExtractRow(TypedDict):
     row_number: int
     raw_line: str           # original pipe-delimited line
-    fields: list[str]       # split fields (368 items)
+    fields: list[str]       # split fields (142 items)
 
 
 def _get_sam_gov_connection_pool() -> ConnectionPool:
@@ -134,7 +134,7 @@ def build_sam_gov_entity_row(
     """Map positional fields to snake_case column names and add extract metadata."""
     result: dict[str, Any] = {}
 
-    # Map the 368 positional fields to named columns
+    # Map the 142 positional fields to named columns
     for i, db_col_name in enumerate(SAM_GOV_DB_COLUMN_NAMES):
         raw_value = row["fields"][i]
         # Strip whitespace; convert empty strings to None

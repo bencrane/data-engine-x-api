@@ -54,12 +54,34 @@ def ingest_sam_gov_extract(
     total_rows_rejected = 0
     total_rows_written = 0
     chunks_processed = 0
+    bof_skipped = False
+    expected_record_count: int | None = None
     chunk: list[SamGovExtractRow] = []
 
     with open(extract_file_path, "r", encoding="utf-8") as f:
         for line in f:
             stripped = line.rstrip("\n").rstrip("\r")
             if not stripped:
+                continue
+
+            # Skip BOF header line (first non-empty line starting with "BOF")
+            if not bof_skipped and stripped.startswith("BOF"):
+                bof_skipped = True
+                # Parse expected record count from BOF (5th space-separated token)
+                bof_tokens = stripped.split()
+                if len(bof_tokens) >= 5:
+                    try:
+                        expected_record_count = int(bof_tokens[4])
+                    except ValueError:
+                        pass
+                logger.info(
+                    "sam_gov_ingest_bof_header",
+                    extra={
+                        "bof_line": stripped,
+                        "expected_record_count": expected_record_count,
+                        "source_filename": source_filename,
+                    },
+                )
                 continue
 
             total_rows_parsed += 1
@@ -142,6 +164,7 @@ def ingest_sam_gov_extract(
             "total_rows_rejected": total_rows_rejected,
             "total_rows_written": total_rows_written,
             "chunks_processed": chunks_processed,
+            "expected_record_count": expected_record_count,
             "total_ms": round(total_ms, 1),
         },
     )
