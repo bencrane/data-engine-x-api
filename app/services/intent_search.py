@@ -6,6 +6,7 @@ from typing import Any
 from app.config import get_settings
 from app.contracts.intent_search import EnumResolutionDetail
 from app.providers import blitzapi, prospeo
+from app.services.enum_registry.field_mappings import get_field_mapping
 from app.services.enum_registry.resolver import resolve_enum, ResolveResult
 
 logger = logging.getLogger(__name__)
@@ -329,6 +330,13 @@ async def execute_intent_search(
         provider_order = [provider]
     else:
         provider_order = list(_PROVIDER_ORDER.get(search_type, ["prospeo", "blitzapi"]))
+        # Reorder providers by how many of the user's enum criteria they support
+        if enum_criteria:
+            def _field_support_count(prov: str) -> int:
+                return sum(
+                    1 for f in enum_criteria if get_field_mapping(f, prov) is not None
+                )
+            provider_order.sort(key=_field_support_count, reverse=True)
 
     all_attempts: list[dict[str, Any]] = []
     last_resolution_details: dict[str, EnumResolutionDetail] = {}
@@ -375,6 +383,11 @@ async def execute_intent_search(
             all_attempts.append(attempt)
 
             if results:
+                # Fields the user requested but this provider doesn't support
+                field_gaps = [
+                    f for f in enum_criteria
+                    if get_field_mapping(f, prov) is None
+                ]
                 return {
                     "search_type": search_type,
                     "provider_used": prov,
@@ -384,6 +397,7 @@ async def execute_intent_search(
                         k: v.model_dump() for k, v in resolution_details.items()
                     },
                     "unresolved_fields": unresolved,
+                    "provider_field_gaps": field_gaps,
                     "pagination": pagination,
                     "provider_attempts": all_attempts,
                 }
@@ -397,6 +411,10 @@ async def execute_intent_search(
 
     # No provider returned results
     provider_used = provider_order[0] if provider_order else "none"
+    field_gaps = [
+        f for f in enum_criteria
+        if get_field_mapping(f, provider_used) is None
+    ] if provider_used != "none" else []
     return {
         "search_type": search_type,
         "provider_used": provider_used,
@@ -406,6 +424,7 @@ async def execute_intent_search(
             k: v.model_dump() for k, v in last_resolution_details.items()
         },
         "unresolved_fields": last_unresolved,
+        "provider_field_gaps": field_gaps,
         "pagination": None,
         "provider_attempts": all_attempts,
     }
