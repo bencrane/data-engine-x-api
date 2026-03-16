@@ -1524,3 +1524,36 @@ async def internal_upsert_entity_state(
         )
 
     return DataEnvelope(data=upserted)
+
+
+# ── SAM.gov Entity Extract Ingest ──────────────────────────────────────────
+
+
+class InternalSamGovIngestRequest(BaseModel):
+    extract_file_path: str
+    extract_date: str
+    extract_type: str
+    source_filename: str
+    source_download_url: str | None = None
+
+
+@router.post("/sam-gov-entities/ingest", response_model=DataEnvelope)
+async def internal_sam_gov_entities_ingest(
+    payload: InternalSamGovIngestRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.sam_gov_extract_ingest import ingest_sam_gov_extract
+
+    try:
+        result = ingest_sam_gov_extract(
+            extract_file_path=payload.extract_file_path,
+            extract_date=payload.extract_date,
+            extract_type=payload.extract_type,
+            source_filename=payload.source_filename,
+            source_download_url=payload.source_download_url,
+        )
+        return DataEnvelope(data=result)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
