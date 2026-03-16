@@ -8,10 +8,17 @@ from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.contracts.intent_search import IntentSearchOutput, IntentSearchRequest
 from app.routers._responses import DataEnvelope
+from app.services.enum_registry.field_mappings import FIELD_REGISTRY
 from app.services.intent_search import execute_intent_search
 
 router = APIRouter()
 _security = HTTPBearer(auto_error=False)
+
+# Pass-through fields available per entity type
+_TEXT_FILTERS: dict[str, dict[str, list[str]]] = {
+    "companies": ["query", "company_domain", "company_name", "location"],
+    "people": ["query", "company_domain", "company_name", "company_linkedin_url", "job_title", "location"],
+}
 
 
 async def _resolve_flexible_auth(
@@ -25,6 +32,40 @@ async def _resolve_flexible_auth(
     except HTTPException:
         pass
     return await get_current_auth(request=request, credentials=credentials)
+
+
+@router.get("/search/filters")
+async def search_filters(
+    provider: str = "prospeo",
+    entity_type: str = "companies",
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    if provider not in ("prospeo", "blitzapi"):
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+    if entity_type not in ("companies", "people"):
+        raise HTTPException(status_code=400, detail=f"Unknown entity_type: {entity_type}")
+
+    filters: dict[str, dict] = {}
+
+    # Enum fields from the registry
+    for field_name, provider_map in FIELD_REGISTRY.items():
+        mapping = provider_map.get(provider)
+        if mapping is None:
+            continue
+        # Skip people-only enum fields for company searches
+        if entity_type == "companies" and field_name in ("seniority", "department"):
+            continue
+        filters[field_name] = {"type": "enum", "values": list(mapping.values)}
+
+    # Text fields
+    for text_field in _TEXT_FILTERS.get(entity_type, []):
+        filters[text_field] = {"type": "text"}
+
+    return DataEnvelope(data={
+        "provider": provider,
+        "entity_type": entity_type,
+        "filters": filters,
+    })
 
 
 @router.post("/search")
