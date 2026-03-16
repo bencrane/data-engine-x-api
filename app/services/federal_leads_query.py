@@ -72,6 +72,18 @@ def query_federal_contract_leads(
     if filters.get("first_time_only"):
         conditions.append("is_first_time_awardee = TRUE")
 
+    if filters.get("first_time_dod_only"):
+        conditions.append("is_first_time_dod_awardee = TRUE AND dod_awards_count > 0")
+
+    if filters.get("first_time_nasa_only"):
+        conditions.append("is_first_time_nasa_awardee = TRUE AND nasa_awards_count > 0")
+
+    if filters.get("first_time_doe_only"):
+        conditions.append("is_first_time_doe_awardee = TRUE AND doe_awards_count > 0")
+
+    if filters.get("first_time_dhs_only"):
+        conditions.append("is_first_time_dhs_awardee = TRUE AND dhs_awards_count > 0")
+
     if filters.get("awarding_agency_code"):
         conditions.append("awarding_agency_code = %s")
         params.append(filters["awarding_agency_code"])

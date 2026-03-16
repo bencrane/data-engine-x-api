@@ -298,7 +298,7 @@ class TestStatsEndpoint:
         cleanup = _override_auth()
         try:
             cursor = MagicMock()
-            cursor.fetchone.return_value = (1000, 500, 200)
+            cursor.fetchone.return_value = (1000, 500, 200, 80, 30, 20, 50)
             cursor.__enter__ = MagicMock(return_value=cursor)
             cursor.__exit__ = MagicMock(return_value=False)
             conn = MagicMock()

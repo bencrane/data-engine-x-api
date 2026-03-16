@@ -736,6 +736,8 @@ async def query_federal_contract_leads_endpoint(
     for key in (
         "naics_prefix", "state", "action_date_from", "action_date_to",
         "min_obligation", "business_size", "first_time_only",
+        "first_time_dod_only", "first_time_nasa_only",
+        "first_time_doe_only", "first_time_dhs_only",
         "awarding_agency_code", "has_sam_match", "recipient_uei", "recipient_name",
     ):
         value = getattr(payload, key)
@@ -769,6 +771,10 @@ class FederalContractLeadsQueryRequest(BaseModel):
     min_obligation: str | None = None
     business_size: str | None = None
     first_time_only: bool | None = None
+    first_time_dod_only: bool | None = None
+    first_time_nasa_only: bool | None = None
+    first_time_doe_only: bool | None = None
+    first_time_dhs_only: bool | None = None
     awarding_agency_code: str | None = None
     has_sam_match: bool | None = None
     recipient_uei: str | None = None

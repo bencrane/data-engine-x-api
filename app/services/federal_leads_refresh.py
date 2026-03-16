@@ -64,7 +64,11 @@ def get_federal_leads_view_stats() -> dict[str, Any]:
         SELECT
             COUNT(*) AS total_rows,
             COUNT(DISTINCT recipient_uei) AS unique_companies,
-            COUNT(*) FILTER (WHERE is_first_time_awardee) AS first_time_awardees
+            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_awardee) AS first_time_awardees,
+            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_dod_awardee AND dod_awards_count > 0) AS first_time_dod_awardees,
+            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_nasa_awardee AND nasa_awards_count > 0) AS first_time_nasa_awardees,
+            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_doe_awardee AND doe_awards_count > 0) AS first_time_doe_awardees,
+            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_dhs_awardee AND dhs_awards_count > 0) AS first_time_dhs_awardees
         FROM entities.mv_federal_contract_leads
     """
     pool = _get_pool()
@@ -77,4 +81,8 @@ def get_federal_leads_view_stats() -> dict[str, Any]:
         "total_rows": row[0],
         "unique_companies": row[1],
         "first_time_awardees": row[2],
+        "first_time_dod_awardees": row[3],
+        "first_time_nasa_awardees": row[4],
+        "first_time_doe_awardees": row[5],
+        "first_time_dhs_awardees": row[6],
     }
