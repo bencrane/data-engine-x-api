@@ -146,3 +146,87 @@ def test_list_valid_values():
     assert "VP" in values
     assert "C-Team" in values
     assert "Staff" in values
+
+
+# ---------------------------------------------------------------------------
+# Numeric range resolver
+# ---------------------------------------------------------------------------
+
+
+def test_numeric_range_exact_bucket_match():
+    result = resolve_enum("blitzapi", "employee_range", "51-200")
+    assert result.value == "51-200"
+    assert result.match_type == "exact"
+    assert result.confidence == 1.0
+
+
+def test_numeric_range_close_fit():
+    result = resolve_enum("blitzapi", "employee_range", "50-200")
+    assert result.value == "51-200"
+    assert result.match_type == "numeric"
+
+
+def test_numeric_range_partial_overlap():
+    result = resolve_enum("blitzapi", "employee_range", "100-300")
+    # 51-200 overlap = 101, 201-500 overlap = 100 → picks 51-200
+    assert result.value in ("51-200", "201-500")
+    assert result.match_type == "numeric"
+
+
+def test_numeric_range_plus_format():
+    result = resolve_enum("blitzapi", "employee_range", "500+")
+    assert result.value is not None
+    assert result.match_type == "numeric"
+
+
+def test_numeric_range_single_number():
+    result = resolve_enum("blitzapi", "employee_range", "150")
+    assert result.value == "51-200"
+    assert result.match_type == "numeric"
+
+
+def test_numeric_range_with_word_suffix():
+    result = resolve_enum("blitzapi", "employee_range", "50-200 employees")
+    assert result.value == "51-200"
+    assert result.match_type == "numeric"
+
+
+def test_numeric_range_prospeo_different_buckets():
+    # Prospeo has finer buckets: 51-100, 101-200
+    result = resolve_enum("prospeo", "employee_range", "50-200")
+    # User range 50-200 spans two Prospeo buckets; 101-200 has more overlap (100) than 51-100 (50)
+    assert result.value in ("51-100", "101-200")
+    assert result.match_type == "numeric"
+
+
+def test_word_range_still_uses_synonym():
+    result = resolve_enum("blitzapi", "employee_range", "enterprise")
+    assert result.value == "10001+"
+    assert result.match_type == "synonym"
+    assert result.confidence == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Industry synonym resolution
+# ---------------------------------------------------------------------------
+
+
+def test_industry_synonym_staffing():
+    result = resolve_enum("blitzapi", "industry", "staffing")
+    assert result.value == "Staffing and Recruiting"
+    assert result.match_type == "synonym"
+    assert result.confidence == 1.0
+
+
+def test_industry_synonym_saas():
+    result = resolve_enum("prospeo", "industry", "saas")
+    assert result.value == "Software Development"
+    assert result.match_type == "synonym"
+    assert result.confidence == 1.0
+
+
+def test_industry_exact_still_works():
+    result = resolve_enum("blitzapi", "industry", "Staffing and Recruiting")
+    assert result.value == "Staffing and Recruiting"
+    assert result.match_type == "exact"
+    assert result.confidence == 1.0

@@ -355,3 +355,57 @@ async def test_missing_criteria_returns_empty():
 
     assert result["result_count"] == 0
     assert result["results"] == []
+
+
+# ---------- Provider selection and field gap tests ----------
+
+
+@pytest.mark.asyncio
+@patch("app.services.intent_search.get_settings")
+@patch("app.services.intent_search.blitzapi.search_companies", new_callable=AsyncMock)
+async def test_country_code_prefers_blitzapi(mock_blitzapi, mock_settings):
+    mock_settings.return_value.prospeo_api_key = "test-key"
+    mock_settings.return_value.blitzapi_api_key = "test-key"
+    mock_blitzapi.return_value = _mock_provider_result(
+        provider="blitzapi",
+        action="search_companies",
+        results=[_fake_company()],
+    )
+
+    result = await execute_intent_search(
+        search_type="companies",
+        criteria={"country_code": "US", "industry": "Construction"},
+        provider=None,
+        limit=25,
+        page=1,
+    )
+
+    # BlitzAPI should be tried first because it supports country_code
+    assert result["provider_used"] == "blitzapi"
+    mock_blitzapi.assert_called_once()
+    # country_code should not appear in field gaps
+    assert "country_code" not in result.get("provider_field_gaps", [])
+
+
+@pytest.mark.asyncio
+@patch("app.services.intent_search.get_settings")
+@patch("app.services.intent_search.prospeo.search_companies", new_callable=AsyncMock)
+async def test_provider_field_gaps_reported(mock_prospeo, mock_settings):
+    mock_settings.return_value.prospeo_api_key = "test-key"
+    mock_settings.return_value.blitzapi_api_key = "test-key"
+    mock_prospeo.return_value = _mock_provider_result(
+        provider="prospeo",
+        action="company_search",
+        results=[_fake_company()],
+    )
+
+    result = await execute_intent_search(
+        search_type="companies",
+        criteria={"country_code": "US", "industry": "Construction"},
+        provider="prospeo",
+        limit=25,
+        page=1,
+    )
+
+    assert result["provider_used"] == "prospeo"
+    assert "country_code" in result["provider_field_gaps"]
