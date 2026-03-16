@@ -139,13 +139,16 @@ def _build_prospeo_person_filters(
     if department:
         filters["person_department"] = {"include": department}
 
+    # Prospeo uses top-level filter keys for company attributes, even in
+    # person search — NOT nested under a "company" dict.
     industry = _resolved_values(resolved_map, "industry")
     if industry:
-        filters.setdefault("company", {})["industry"] = {"include": industry}
+        filters["company_industry"] = {"include": industry}
 
     employee_range = _resolved_values(resolved_map, "employee_range")
     if employee_range:
-        filters.setdefault("company", {})["employee_range"] = {"include": employee_range}
+        # company_headcount_range takes a bare array, not {"include": [...]}
+        filters["company_headcount_range"] = employee_range
 
     job_title = pass_through.get("job_title")
     if job_title:
@@ -175,13 +178,17 @@ def _build_prospeo_company_filters(
 ) -> dict[str, Any]:
     filters: dict[str, Any] = {}
 
+    # Prospeo company search uses top-level filter keys (company_industry,
+    # company_headcount_range) — NOT nested under a "company" dict.
+    # The "company" key is only for names/websites filtering.
     industry = _resolved_values(resolved_map, "industry")
     if industry:
-        filters.setdefault("company", {})["industry"] = {"include": industry}
+        filters["company_industry"] = {"include": industry}
 
     employee_range = _resolved_values(resolved_map, "employee_range")
     if employee_range:
-        filters.setdefault("company", {})["employee_range"] = {"include": employee_range}
+        # company_headcount_range takes a bare array, not {"include": [...]}
+        filters["company_headcount_range"] = employee_range
 
     company_domain = pass_through.get("company_domain")
     company_name = pass_through.get("company_name")

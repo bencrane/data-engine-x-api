@@ -221,8 +221,8 @@ async def test_company_search_prospeo_with_industry(mock_search, mock_settings):
     assert result["provider_used"] == "prospeo"
     call_kwargs = mock_search.call_args.kwargs
     filters = call_kwargs["provider_filters"]["prospeo"]
-    assert filters["company"]["industry"] == {"include": ["Staffing and Recruiting"]}
-    assert filters["company"]["employee_range"] == {"include": ["201-500"]}
+    assert filters["company_industry"] == {"include": ["Staffing and Recruiting"]}
+    assert filters["company_headcount_range"] == ["201-500"]
 
 
 @pytest.mark.asyncio
@@ -334,7 +334,7 @@ async def test_list_criteria_values(mock_search, mock_settings):
     call_kwargs = mock_search.call_args.kwargs
     filters = call_kwargs["provider_filters"]["prospeo"]
     # Both values should be individually resolved and passed as a list
-    industry_include = filters["company"]["industry"]["include"]
+    industry_include = filters["company_industry"]["include"]
     assert "Construction" in industry_include
     assert "Accounting" in industry_include
     assert len(industry_include) == 2
