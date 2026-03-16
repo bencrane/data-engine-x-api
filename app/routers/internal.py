@@ -1588,3 +1588,36 @@ async def internal_usaspending_contracts_ingest(
         raise HTTPException(status_code=422, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── SBA 7(a) Loan Ingest ──────────────────────────────────────────────────
+
+
+class InternalSbaIngestRequest(BaseModel):
+    csv_file_path: str
+    extract_date: str
+    source_filename: str
+    source_url: str = ""
+    chunk_size: int = 50_000
+
+
+@router.post("/sba-7a-loans/ingest", response_model=DataEnvelope)
+async def internal_sba_7a_loans_ingest(
+    payload: InternalSbaIngestRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.sba_ingest import ingest_sba_csv
+
+    try:
+        result = ingest_sba_csv(
+            csv_file_path=payload.csv_file_path,
+            extract_date=payload.extract_date,
+            source_filename=payload.source_filename,
+            source_url=payload.source_url,
+            chunk_size=payload.chunk_size,
+        )
+        return DataEnvelope(data=result)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
