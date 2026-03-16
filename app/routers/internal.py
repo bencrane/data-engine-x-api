@@ -1559,6 +1559,24 @@ async def internal_sam_gov_entities_ingest(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── Federal Contract Leads View Refresh ────────────────────────────────────
+
+
+class InternalFederalLeadsRefreshRequest(BaseModel):
+    concurrent: bool = True
+
+
+@router.post("/federal-contract-leads/refresh", response_model=DataEnvelope)
+async def internal_federal_contract_leads_refresh(
+    payload: InternalFederalLeadsRefreshRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.federal_leads_refresh import refresh_federal_contract_leads
+
+    result = refresh_federal_contract_leads(concurrent=payload.concurrent)
+    return DataEnvelope(data=result)
+
+
 # ── USASpending.gov Contract Ingest ────────────────────────────────────────
 
 

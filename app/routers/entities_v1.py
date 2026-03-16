@@ -21,6 +21,8 @@ from app.services.external_ingest import ingest_entity
 from app.services.gemini_icp_job_titles import query_gemini_icp_job_titles
 from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_details
 from app.services.person_intel_briefings import query_person_intel_briefings
+from app.services.federal_leads_query import query_federal_contract_leads
+from app.services.federal_leads_refresh import get_federal_leads_view_stats
 from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
 
@@ -719,6 +721,60 @@ async def query_person_intel_briefings_rows(
         offset=payload.offset,
     )
     return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_federal_contract_leads_endpoint(
+    payload: FederalContractLeadsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in (
+        "naics_prefix", "state", "action_date_from", "action_date_to",
+        "min_obligation", "business_size", "first_time_only",
+        "awarding_agency_code", "has_sam_match", "recipient_uei", "recipient_name",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = query_federal_contract_leads(
+        filters=filters,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/stats",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_stats(
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    stats = get_federal_leads_view_stats()
+    return DataEnvelope(data=stats)
+
+
+class FederalContractLeadsQueryRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    action_date_from: str | None = None
+    action_date_to: str | None = None
+    min_obligation: str | None = None
+    business_size: str | None = None
+    first_time_only: bool | None = None
+    awarding_agency_code: str | None = None
+    has_sam_match: bool | None = None
+    recipient_uei: str | None = None
+    recipient_name: str | None = None
+    limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
 
 
 class EntityIngestRequest(BaseModel):
