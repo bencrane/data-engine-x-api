@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -23,7 +23,7 @@ from app.services.sam_gov_common import (
 
 
 def _make_pipe_line(fields: list[str] | None = None) -> str:
-    """Build a valid 368-field pipe-delimited line with !end marker."""
+    """Build a valid 142-field pipe-delimited line with !end marker."""
     if fields is None:
         fields = [""] * SAM_GOV_COLUMN_COUNT
     fields[0] = fields[0] or "F847A1795DE4"  # UEI
@@ -46,32 +46,32 @@ def _make_source_context() -> SamGovSourceContext:
 
 
 class TestColumnMap:
-    def test_column_count_is_368(self):
-        assert SAM_GOV_COLUMN_COUNT == 368
+    def test_column_count_is_142(self):
+        assert SAM_GOV_COLUMN_COUNT == 142
 
     def test_first_column_is_unique_entity_id(self):
-        assert SAM_GOV_COLUMNS[0]["position"] == 1
+        assert SAM_GOV_COLUMNS[0]["v2_position"] == 1
         assert SAM_GOV_COLUMNS[0]["db_column_name"] == "unique_entity_id"
 
     def test_last_column_is_end_of_record(self):
-        assert SAM_GOV_COLUMNS[-1]["position"] == 368
+        assert SAM_GOV_COLUMNS[-1]["v2_position"] == 142
         assert SAM_GOV_COLUMNS[-1]["db_column_name"] == "end_of_record_indicator"
 
     def test_column_6_is_sam_extract_code(self):
         col6 = SAM_GOV_COLUMNS[5]  # zero-indexed
-        assert col6["position"] == 6
+        assert col6["v2_position"] == 6
         assert col6["db_column_name"] == "sam_extract_code"
 
     def test_column_12_is_legal_business_name(self):
         col12 = SAM_GOV_COLUMNS[11]  # zero-indexed
-        assert col12["position"] == 12
+        assert col12["v2_position"] == 12
         assert col12["db_column_name"] == "legal_business_name"
 
     def test_all_db_column_names_are_valid_identifiers(self):
         identifier_pattern = re.compile(r"^[a-z_][a-z0-9_]*$")
         for col in SAM_GOV_COLUMNS:
             assert identifier_pattern.fullmatch(col["db_column_name"]), (
-                f"Invalid identifier at position {col['position']}: "
+                f"Invalid identifier at V2 position {col['v2_position']}: "
                 f"{col['db_column_name']!r}"
             )
 
@@ -98,12 +98,12 @@ class TestLineParser:
         assert result is not None
         assert result["row_number"] == 1
         assert result["raw_line"] == line
-        assert len(result["fields"]) == 368
+        assert len(result["fields"]) == 142
         assert result["fields"][0] == "F847A1795DE4"
         assert result["fields"][-1] == "!end"
 
     def test_wrong_field_count_returns_none(self):
-        # Only 10 fields instead of 368
+        # Only 10 fields instead of 142
         line = "|".join(["field"] * 10)
         result = parse_sam_gov_dat_line(line, row_number=1)
         assert result is None
@@ -139,7 +139,7 @@ class TestRowBuilder:
         fields[0] = "F847A1795DE4"
         fields[5] = "A"
         fields[11] = "ACME CORP"
-        fields[35] = "541511"  # primary_naics
+        fields[32] = "541511"  # primary_naics (V2 position 33, zero-indexed 32)
         fields[-1] = "!end"
         line = "|".join(fields)
 
@@ -191,8 +191,6 @@ class TestRowBuilder:
 
         # col_002_deprecated should be None (empty string)
         assert row["col_002_deprecated"] is None
-        # FOUO fields like company_security_level should be None
-        assert row["company_security_level"] is None
 
     def test_whitespace_only_fields_become_none(self):
         fields = [""] * SAM_GOV_COLUMN_COUNT
@@ -346,5 +344,42 @@ class TestIngestService:
         assert len(captured_rows) == 1
         row = captured_rows[0]
         assert row["row_number"] == 1
-        assert len(row["fields"]) == 368
+        assert len(row["fields"]) == 142
         assert row["fields"][0] == "F847A1795DE4"
+
+    def test_bof_line_skipped(self, tmp_path):
+        """BOF header line is skipped and not parsed as a data row."""
+        dat_file = tmp_path / "test.dat"
+        bof_line = "BOF PUBLIC V2 00000000 20260301 0000002 0000001"
+        good_line = _make_pipe_line()
+
+        with open(dat_file, "w") as f:
+            f.write(bof_line + "\n")
+            f.write(good_line + "\n")
+            f.write(good_line + "\n")
+
+        captured_rows = []
+
+        def mock_upsert(*, source_context, rows):
+            captured_rows.extend(rows)
+            return {"rows_written": len(rows)}
+
+        with patch(
+            "app.services.sam_gov_extract_ingest.upsert_sam_gov_entities",
+            side_effect=mock_upsert,
+        ):
+            from app.services.sam_gov_extract_ingest import ingest_sam_gov_extract
+
+            result = ingest_sam_gov_extract(
+                extract_file_path=str(dat_file),
+                extract_date="2026-03-01",
+                extract_type="MONTHLY",
+                source_filename="test.dat",
+            )
+
+        # BOF line should not be counted in parsed rows
+        assert result["total_rows_parsed"] == 2
+        assert result["total_rows_accepted"] == 2
+        assert result["total_rows_rejected"] == 0
+        assert result["total_rows_written"] == 2
+        assert len(captured_rows) == 2
