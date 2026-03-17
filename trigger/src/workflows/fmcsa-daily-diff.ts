@@ -223,6 +223,30 @@ function formatStreamingWorkflowError(feed: FmcsaDailyDiffFeedConfig, error: unk
   return new Error(`${feed.feedName} CSV parsing failed: ${String(error)}`);
 }
 
+function isRetryableDownloadError(error: unknown): boolean {
+  if (
+    error instanceof InternalApiError ||
+    error instanceof InternalApiTimeoutError ||
+    error instanceof PersistenceConfirmationError
+  ) {
+    return false;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("terminated") ||
+      msg.includes("socket") ||
+      msg.includes("econnreset") ||
+      msg.includes("other side closed") ||
+      msg.includes("download failed")
+    );
+  }
+  return false;
+}
+
+const STREAMING_RETRY_BACKOFFS_MS = [30_000, 120_000] as const;
+const STREAMING_MAX_ATTEMPTS = STREAMING_RETRY_BACKOFFS_MS.length + 1; // 3 total
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -919,16 +943,38 @@ export async function runFmcsaDailyDiffWorkflow(
   });
 
   if (shouldUseStreamingParser(payload.feed)) {
-    const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
-    const result = await parseAndPersistStreamedCsv(
-      client,
-      payload,
-      feedDate,
-      observedAt,
-      response,
-    );
-    logger.info("fmcsa snapshot workflow succeeded", { ...result });
-    return result;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= STREAMING_MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
+        const result = await parseAndPersistStreamedCsv(
+          client,
+          payload,
+          feedDate,
+          observedAt,
+          response,
+        );
+        logger.info("fmcsa snapshot workflow succeeded", { ...result });
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (attempt < STREAMING_MAX_ATTEMPTS && isRetryableDownloadError(error)) {
+          const backoffMs = STREAMING_RETRY_BACKOFFS_MS[attempt - 1];
+          logger.warn("fmcsa streaming retry", {
+            feed_name: payload.feed.feedName,
+            attempt,
+            max_attempts: STREAMING_MAX_ATTEMPTS,
+            error_message: error instanceof Error ? error.message : String(error),
+            backoff_ms: backoffMs,
+          });
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
+        throw error;
+      }
+    }
+    // Unreachable — loop always returns or throws — but satisfies TypeScript.
+    throw lastError;
   }
 
   const rawBody = await downloadDailyDiffText(fetchImpl, payload.feed);
