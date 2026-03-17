@@ -14,12 +14,12 @@ class Settings(BaseSettings):
     database_url: str
 
     # Supabase
-    supabase_url: str
-    supabase_service_key: str
+    supabase_url: str | None = None
+    supabase_service_key: str | None = None
 
     # Trigger.dev
-    trigger_secret_key: str
-    trigger_project_id: str
+    trigger_secret_key: str | None = None
+    trigger_project_id: str | None = None
     trigger_api_url: str = "https://api.trigger.dev"
 
     # Auth
