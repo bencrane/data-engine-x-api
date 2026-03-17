@@ -496,7 +496,7 @@ function createClient(
       authContext: {
         orgId: "system",
       },
-      apiUrl: payload.apiUrl,
+      apiUrl: process.env.FMCSA_INGEST_API_URL ?? payload.apiUrl,
       internalApiKey: payload.internalApiKey,
     })
   );
