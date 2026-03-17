@@ -137,6 +137,14 @@ interface FmcsaArtifactIngestConfirmation {
   checksum_verified: boolean;
 }
 
+interface FmcsaBatchUpsertResponse {
+  feed_name: string;
+  table_name: string;
+  feed_date: string;
+  rows_received: number;
+  rows_written: number;
+}
+
 interface StorageFileObject {
   name: string;
   created_at: string;
@@ -730,7 +738,6 @@ const STREAMING_DIRECT_POST_CHUNK_SIZE = 10_000;
 
 async function parseAndPersistStreamedCsv(
   client: InternalApiClient,
-  storage: SupabaseStorageClient,
   payload: FmcsaDailyDiffWorkflowPayload,
   feedDate: string,
   observedAt: string,
@@ -762,8 +769,6 @@ async function parseAndPersistStreamedCsv(
   const chunkSize = payload.feed.writeBatchSize ?? STREAMING_DIRECT_POST_CHUNK_SIZE;
   const sourceRunMetadata = serializeSchedulePayload(payload.schedule, payload.feed, feedDate, observedAt);
 
-  await ensureBucketExists(storage);
-
   const flushChunk = async (): Promise<void> => {
     if (chunk.length === 0) return;
     const chunkNumber = chunksProcessed + 1;
@@ -772,28 +777,15 @@ async function parseAndPersistStreamedCsv(
     const isFirstChunk = chunksProcessed === 0;
 
     try {
-      const { gzippedBytes, checksum } = buildNdjsonGzipped(chunk);
-      const artifactPath = resolveArtifactPath(payload.feed, feedDate) + `.chunk${chunkNumber}`;
-
-      logger.info("fmcsa streaming chunk upload", {
+      logger.info("fmcsa streaming chunk post", {
         feed_name: payload.feed.feedName,
         chunk_number: chunkNumber,
         rows: chunk.length,
-        artifact_size_bytes: gzippedBytes.length,
         is_first_chunk: isFirstChunk,
+        endpoint: payload.feed.internalUpsertPath,
       });
 
-      const { error: uploadError } = await storage.upload(
-        FMCSA_ARTIFACTS_BUCKET,
-        artifactPath,
-        gzippedBytes,
-        { contentType: "application/gzip", upsert: false },
-      );
-      if (uploadError) {
-        throw new Error(`Artifact upload failed for ${artifactPath}: ${uploadError.message}`);
-      }
-
-      const manifest: FmcsaArtifactIngestManifest = {
+      const batchPayload = {
         feed_name: payload.feed.feedName,
         feed_date: feedDate,
         download_url: payload.feed.downloadUrl,
@@ -802,35 +794,23 @@ async function parseAndPersistStreamedCsv(
         source_task_id: payload.feed.taskId,
         source_schedule_id: payload.schedule?.scheduleId ?? null,
         source_run_metadata: sourceRunMetadata,
-        artifact_bucket: FMCSA_ARTIFACTS_BUCKET,
-        artifact_path: artifactPath,
-        row_count: chunk.length,
-        artifact_checksum: checksum,
+        records: chunk,
         use_snapshot_replace: true,
         is_first_chunk: isFirstChunk,
       };
 
-      const confirmation = await writeDedicatedTableConfirmed<FmcsaArtifactIngestConfirmation>(client, {
-        path: "/api/internal/fmcsa/ingest-artifact",
-        payload: manifest,
-        timeoutMs: MANIFEST_INGEST_TIMEOUT_MS,
+      const confirmation = await writeDedicatedTableConfirmed<FmcsaBatchUpsertResponse>(client, {
+        path: payload.feed.internalUpsertPath,
+        payload: batchPayload,
+        timeoutMs: payload.feed.persistenceTimeoutMs ?? 300_000,
         validate: (r) =>
           isRecord(r) &&
-          typeof r.rows_received === "number" &&
           typeof r.rows_written === "number" &&
-          r.rows_received === chunk.length &&
           r.rows_written >= 0,
-        confirmationErrorMessage: `${payload.feed.feedName} chunk ${chunkNumber} artifact ingest confirmation failed`,
+        confirmationErrorMessage: `${payload.feed.feedName} chunk ${chunkNumber} batch upsert confirmation failed`,
       });
 
       totalRowsWritten += confirmation.rows_written;
-
-      // Clean up chunk artifact after confirmed success (non-fatal)
-      try {
-        await storage.remove(FMCSA_ARTIFACTS_BUCKET, [artifactPath]);
-      } catch {
-        // Non-fatal: TTL cleanup will handle it
-      }
     } catch (error) {
       throw new Error(
         `${payload.feed.feedName} chunk ${chunkNumber} failed (rows ${startRow}-${endRow}): ${error instanceof Error ? error.message : String(error)}`,
@@ -887,10 +867,7 @@ async function parseAndPersistStreamedCsv(
   // Flush remaining partial chunk
   await flushChunk();
 
-  // TTL cleanup for this feed (non-fatal)
-  await cleanupOldArtifacts(storage, payload.feed);
-
-  logger.info("fmcsa streaming artifact ingest complete", {
+  logger.info("fmcsa streaming direct post complete", {
     feed_name: payload.feed.feedName,
     chunks_processed: chunksProcessed,
     total_rows_written: totalRowsWritten,
@@ -936,7 +913,6 @@ export async function runFmcsaDailyDiffWorkflow(
     const response = await downloadDailyDiffResponse(fetchImpl, payload.feed);
     const result = await parseAndPersistStreamedCsv(
       client,
-      storage,
       payload,
       feedDate,
       observedAt,
