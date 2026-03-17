@@ -26,6 +26,7 @@ from app.services.federal_leads_query import query_federal_contract_leads
 from app.services.federal_leads_refresh import get_federal_leads_view_stats
 from app.services.federal_leads_company_detail import get_company_detail
 from app.services.federal_leads_export import stream_federal_contract_leads_csv
+from app.services.federal_leads_naics_metrics import get_naics_metrics, get_naics_agency_breakdown
 from app.services.federal_leads_verticals import get_vertical_summary
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
@@ -202,6 +203,15 @@ class FederalContractLeadsQueryRequest(BaseModel):
     recipient_uei: str | None = None
     recipient_name: str | None = None
     limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class NaicsMetricsRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    min_companies: int | None = None
+    business_size: str | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
 
 
@@ -924,6 +934,40 @@ async def federal_contract_leads_verticals(
 ):
     verticals = get_vertical_summary()
     return DataEnvelope(data={"verticals": verticals})
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/naics-metrics",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_naics_metrics(
+    payload: NaicsMetricsRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "min_companies", "business_size"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_naics_metrics(
+        filters=filters,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/naics-metrics/{naics_code}/agencies",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_naics_agency_breakdown(
+    naics_code: str,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    agencies = get_naics_agency_breakdown(naics_code=naics_code)
+    return DataEnvelope(data={"naics_code": naics_code, "agencies": agencies})
 
 
 @entity_relationships_router.get(
