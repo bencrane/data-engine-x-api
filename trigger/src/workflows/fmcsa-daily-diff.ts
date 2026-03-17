@@ -2156,6 +2156,7 @@ export const FMCSA_SMS_FEED_CORRECTIONS = {
 export const __testables = {
   buildNdjsonGzipped,
   formatStreamingWorkflowError,
+  isRetryableDownloadError,
   parseDailyDiffBody,
   resolveFeedDate,
   resolveDownloadTimeoutMs,
