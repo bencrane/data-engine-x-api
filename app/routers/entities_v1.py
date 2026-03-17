@@ -27,6 +27,15 @@ from app.services.federal_leads_refresh import get_federal_leads_view_stats
 from app.services.federal_leads_company_detail import get_company_detail
 from app.services.federal_leads_export import stream_federal_contract_leads_csv
 from app.services.federal_leads_naics_metrics import get_naics_metrics, get_naics_agency_breakdown
+from app.services.federal_leads_analytics import (
+    get_time_series,
+    get_award_size_distribution,
+    get_set_aside_breakdown,
+    get_competition_metrics,
+    get_geographic_hotspots,
+    get_repeat_awardee_velocity,
+    get_award_ceiling_gap,
+)
 from app.services.federal_leads_verticals import get_vertical_summary
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
@@ -213,6 +222,24 @@ class NaicsMetricsRequest(BaseModel):
     business_size: str | None = None
     limit: int = Field(default=100, ge=1, le=1000)
     offset: int = Field(default=0, ge=0)
+
+
+class FederalAnalyticsFilters(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    business_size: str | None = None
+    awarding_agency_code: str | None = None
+
+
+class TimeSeriesRequest(FederalAnalyticsFilters):
+    period: str = Field(default="quarter", pattern="^(month|quarter)$")
+
+
+class GeographicRequest(BaseModel):
+    """No state filter — state IS the dimension."""
+    naics_prefix: str | None = None
+    business_size: str | None = None
+    awarding_agency_code: str | None = None
 
 
 class SbaLoansQueryRequest(BaseModel):
@@ -968,6 +995,132 @@ async def federal_contract_leads_naics_agency_breakdown(
 ):
     agencies = get_naics_agency_breakdown(naics_code=naics_code)
     return DataEnvelope(data={"naics_code": naics_code, "agencies": agencies})
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/time-series",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_time_series(
+    payload: TimeSeriesRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_time_series(period=payload.period, filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/size-distribution",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_size_distribution(
+    payload: FederalAnalyticsFilters,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_award_size_distribution(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/set-asides",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_set_asides(
+    payload: FederalAnalyticsFilters,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_set_aside_breakdown(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/competition",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_competition(
+    payload: FederalAnalyticsFilters,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_competition_metrics(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/geographic",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_geographic(
+    payload: GeographicRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_geographic_hotspots(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/repeat-velocity",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_repeat_velocity(
+    payload: FederalAnalyticsFilters,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_repeat_awardee_velocity(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics/ceiling-gap",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_ceiling_gap(
+    payload: FederalAnalyticsFilters,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in ("naics_prefix", "state", "business_size", "awarding_agency_code"):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_award_ceiling_gap(filters=filters)
+    return DataEnvelope(data=results)
 
 
 @entity_relationships_router.get(
