@@ -23,6 +23,7 @@ from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_de
 from app.services.person_intel_briefings import query_person_intel_briefings
 from app.services.federal_leads_query import query_federal_contract_leads
 from app.services.federal_leads_refresh import get_federal_leads_view_stats
+from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
 
@@ -763,6 +764,45 @@ async def federal_contract_leads_stats(
     return DataEnvelope(data=stats)
 
 
+@entity_relationships_router.post(
+    "/sba-loans/query",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def query_sba_loans_endpoint(
+    payload: SbaLoansQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in (
+        "naics_prefix", "state", "min_loan_amount", "max_loan_amount",
+        "approval_date_from", "approval_date_to", "business_age",
+        "business_type", "lender_name", "loan_status", "borrower_name",
+        "min_jobs",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = query_sba_loans(
+        filters=filters,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/sba-loans/stats",
+    response_model=DataEnvelope,
+)
+async def sba_loans_stats(
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    stats = get_sba_loans_stats()
+    return DataEnvelope(data=stats)
+
+
 class FederalContractLeadsQueryRequest(BaseModel):
     naics_prefix: str | None = None
     state: str | None = None
@@ -779,6 +819,23 @@ class FederalContractLeadsQueryRequest(BaseModel):
     has_sam_match: bool | None = None
     recipient_uei: str | None = None
     recipient_name: str | None = None
+    limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class SbaLoansQueryRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    min_loan_amount: str | None = None
+    max_loan_amount: str | None = None
+    approval_date_from: str | None = None
+    approval_date_to: str | None = None
+    business_age: str | None = None
+    business_type: str | None = None
+    lender_name: str | None = None
+    loan_status: str | None = None
+    borrower_name: str | None = None
+    min_jobs: str | None = None
     limit: int = Field(default=25, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
 
