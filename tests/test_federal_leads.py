@@ -292,13 +292,112 @@ class TestQueryEndpoint:
             cleanup()
 
 
+class TestVerticalSummaryMetrics:
+    @patch("app.services.federal_leads_verticals._get_pool")
+    def test_new_metrics_present(self, mock_get_pool):
+        pool, cursor = _mock_pool([
+            {
+                "vertical": "IT & Professional Services",
+                "total_rows": 100,
+                "unique_companies": 10,
+                "first_time_awardees": 3,
+                "repeat_awardees": 7,
+                "total_obligated": 500000.0,
+                "average_obligation": 50000.0,
+                "median_obligation": 45000.0,
+                "average_award_ceiling": 75000.0,
+            },
+        ])
+        mock_get_pool.return_value = pool
+
+        from app.services.federal_leads_verticals import get_vertical_summary
+        result = get_vertical_summary()
+
+        assert len(result) == 1
+        v = result[0]
+        assert v["average_obligation"] == 50000.0
+        assert v["median_obligation"] == 45000.0
+        assert v["average_award_ceiling"] == 75000.0
+
+    @patch("app.services.federal_leads_verticals._get_pool")
+    def test_null_metrics_fallback_to_zero(self, mock_get_pool):
+        pool, cursor = _mock_pool([
+            {
+                "vertical": "Construction",
+                "total_rows": 5,
+                "unique_companies": 2,
+                "first_time_awardees": 1,
+                "repeat_awardees": 1,
+                "total_obligated": None,
+                "average_obligation": None,
+                "median_obligation": None,
+                "average_award_ceiling": None,
+            },
+        ])
+        mock_get_pool.return_value = pool
+
+        from app.services.federal_leads_verticals import get_vertical_summary
+        result = get_vertical_summary()
+
+        v = result[0]
+        assert v["total_obligated"] == 0.0
+        assert v["average_obligation"] == 0.0
+        assert v["median_obligation"] == 0.0
+        assert v["average_award_ceiling"] == 0.0
+
+
+class TestStatsMetrics:
+    @patch("app.services.federal_leads_refresh._get_pool")
+    def test_new_metrics_present(self, mock_get_pool):
+        cursor = MagicMock()
+        # 7 original fields + 3 new metrics
+        cursor.fetchone.return_value = (1000, 500, 200, 80, 30, 20, 50, 250000.0, 180000.0, 400000.0)
+        cursor.__enter__ = MagicMock(return_value=cursor)
+        cursor.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        pool = MagicMock()
+        pool.connection.return_value = conn
+        mock_get_pool.return_value = pool
+
+        from app.services.federal_leads_refresh import get_federal_leads_view_stats
+        result = get_federal_leads_view_stats()
+
+        assert result["average_obligation"] == 250000.0
+        assert result["median_obligation"] == 180000.0
+        assert result["average_award_ceiling"] == 400000.0
+
+    @patch("app.services.federal_leads_refresh._get_pool")
+    def test_null_metrics_fallback_to_zero(self, mock_get_pool):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (0, 0, 0, 0, 0, 0, 0, None, None, None)
+        cursor.__enter__ = MagicMock(return_value=cursor)
+        cursor.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        pool = MagicMock()
+        pool.connection.return_value = conn
+        mock_get_pool.return_value = pool
+
+        from app.services.federal_leads_refresh import get_federal_leads_view_stats
+        result = get_federal_leads_view_stats()
+
+        assert result["average_obligation"] == 0.0
+        assert result["median_obligation"] == 0.0
+        assert result["average_award_ceiling"] == 0.0
+
+
 class TestStatsEndpoint:
     @patch("app.services.federal_leads_refresh._get_pool")
     def test_stats_returns_data_envelope(self, mock_get_pool):
         cleanup = _override_auth()
         try:
             cursor = MagicMock()
-            cursor.fetchone.return_value = (1000, 500, 200, 80, 30, 20, 50)
+            cursor.fetchone.return_value = (1000, 500, 200, 80, 30, 20, 50, 250000.0, 180000.0, 400000.0)
             cursor.__enter__ = MagicMock(return_value=cursor)
             cursor.__exit__ = MagicMock(return_value=False)
             conn = MagicMock()
