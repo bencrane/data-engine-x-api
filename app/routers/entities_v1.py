@@ -26,6 +26,7 @@ from app.services.federal_leads_query import query_federal_contract_leads
 from app.services.federal_leads_refresh import get_federal_leads_view_stats
 from app.services.federal_leads_company_detail import get_company_detail
 from app.services.federal_leads_export import stream_federal_contract_leads_csv
+from app.services.federal_leads_verticals import get_vertical_summary
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
@@ -845,6 +846,17 @@ async def sba_loans_stats(
 ):
     stats = get_sba_loans_stats()
     return DataEnvelope(data=stats)
+
+
+@entity_relationships_router.get(
+    "/federal-contract-leads/verticals",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_verticals(
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    verticals = get_vertical_summary()
+    return DataEnvelope(data={"verticals": verticals})
 
 
 @entity_relationships_router.get(
