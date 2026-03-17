@@ -70,6 +70,33 @@ class FmcsaSafetyRiskQueryRequest(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
+class FmcsaCarrierExportRequest(BaseModel):
+    # Census filters
+    state: str | None = None
+    min_power_units: int | None = None
+    max_power_units: int | None = None
+    carrier_operation: str | None = None
+    authorized_for_hire: bool | None = None
+    private_only: bool | None = None
+    exempt_for_hire: bool | None = None
+    private_property: bool | None = None
+    hazmat_flag: bool | None = None
+    passenger_carrier_flag: bool | None = None
+    mcs150_date_from: str | None = None
+    mcs150_date_to: str | None = None
+    legal_name_contains: str | None = None
+    dot_number: str | None = None
+    min_drivers: int | None = None
+    max_drivers: int | None = None
+    # Safety filters
+    min_unsafe_driving_percentile: int | None = None
+    min_hours_of_service_percentile: int | None = None
+    min_vehicle_maintenance_percentile: int | None = None
+    has_alert_unsafe_driving: bool | None = None
+    has_alert_vehicle_maintenance: bool | None = None
+    has_alert_driver_fitness: bool | None = None
+
+
 class FmcsaCrashQueryRequest(BaseModel):
     dot_number: str | None = None
     state: str | None = None
@@ -160,17 +187,23 @@ async def query_fmcsa_safety_risk_endpoint(
     "/fmcsa-carriers/export",
 )
 async def fmcsa_carriers_export_endpoint(
-    payload: FmcsaCarrierQueryRequest,
+    payload: FmcsaCarrierExportRequest,
     auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
     from app.services.fmcsa_carrier_export import stream_fmcsa_carriers_csv
 
     filters: dict[str, Any] = {}
     for key in (
+        # Census filters
         "state", "min_power_units", "max_power_units", "carrier_operation",
         "authorized_for_hire", "private_only", "exempt_for_hire", "private_property",
         "hazmat_flag", "passenger_carrier_flag", "mcs150_date_from", "mcs150_date_to",
         "legal_name_contains", "dot_number", "min_drivers", "max_drivers",
+        # Safety filters
+        "min_unsafe_driving_percentile", "min_hours_of_service_percentile",
+        "min_vehicle_maintenance_percentile",
+        "has_alert_unsafe_driving", "has_alert_vehicle_maintenance",
+        "has_alert_driver_fitness",
     ):
         value = getattr(payload, key)
         if value is not None:

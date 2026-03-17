@@ -13,6 +13,8 @@ from app.config import get_settings
 from app.services.fmcsa_carrier_query import (
     CENSUS_CURATED_COLUMNS,
     _build_carrier_where,
+    _build_safety_where,
+    _conditions_to_where,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,9 +63,15 @@ def stream_fmcsa_carriers_csv(
     Uses a server-side cursor to avoid loading all rows into memory.
     Raises ValueError if the result set exceeds max_rows.
     """
-    where_clause, params = _build_carrier_where(filters)
+    census_conditions, census_params = _build_carrier_where(filters, table_alias="census")
+    safety_conditions, safety_params = _build_safety_where(filters, table_alias="safety")
 
-    # Prefix census columns with alias for the joined query
+    all_conditions = census_conditions + safety_conditions
+    all_params = census_params + safety_params
+
+    where_clause = _conditions_to_where(all_conditions)
+
+    # Prefix columns with aliases for the joined query
     census_cols = ", ".join(f"census.{c}" for c in CENSUS_CURATED_COLUMNS)
     safety_cols = ", ".join(f"safety.{c}" for c in SAFETY_EXPORT_COLUMNS)
 
@@ -82,35 +90,19 @@ def stream_fmcsa_carriers_csv(
         )
     """
 
-    # The WHERE clause references unqualified columns from _build_carrier_where.
-    # Re-qualify them with the census alias.
-    qualified_where = where_clause.replace("physical_state", "census.physical_state")
-    qualified_where = qualified_where.replace("power_unit_count", "census.power_unit_count")
-    qualified_where = qualified_where.replace("carrier_operation_code", "census.carrier_operation_code")
-    qualified_where = qualified_where.replace("authorized_for_hire", "census.authorized_for_hire")
-    qualified_where = qualified_where.replace("private_only", "census.private_only")
-    qualified_where = qualified_where.replace("exempt_for_hire", "census.exempt_for_hire")
-    qualified_where = qualified_where.replace("private_property", "census.private_property")
-    qualified_where = qualified_where.replace("hazmat_flag", "census.hazmat_flag")
-    qualified_where = qualified_where.replace("passenger_carrier_flag", "census.passenger_carrier_flag")
-    qualified_where = qualified_where.replace("mcs150_date", "census.mcs150_date")
-    qualified_where = qualified_where.replace("legal_name", "census.legal_name")
-    qualified_where = qualified_where.replace("dot_number", "census.dot_number")
-    qualified_where = qualified_where.replace("driver_total", "census.driver_total")
-
     # Count check first
     count_sql = f"""
         {base_cte}
         SELECT COUNT(*)
         FROM latest_census census
         LEFT JOIN latest_safety safety ON census.dot_number = safety.dot_number
-        {qualified_where}
+        {where_clause}
     """
 
     pool = _get_pool()
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(count_sql, params)
+            cur.execute(count_sql, all_params)
             total = cur.fetchone()[0]
 
     if total > max_rows:
@@ -125,7 +117,7 @@ def stream_fmcsa_carriers_csv(
         SELECT {census_cols}, {safety_cols}
         FROM latest_census census
         LEFT JOIN latest_safety safety ON census.dot_number = safety.dot_number
-        {qualified_where}
+        {where_clause}
         ORDER BY census.power_unit_count DESC NULLS LAST, census.dot_number
     """
 
@@ -134,7 +126,7 @@ def stream_fmcsa_carriers_csv(
     with pool.connection() as conn:
         with conn.cursor(name="fmcsa_csv_export_cursor") as cur:
             cur.itersize = 5000
-            cur.execute(data_sql, params)
+            cur.execute(data_sql, all_params)
 
             # Yield header row
             buf = io.StringIO()

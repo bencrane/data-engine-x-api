@@ -74,74 +74,127 @@ def _get_pool() -> ConnectionPool:
         return _pool
 
 
-def _build_carrier_where(filters: dict[str, Any]) -> tuple[str, list[Any]]:
-    """Build WHERE clause for carrier census queries. Shared by query and export."""
+def _col(name: str, alias: str | None) -> str:
+    """Qualify a column name with a table alias if provided."""
+    return f"{alias}.{name}" if alias else name
+
+
+def _build_carrier_where(
+    filters: dict[str, Any],
+    table_alias: str | None = None,
+) -> tuple[list[str], list[Any]]:
+    """Build WHERE conditions for carrier census queries.
+
+    Returns (conditions, params) — the caller assembles the WHERE clause
+    so it can merge conditions from multiple helpers.
+
+    When *table_alias* is provided, every column reference is qualified
+    (e.g. ``census.physical_state``).  When ``None``, columns are bare.
+    """
     conditions: list[str] = []
     params: list[Any] = []
 
     if filters.get("state"):
-        conditions.append("physical_state = %s")
+        conditions.append(f"{_col('physical_state', table_alias)} = %s")
         params.append(filters["state"])
 
     if filters.get("min_power_units") is not None:
-        conditions.append("power_unit_count >= %s")
+        conditions.append(f"{_col('power_unit_count', table_alias)} >= %s")
         params.append(filters["min_power_units"])
 
     if filters.get("max_power_units") is not None:
-        conditions.append("power_unit_count <= %s")
+        conditions.append(f"{_col('power_unit_count', table_alias)} <= %s")
         params.append(filters["max_power_units"])
 
     if filters.get("carrier_operation"):
-        conditions.append("carrier_operation_code = %s")
+        conditions.append(f"{_col('carrier_operation_code', table_alias)} = %s")
         params.append(filters["carrier_operation"])
 
     if filters.get("authorized_for_hire"):
-        conditions.append("authorized_for_hire = TRUE")
+        conditions.append(f"{_col('authorized_for_hire', table_alias)} = TRUE")
 
     if filters.get("private_only"):
-        conditions.append("private_only = TRUE")
+        conditions.append(f"{_col('private_only', table_alias)} = TRUE")
 
     if filters.get("exempt_for_hire"):
-        conditions.append("exempt_for_hire = TRUE")
+        conditions.append(f"{_col('exempt_for_hire', table_alias)} = TRUE")
 
     if filters.get("private_property"):
-        conditions.append("private_property = TRUE")
+        conditions.append(f"{_col('private_property', table_alias)} = TRUE")
 
     if filters.get("hazmat_flag"):
-        conditions.append("hazmat_flag = TRUE")
+        conditions.append(f"{_col('hazmat_flag', table_alias)} = TRUE")
 
     if filters.get("passenger_carrier_flag"):
-        conditions.append("passenger_carrier_flag = TRUE")
+        conditions.append(f"{_col('passenger_carrier_flag', table_alias)} = TRUE")
 
     if filters.get("mcs150_date_from"):
-        conditions.append("mcs150_date >= %s::DATE")
+        conditions.append(f"{_col('mcs150_date', table_alias)} >= %s::DATE")
         params.append(filters["mcs150_date_from"])
 
     if filters.get("mcs150_date_to"):
-        conditions.append("mcs150_date <= %s::DATE")
+        conditions.append(f"{_col('mcs150_date', table_alias)} <= %s::DATE")
         params.append(filters["mcs150_date_to"])
 
     if filters.get("legal_name_contains"):
-        conditions.append("legal_name ILIKE %s")
+        conditions.append(f"{_col('legal_name', table_alias)} ILIKE %s")
         params.append(f"%{filters['legal_name_contains']}%")
 
     if filters.get("dot_number"):
-        conditions.append("dot_number = %s")
+        conditions.append(f"{_col('dot_number', table_alias)} = %s")
         params.append(filters["dot_number"])
 
     if filters.get("min_drivers") is not None:
-        conditions.append("driver_total >= %s")
+        conditions.append(f"{_col('driver_total', table_alias)} >= %s")
         params.append(filters["min_drivers"])
 
     if filters.get("max_drivers") is not None:
-        conditions.append("driver_total <= %s")
+        conditions.append(f"{_col('driver_total', table_alias)} <= %s")
         params.append(filters["max_drivers"])
 
-    where_clause = ""
-    if conditions:
-        where_clause = "WHERE " + " AND ".join(conditions)
+    return conditions, params
 
-    return where_clause, params
+
+def _build_safety_where(
+    filters: dict[str, Any],
+    table_alias: str | None = None,
+) -> tuple[list[str], list[Any]]:
+    """Build WHERE conditions for safety percentile filters.
+
+    When *table_alias* is provided, every column reference is qualified.
+    """
+    conditions: list[str] = []
+    params: list[Any] = []
+
+    if filters.get("min_unsafe_driving_percentile") is not None:
+        conditions.append(f"{_col('unsafe_driving_percentile', table_alias)} >= %s")
+        params.append(filters["min_unsafe_driving_percentile"])
+
+    if filters.get("min_hours_of_service_percentile") is not None:
+        conditions.append(f"{_col('hours_of_service_percentile', table_alias)} >= %s")
+        params.append(filters["min_hours_of_service_percentile"])
+
+    if filters.get("min_vehicle_maintenance_percentile") is not None:
+        conditions.append(f"{_col('vehicle_maintenance_percentile', table_alias)} >= %s")
+        params.append(filters["min_vehicle_maintenance_percentile"])
+
+    if filters.get("has_alert_unsafe_driving"):
+        conditions.append(f"{_col('unsafe_driving_basic_alert', table_alias)} = TRUE")
+
+    if filters.get("has_alert_vehicle_maintenance"):
+        conditions.append(f"{_col('vehicle_maintenance_basic_alert', table_alias)} = TRUE")
+
+    if filters.get("has_alert_driver_fitness"):
+        conditions.append(f"{_col('driver_fitness_basic_alert', table_alias)} = TRUE")
+
+    return conditions, params
+
+
+def _conditions_to_where(conditions: list[str]) -> str:
+    """Join a list of conditions into a WHERE clause (or empty string)."""
+    if not conditions:
+        return ""
+    return "WHERE " + " AND ".join(conditions)
 
 
 def query_fmcsa_carriers(
@@ -153,7 +206,8 @@ def query_fmcsa_carriers(
     safe_limit = max(1, min(limit, 500))
     safe_offset = max(0, offset)
 
-    where_clause, params = _build_carrier_where(filters)
+    conditions, params = _build_carrier_where(filters)
+    where_clause = _conditions_to_where(conditions)
 
     columns = ", ".join(CENSUS_CURATED_COLUMNS)
 

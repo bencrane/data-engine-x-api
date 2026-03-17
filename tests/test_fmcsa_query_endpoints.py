@@ -66,21 +66,20 @@ class TestFmcsaCarrierQuery:
         assert result["limit"] == 25
         assert result["offset"] == 0
 
-    @patch("app.services.fmcsa_carrier_query._get_pool")
-    def test_state_filter_generates_exact_match(self, mock_pool):
+    def test_state_filter_generates_exact_match(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({"state": "TX"})
-        assert "physical_state = %s" in where
+        conditions, params = _build_carrier_where({"state": "TX"})
+        assert any("physical_state = %s" in c for c in conditions)
         assert "TX" in params
 
-    @patch("app.services.fmcsa_carrier_query._get_pool")
-    def test_power_unit_range_filters(self, mock_pool):
+    def test_power_unit_range_filters(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({"min_power_units": 10, "max_power_units": 100})
-        assert "power_unit_count >= %s" in where
-        assert "power_unit_count <= %s" in where
+        conditions, params = _build_carrier_where({"min_power_units": 10, "max_power_units": 100})
+        joined = " ".join(conditions)
+        assert "power_unit_count >= %s" in joined
+        assert "power_unit_count <= %s" in joined
         assert 10 in params
         assert 100 in params
 
@@ -88,56 +87,56 @@ class TestFmcsaCarrierQuery:
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
         # When True, condition appears
-        where_true, _ = _build_carrier_where({"hazmat_flag": True})
-        assert "hazmat_flag = TRUE" in where_true
+        conds_true, _ = _build_carrier_where({"hazmat_flag": True})
+        assert any("hazmat_flag = TRUE" in c for c in conds_true)
 
         # When False (falsy), condition does NOT appear
-        where_false, _ = _build_carrier_where({"hazmat_flag": False})
-        assert "hazmat_flag" not in where_false
+        conds_false, _ = _build_carrier_where({"hazmat_flag": False})
+        assert not any("hazmat_flag" in c for c in conds_false)
 
         # Same for authorized_for_hire
-        where_auth, _ = _build_carrier_where({"authorized_for_hire": True})
-        assert "authorized_for_hire = TRUE" in where_auth
+        conds_auth, _ = _build_carrier_where({"authorized_for_hire": True})
+        assert any("authorized_for_hire = TRUE" in c for c in conds_auth)
 
-        where_no_auth, _ = _build_carrier_where({"authorized_for_hire": False})
-        assert "authorized_for_hire" not in where_no_auth
+        conds_no_auth, _ = _build_carrier_where({"authorized_for_hire": False})
+        assert not any("authorized_for_hire" in c for c in conds_no_auth)
 
     def test_legal_name_contains_generates_ilike(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({"legal_name_contains": "ACME"})
-        assert "legal_name ILIKE %s" in where
+        conditions, params = _build_carrier_where({"legal_name_contains": "ACME"})
+        assert any("legal_name ILIKE %s" in c for c in conditions)
         assert "%ACME%" in params
 
     def test_dot_number_generates_exact_match(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({"dot_number": "123456"})
-        assert "dot_number = %s" in where
+        conditions, params = _build_carrier_where({"dot_number": "123456"})
+        assert any("dot_number = %s" in c for c in conditions)
         assert "123456" in params
 
     def test_mcs150_date_filters_cast_to_date(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({
+        conditions, params = _build_carrier_where({
             "mcs150_date_from": "2025-01-01",
             "mcs150_date_to": "2025-12-31",
         })
-        assert "mcs150_date >= %s::DATE" in where
-        assert "mcs150_date <= %s::DATE" in where
+        joined = " ".join(conditions)
+        assert "mcs150_date >= %s::DATE" in joined
+        assert "mcs150_date <= %s::DATE" in joined
         assert "2025-01-01" in params
         assert "2025-12-31" in params
 
-    def test_multiple_filters_combine_with_and(self):
+    def test_multiple_filters_produce_multiple_conditions(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({
+        conditions, params = _build_carrier_where({
             "state": "TX",
             "min_power_units": 10,
             "hazmat_flag": True,
         })
-        assert " AND " in where
-        assert where.count("AND") == 2
+        assert len(conditions) == 3
 
     @patch("app.services.fmcsa_carrier_query._get_pool")
     def test_pagination_safe_clamping(self, mock_pool):
@@ -160,17 +159,18 @@ class TestFmcsaCarrierQuery:
     def test_driver_range_filters(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({"min_drivers": 5, "max_drivers": 50})
-        assert "driver_total >= %s" in where
-        assert "driver_total <= %s" in where
+        conditions, params = _build_carrier_where({"min_drivers": 5, "max_drivers": 50})
+        joined = " ".join(conditions)
+        assert "driver_total >= %s" in joined
+        assert "driver_total <= %s" in joined
         assert 5 in params
         assert 50 in params
 
     def test_carrier_operation_filter(self):
         from app.services.fmcsa_carrier_query import _build_carrier_where
 
-        where, params = _build_carrier_where({"carrier_operation": "A"})
-        assert "carrier_operation_code = %s" in where
+        conditions, params = _build_carrier_where({"carrier_operation": "A"})
+        assert any("carrier_operation_code = %s" in c for c in conditions)
         assert "A" in params
 
 
@@ -847,13 +847,149 @@ class TestFmcsaCarrierExport:
         gen = stream_fmcsa_carriers_csv(filters={"state": "TX"})
         list(gen)  # consume
 
-        # Check that the count query included the filter
+        # Check that the count query included the aliased filter
         count_sql = cur_count.execute.call_args[0][0]
-        assert "physical_state" in count_sql
+        assert "census.physical_state" in count_sql
+
+    @patch("app.services.fmcsa_carrier_export._get_pool")
+    def test_combined_census_and_safety_filters(self, mock_pool):
+        """Export with both census and safety filters generates aliased conditions."""
+        from app.services.fmcsa_carrier_export import stream_fmcsa_carriers_csv
+
+        conn = MagicMock()
+        cur_count = MagicMock()
+        cur_count.fetchone.return_value = (1,)
+        cur_count.__enter__ = MagicMock(return_value=cur_count)
+        cur_count.__exit__ = MagicMock(return_value=False)
+
+        cur_data = MagicMock()
+        cur_data.description = []
+        cur_data.fetchmany.return_value = []
+        cur_data.__enter__ = MagicMock(return_value=cur_data)
+        cur_data.__exit__ = MagicMock(return_value=False)
+
+        conn.cursor.side_effect = [cur_count, cur_data]
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        mock_pool.return_value.connection.return_value = conn
+
+        filters = {
+            "state": "TX",
+            "min_power_units": 20,
+            "has_alert_unsafe_driving": True,
+            "min_vehicle_maintenance_percentile": 70,
+        }
+        gen = stream_fmcsa_carriers_csv(filters=filters)
+        list(gen)  # consume
+
+        count_sql = cur_count.execute.call_args[0][0]
+        # Census filters should be qualified with census alias
+        assert "census.physical_state" in count_sql
+        assert "census.power_unit_count" in count_sql
+        # Safety filters should be qualified with safety alias
+        assert "safety.unsafe_driving_basic_alert = TRUE" in count_sql
+        assert "safety.vehicle_maintenance_percentile" in count_sql
 
 
 # ---------------------------------------------------------------------------
-# 7. Endpoint/Router Tests
+# 8. Aliased Filter Generation Tests
+# ---------------------------------------------------------------------------
+
+class TestAliasedFilterGeneration:
+    """Tests for _build_carrier_where and _build_safety_where with table aliases."""
+
+    def test_carrier_where_no_alias_produces_bare_columns(self):
+        from app.services.fmcsa_carrier_query import _build_carrier_where
+
+        conditions, params = _build_carrier_where({"state": "CA", "min_power_units": 5})
+        joined = " ".join(conditions)
+        assert "physical_state = %s" in joined
+        assert "power_unit_count >= %s" in joined
+        # No alias prefix
+        assert "." not in joined
+
+    def test_carrier_where_with_alias_qualifies_all_columns(self):
+        from app.services.fmcsa_carrier_query import _build_carrier_where
+
+        conditions, params = _build_carrier_where(
+            {"state": "TX", "min_power_units": 10, "hazmat_flag": True, "legal_name_contains": "ACME", "dot_number": "123"},
+            table_alias="c",
+        )
+        for cond in conditions:
+            # Every condition must start with the alias
+            assert cond.startswith("c."), f"Condition not aliased: {cond}"
+
+    def test_carrier_where_alias_does_not_hardcode_census(self):
+        """The alias is caller-provided, not hardcoded to 'census'."""
+        from app.services.fmcsa_carrier_query import _build_carrier_where
+
+        conditions, _ = _build_carrier_where({"state": "NY"}, table_alias="my_tbl")
+        assert any("my_tbl.physical_state" in c for c in conditions)
+        assert not any("census." in c for c in conditions)
+
+    def test_safety_where_no_alias_produces_bare_columns(self):
+        from app.services.fmcsa_carrier_query import _build_safety_where
+
+        conditions, params = _build_safety_where({
+            "min_unsafe_driving_percentile": 80,
+            "has_alert_driver_fitness": True,
+        })
+        joined = " ".join(conditions)
+        assert "unsafe_driving_percentile >= %s" in joined
+        assert "driver_fitness_basic_alert = TRUE" in joined
+        assert "." not in joined
+
+    def test_safety_where_with_alias_qualifies_all_columns(self):
+        from app.services.fmcsa_carrier_query import _build_safety_where
+
+        conditions, params = _build_safety_where(
+            {
+                "min_unsafe_driving_percentile": 80,
+                "min_hours_of_service_percentile": 60,
+                "min_vehicle_maintenance_percentile": 70,
+                "has_alert_unsafe_driving": True,
+                "has_alert_vehicle_maintenance": True,
+                "has_alert_driver_fitness": True,
+            },
+            table_alias="s",
+        )
+        assert len(conditions) == 6
+        for cond in conditions:
+            assert cond.startswith("s."), f"Condition not aliased: {cond}"
+
+    def test_safety_where_alias_does_not_hardcode_safety(self):
+        from app.services.fmcsa_carrier_query import _build_safety_where
+
+        conditions, _ = _build_safety_where(
+            {"has_alert_unsafe_driving": True},
+            table_alias="xyz",
+        )
+        assert any("xyz.unsafe_driving_basic_alert" in c for c in conditions)
+        assert not any("safety." in c for c in conditions)
+
+    def test_safety_where_boolean_only_fires_when_true(self):
+        from app.services.fmcsa_carrier_query import _build_safety_where
+
+        conds_true, _ = _build_safety_where({"has_alert_unsafe_driving": True})
+        assert any("unsafe_driving_basic_alert = TRUE" in c for c in conds_true)
+
+        conds_false, _ = _build_safety_where({"has_alert_unsafe_driving": False})
+        assert not any("unsafe_driving_basic_alert" in c for c in conds_false)
+
+    def test_conditions_to_where_empty(self):
+        from app.services.fmcsa_carrier_query import _conditions_to_where
+
+        assert _conditions_to_where([]) == ""
+
+    def test_conditions_to_where_joins_with_and(self):
+        from app.services.fmcsa_carrier_query import _conditions_to_where
+
+        result = _conditions_to_where(["a = 1", "b = 2", "c = 3"])
+        assert result == "WHERE a = 1 AND b = 2 AND c = 3"
+
+
+# ---------------------------------------------------------------------------
+# 9. Endpoint/Router Tests
 # ---------------------------------------------------------------------------
 
 class TestFmcsaEndpoints:
@@ -883,6 +1019,21 @@ class TestFmcsaEndpoints:
         assert req.limit == 25
         assert req.offset == 0
         assert req.dot_number is None
+
+    def test_export_request_model_has_safety_fields(self):
+        from app.routers.fmcsa_v1 import FmcsaCarrierExportRequest
+
+        req = FmcsaCarrierExportRequest(
+            state="TX",
+            min_power_units=20,
+            min_unsafe_driving_percentile=80,
+            has_alert_vehicle_maintenance=True,
+        )
+        assert req.state == "TX"
+        assert req.min_unsafe_driving_percentile == 80
+        assert req.has_alert_vehicle_maintenance is True
+        # Census-only fields still present
+        assert req.min_power_units == 20
 
     def test_carrier_query_request_limit_validation(self):
         from pydantic import ValidationError
