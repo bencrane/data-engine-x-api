@@ -1619,6 +1619,21 @@ class InternalSbaIngestRequest(BaseModel):
     chunk_size: int = 50_000
 
 
+class InternalDetectFmcsaSignalsRequest(BaseModel):
+    feed_date: str
+
+
+@router.post("/fmcsa-signals/detect", response_model=DataEnvelope)
+async def internal_detect_fmcsa_signals(
+    payload: InternalDetectFmcsaSignalsRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.fmcsa_signal_detection import run_signal_detection
+
+    result = run_signal_detection(feed_date=payload.feed_date)
+    return DataEnvelope(data=result)
+
+
 @router.post("/sba-7a-loans/ingest", response_model=DataEnvelope)
 async def internal_sba_7a_loans_ingest(
     payload: InternalSbaIngestRequest,
