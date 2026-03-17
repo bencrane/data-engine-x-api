@@ -757,6 +757,15 @@ async function parseAndPersistStreamedCsv(
   const inputStream = Readable.fromWeb(response.body as any);
   inputStream.pipe(parser);
 
+  // Bidirectional error propagation: .pipe() does NOT forward errors.
+  // Without this, a socket close on inputStream leaves the parser hanging forever.
+  inputStream.on("error", (err) => {
+    parser.destroy(err);
+  });
+  parser.on("error", (err) => {
+    inputStream.destroy(err);
+  });
+
   let headerValidated = false;
   let rowNumber = 0;
   let rowsDownloaded = 0;
