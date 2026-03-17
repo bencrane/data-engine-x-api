@@ -3,6 +3,7 @@
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -23,6 +24,7 @@ from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_de
 from app.services.person_intel_briefings import query_person_intel_briefings
 from app.services.federal_leads_query import query_federal_contract_leads
 from app.services.federal_leads_refresh import get_federal_leads_view_stats
+from app.services.federal_leads_export import stream_federal_contract_leads_csv
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
@@ -762,6 +764,47 @@ async def federal_contract_leads_stats(
 ):
     stats = get_federal_leads_view_stats()
     return DataEnvelope(data=stats)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/export",
+)
+async def federal_contract_leads_export(
+    payload: FederalContractLeadsQueryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in (
+        "naics_prefix", "state", "action_date_from", "action_date_to",
+        "min_obligation", "business_size", "first_time_only",
+        "first_time_dod_only", "first_time_nasa_only",
+        "first_time_doe_only", "first_time_dhs_only",
+        "awarding_agency_code", "has_sam_match", "recipient_uei", "recipient_name",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    max_rows = 100_000
+
+    try:
+        # The generator does a count check before yielding any rows.
+        # We must advance it once to trigger the check eagerly so ValueError
+        # propagates before we hand off to StreamingResponse.
+        gen = stream_federal_contract_leads_csv(filters=filters, max_rows=max_rows)
+        first_line = next(gen)
+
+        def csv_with_first():
+            yield first_line
+            yield from gen
+
+        return StreamingResponse(
+            csv_with_first(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=federal_contract_leads_export.csv"},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @entity_relationships_router.post(
