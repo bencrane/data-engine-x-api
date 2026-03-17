@@ -24,6 +24,7 @@ from app.services.icp_job_titles import query_icp_job_titles, query_icp_title_de
 from app.services.person_intel_briefings import query_person_intel_briefings
 from app.services.federal_leads_query import query_federal_contract_leads
 from app.services.federal_leads_refresh import get_federal_leads_view_stats
+from app.services.federal_leads_company_detail import get_company_detail
 from app.services.federal_leads_export import stream_federal_contract_leads_csv
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
@@ -844,6 +845,21 @@ async def sba_loans_stats(
 ):
     stats = get_sba_loans_stats()
     return DataEnvelope(data=stats)
+
+
+@entity_relationships_router.get(
+    "/federal-contract-leads/{uei}",
+    response_model=DataEnvelope,
+    responses={404: {"model": ErrorEnvelope}},
+)
+async def federal_contract_leads_company_detail(
+    uei: str,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    result = get_company_detail(uei=uei)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"UEI {uei} not found in SAM.gov or USASpending")
+    return DataEnvelope(data=result)
 
 
 class FederalContractLeadsQueryRequest(BaseModel):
