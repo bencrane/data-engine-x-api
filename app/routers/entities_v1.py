@@ -185,6 +185,73 @@ class SalesNavProspectsQueryRequest(BaseModel):
     org_id: str | None = None
 
 
+class FederalContractLeadsQueryRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    action_date_from: str | None = None
+    action_date_to: str | None = None
+    min_obligation: str | None = None
+    business_size: str | None = None
+    first_time_only: bool | None = None
+    first_time_dod_only: bool | None = None
+    first_time_nasa_only: bool | None = None
+    first_time_doe_only: bool | None = None
+    first_time_dhs_only: bool | None = None
+    awarding_agency_code: str | None = None
+    has_sam_match: bool | None = None
+    recipient_uei: str | None = None
+    recipient_name: str | None = None
+    limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class SbaLoansQueryRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    min_loan_amount: str | None = None
+    max_loan_amount: str | None = None
+    approval_date_from: str | None = None
+    approval_date_to: str | None = None
+    business_age: str | None = None
+    business_type: str | None = None
+    lender_name: str | None = None
+    loan_status: str | None = None
+    borrower_name: str | None = None
+    min_jobs: str | None = None
+    limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class EntityIngestRequest(BaseModel):
+    entity_type: Literal["company", "person"]
+    source_provider: str = Field(..., min_length=1, max_length=100)
+    payload: dict[str, Any]
+    # Super-admin override
+    org_id: str | None = None
+    company_id: str | None = None
+
+
+class LeadsQueryRequest(BaseModel):
+    # Company filters
+    industry: str | None = None
+    employee_range: str | None = None
+    hq_country: str | None = None
+    canonical_domain: str | None = None
+    company_name: str | None = None
+    # Person filters
+    title: str | None = None
+    seniority: str | None = None
+    department: str | None = None
+    email_status: str | None = None
+    has_email: bool | None = None
+    has_phone: bool | None = None
+    # Pagination
+    limit: int = Field(default=25, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+    # Super-admin override
+    org_id: str | None = None
+
+
 @router.post(
     "/companies",
     response_model=DataEnvelope,
@@ -872,73 +939,6 @@ async def federal_contract_leads_company_detail(
     if result is None:
         raise HTTPException(status_code=404, detail=f"UEI {uei} not found in SAM.gov or USASpending")
     return DataEnvelope(data=result)
-
-
-class FederalContractLeadsQueryRequest(BaseModel):
-    naics_prefix: str | None = None
-    state: str | None = None
-    action_date_from: str | None = None
-    action_date_to: str | None = None
-    min_obligation: str | None = None
-    business_size: str | None = None
-    first_time_only: bool | None = None
-    first_time_dod_only: bool | None = None
-    first_time_nasa_only: bool | None = None
-    first_time_doe_only: bool | None = None
-    first_time_dhs_only: bool | None = None
-    awarding_agency_code: str | None = None
-    has_sam_match: bool | None = None
-    recipient_uei: str | None = None
-    recipient_name: str | None = None
-    limit: int = Field(default=25, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
-
-
-class SbaLoansQueryRequest(BaseModel):
-    naics_prefix: str | None = None
-    state: str | None = None
-    min_loan_amount: str | None = None
-    max_loan_amount: str | None = None
-    approval_date_from: str | None = None
-    approval_date_to: str | None = None
-    business_age: str | None = None
-    business_type: str | None = None
-    lender_name: str | None = None
-    loan_status: str | None = None
-    borrower_name: str | None = None
-    min_jobs: str | None = None
-    limit: int = Field(default=25, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
-
-
-class EntityIngestRequest(BaseModel):
-    entity_type: Literal["company", "person"]
-    source_provider: str = Field(..., min_length=1, max_length=100)
-    payload: dict[str, Any]
-    # Super-admin override
-    org_id: str | None = None
-    company_id: str | None = None
-
-
-class LeadsQueryRequest(BaseModel):
-    # Company filters
-    industry: str | None = None
-    employee_range: str | None = None
-    hq_country: str | None = None
-    canonical_domain: str | None = None
-    company_name: str | None = None
-    # Person filters
-    title: str | None = None
-    seniority: str | None = None
-    department: str | None = None
-    email_status: str | None = None
-    has_email: bool | None = None
-    has_phone: bool | None = None
-    # Pagination
-    limit: int = Field(default=25, ge=1, le=500)
-    offset: int = Field(default=0, ge=0)
-    # Super-admin override
-    org_id: str | None = None
 
 
 @leads_router.post(
