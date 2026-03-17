@@ -11,6 +11,7 @@ from app.routers import (
     coverage_v1,
     entities_v1,
     execute_v1,
+    fmcsa_v1,
     health,
     internal,
     lists_v1,
@@ -158,6 +159,11 @@ app.include_router(
     lists_v1.router,
     prefix="/api/v1",
     tags=["lists-v1"],
+)
+app.include_router(
+    fmcsa_v1.fmcsa_router,
+    prefix="/api/v1",
+    tags=["fmcsa-v1"],
 )
 app.include_router(
     alumni_gtm.router,
