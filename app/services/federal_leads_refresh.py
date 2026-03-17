@@ -68,7 +68,10 @@ def get_federal_leads_view_stats() -> dict[str, Any]:
             COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_dod_awardee AND dod_awards_count > 0) AS first_time_dod_awardees,
             COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_nasa_awardee AND nasa_awards_count > 0) AS first_time_nasa_awardees,
             COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_doe_awardee AND doe_awards_count > 0) AS first_time_doe_awardees,
-            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_dhs_awardee AND dhs_awards_count > 0) AS first_time_dhs_awardees
+            COUNT(DISTINCT recipient_uei) FILTER (WHERE is_first_time_dhs_awardee AND dhs_awards_count > 0) AS first_time_dhs_awardees,
+            SUM(CAST(NULLIF(federal_action_obligation, '') AS NUMERIC)) / NULLIF(COUNT(DISTINCT recipient_uei), 0) AS average_obligation,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY CAST(NULLIF(federal_action_obligation, '') AS NUMERIC)) AS median_obligation,
+            SUM(CAST(NULLIF(potential_total_value_of_award, '') AS NUMERIC)) / NULLIF(COUNT(DISTINCT recipient_uei), 0) AS average_award_ceiling
         FROM entities.mv_federal_contract_leads
     """
     pool = _get_pool()
@@ -85,4 +88,7 @@ def get_federal_leads_view_stats() -> dict[str, Any]:
         "first_time_nasa_awardees": row[4],
         "first_time_doe_awardees": row[5],
         "first_time_dhs_awardees": row[6],
+        "average_obligation": float(row[7]) if row[7] is not None else 0.0,
+        "median_obligation": float(row[8]) if row[8] is not None else 0.0,
+        "average_award_ceiling": float(row[9]) if row[9] is not None else 0.0,
     }
