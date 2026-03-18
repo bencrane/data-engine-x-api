@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T16:00:00Z
+**Last updated:** 2026-03-18T18:45:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_ENIGMA_INTEGRATION_AUDIT.md`
+**Summary:** Created `docs/ENIGMA_INTEGRATION_AUDIT.md` covering 8 sections: Enigma API surface inventory (~15 distinct capabilities across GraphQL, KYB, screening, MCP), provider adapter analysis (3 functions: `match_business`, `get_card_analytics`, `get_brand_locations`), operation wiring (2 operations: `company.enrich.card_revenue` and `company.enrich.locations`), Trigger.dev integration status (none), gap analysis (documented vs built vs wired vs called), credential configuration (`ENIGMA_API_KEY` via `app/config.py`), rate limits and credit pricing model, and prioritized recommendations. Key finding: of ~15 documented capabilities, only 2 are built into operations — the vast majority of Enigma's API surface (KYB, screening, legal entities, person data, semantic search, aggregate queries, per-location analytics) has no adapter code.
+**Flagged:** `company.enrich.card_revenue` has been called in production (not in never-called list), confirming `ENIGMA_API_KEY` is configured. `company.enrich.locations` is fully built and tested but has never been called. No Trigger.dev integration or blueprint references exist for either Enigma operation — both are only reachable via ad-hoc `/api/v1/execute` calls. No retry or rate-limit handling in the adapter; 429 responses are treated as generic failures.
 
 ---
 
