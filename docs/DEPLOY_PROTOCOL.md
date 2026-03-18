@@ -109,3 +109,4 @@ Migration order:
 38. `038_mv_usaspending_analytical.sql` — USASpending typed base MV + first-contract MV (**heavy: 10-30 min on 14.6M rows, run during low-traffic window**)
 39. `039_mv_fmcsa_analytical.sql` — FMCSA latest census, safety percentiles, crash counts, master carrier MVs (**heavy: run during low-traffic window**)
 40. `040_analytical_missing_indexes.sql` — supplemental composite indexes for USASpending, SAM.gov, SBA
+41. `041_enigma_brand_discoveries.sql` — Enigma brand discoveries + location enrichments tables (2 new tables in `entities` schema with indexes)
