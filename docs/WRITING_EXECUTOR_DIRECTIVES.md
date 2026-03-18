@@ -1,6 +1,6 @@
 # Writing Executor Directives
 
-**Last updated:** 2026-03-18T06:30:00Z
+**Last updated:** 2026-03-18T07:00:00Z
 
 How to write directives that executor agents can implement correctly without ambiguity.
 
@@ -74,13 +74,16 @@ Commit standalone.
 
 [... more deliverables ...]
 
+### Final Deliverable: Work Log Entry
+Append an entry to `docs/EXECUTOR_WORK_LOG.md` following the format defined in that file. This is your final commit.
+
 ---
 
 **What is NOT in scope:** [Explicit exclusions]
 
 **Commit convention:** Each deliverable is one commit. Do not push.
 
-**When done:** Report back with: (a) ..., (b) ..., (c) ..., (d) ..., (e) anything to flag.
+**When done:** Report back with: (a) ..., (b) ..., (c) ..., (d) ..., (e) anything to flag. The work log entry should be included in the executor's final commit.
 ```
 
 ---
@@ -104,6 +107,8 @@ Commit standalone.
 8. **Do not use existing directives as status documents.** Use them for scope and style calibration only. If production status matters, cite the audited truth docs explicitly inside the directive.
 
 9. **Keep the workflow docs aligned.** `docs/EXECUTOR_AGENT_DIRECTIVE.md` may be used as a convenience scaffold, but this file defines the standard template and wording.
+
+10. **Every directive includes a work log entry as its final deliverable.** The executor appends to `docs/EXECUTOR_WORK_LOG.md` with the directive path, a 1-3 sentence summary, and any flags.
 
 ---
 
