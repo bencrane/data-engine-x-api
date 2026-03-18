@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T15:30:00Z
+**Last updated:** 2026-03-18T16:00:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_ANALYTICAL_MATERIALIZED_VIEWS.md`
+**Summary:** Created migrations 038-040 adding analytical materialized views and supplemental indexes. Migration 038 adds two USASpending MVs: `mv_usaspending_contracts_typed` (28 columns, pre-cast from TEXT to proper types with DISTINCT ON dedup) and `mv_usaspending_first_contracts` (first contract per recipient_uei for first-time awardee analysis). Migration 039 adds four FMCSA MVs: `mv_fmcsa_latest_census` (latest snapshot per carrier), `mv_fmcsa_latest_safety_percentiles` (latest percentiles per carrier), `mv_fmcsa_crash_counts_12mo` (trailing 12-month crash aggregation), and `mv_fmcsa_carrier_master` (master join of all three). Migration 040 adds 4 composite indexes across USASpending, SAM.gov, and SBA tables after auditing all 18 FMCSA tables (no gaps found). Created `scripts/refresh_analytical_views.sql` covering 9 total MVs with dependency ordering. Updated DEPLOY_PROTOCOL.md with migrations 038-040.
+**Flagged:** Column name mismatches vs directive: `small_business_competitive_flag` does not exist — used `contracting_officers_determination_of_business_size` (TEXT) instead. `place_of_performance_state_code` is actually `primary_place_of_performance_state_code`. Directive suggested `awarding_agency_name` index on base usaspending_contracts but existing index is on `awarding_agency_code` — both the MV index and composite index use `awarding_agency_name`. Migrations 036/037 (FMCSA authority grants and insurance cancellations) still not applied to production per operational reality check — refresh script includes them with a note.
 
 ---
 
