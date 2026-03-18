@@ -1,6 +1,6 @@
 # Deploy Protocol
 
-**Last updated:** 2026-03-18T07:00:00Z
+**Last updated:** 2026-03-18T07:15:00Z
 
 Deploy ordering, common commands, and migration reference for `data-engine-x-api`.
 
@@ -59,3 +59,20 @@ Migration order:
 18. `018_alumnigtm_persistence.sql`
 19. `019_company_ads.sql`
 20. `020_salesnav_prospects.sql`
+21. `021_schema_split_ops_entities.sql`
+22. `022_fmcsa_top5_daily_diff_tables.sql`
+23. `023_fmcsa_snapshot_history_tables.sql`
+24. `024_fmcsa_sms_tables.sql`
+25. `025_fmcsa_remaining_csv_export_tables.sql`
+26. `026_client_automation_and_entity_associations.sql`
+27. `027_fmcsa_snapshot_replace_indexes.sql`
+28. `028_leads_query_function.sql`
+29. `029_lists.sql`
+30. `030_sam_gov_entities.sql`
+31. `031_usaspending_contracts.sql`
+32. `032_sba_7a_loans.sql`
+33. `033_mv_federal_contract_leads.sql`
+34. `034_mv_federal_contract_leads_agency_first_time.sql`
+35. `035_fmcsa_carrier_signals.sql`
+36. `036_mv_fmcsa_authority_grants.sql`
+37. `037_mv_fmcsa_insurance_cancellations.sql`
