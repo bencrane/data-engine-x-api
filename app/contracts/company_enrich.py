@@ -184,6 +184,60 @@ class EnigmaLocationsOutput(BaseModel):
     source_provider: str = "enigma"
 
 
+class EnigmaBrandItem(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    website: str | None = None
+    location_count: int | None = None
+    industries: list[str] | None = None
+
+
+class EnigmaBrandDiscoveryOutput(BaseModel):
+    brands: list[EnigmaBrandItem] | None = None
+    total_returned: int | None = None
+    has_next_page: bool | None = None
+    next_page_token: str | None = None
+    prompt: str | None = None
+    geography_filter: str | None = None
+    source_provider: str = "enigma"
+
+
+class EnigmaContactItem(BaseModel):
+    full_name: str | None = None
+    job_title: str | None = None
+    job_function: str | None = None
+    management_level: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+
+class EnigmaLocationEnrichedItem(EnigmaLocationItem):
+    phone: str | None = None
+    website: str | None = None
+    annual_card_revenue: float | None = None
+    annual_card_revenue_yoy_growth: float | None = None
+    annual_avg_daily_customers: float | None = None
+    annual_transaction_count: float | None = None
+    competitive_rank: int | None = None
+    competitive_rank_total: int | None = None
+    review_count: int | None = None
+    review_avg_rating: float | None = None
+    contacts: list[EnigmaContactItem] | None = None
+
+
+class EnigmaLocationsEnrichedOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    total_location_count: int | None = None
+    locations: list[EnigmaLocationEnrichedItem] | None = None
+    location_count: int | None = None
+    open_count: int | None = None
+    closed_count: int | None = None
+    has_next_page: bool | None = None
+    end_cursor: str | None = None
+    source_provider: str = "enigma"
+
+
 class FMCSABasicScore(BaseModel):
     category: str
     percentile: float | None = None
