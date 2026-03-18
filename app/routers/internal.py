@@ -41,6 +41,8 @@ from app.services.entity_relationships import (
 from app.services.company_intel_briefings import upsert_company_intel_briefing
 from app.services.gemini_icp_job_titles import upsert_gemini_icp_job_titles
 from app.services.icp_job_titles import upsert_icp_job_titles
+from app.services.enigma_brand_discoveries import upsert_enigma_brand_discoveries
+from app.services.enigma_location_enrichments import upsert_enigma_location_enrichments
 from app.services.person_intel_briefings import upsert_person_intel_briefing
 from app.services.entity_state import (
     EntityStateVersionError,
@@ -321,8 +323,8 @@ class InternalUpsertEnigmaBrandDiscoveriesRequest(BaseModel):
 class InternalUpsertEnigmaLocationEnrichmentsRequest(BaseModel):
     enigma_brand_id: str
     locations: list[dict[str, Any]]
-    brand_name: str | None = None
     company_id: str | None = None
+    brand_name: str | None = None
     enriched_by_operation_id: str = "company.enrich.locations"
     source_submission_id: str | None = None
     source_pipeline_run_id: str | None = None
