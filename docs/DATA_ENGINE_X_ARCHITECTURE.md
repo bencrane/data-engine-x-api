@@ -1,6 +1,8 @@
 # data-engine-x Architecture
 
-Ground-truth architecture note as of `2026-03-10`.
+**Last updated:** 2026-03-18T06:30:00Z
+
+Ground-truth architecture note as of `2026-03-18`.
 
 This document is not aspirational. It describes the production system that actually exists, the parts that are healthy, and the parts that are broken.
 
@@ -227,7 +229,7 @@ That is not safe.
 
 Use:
 
-- `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+- `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`
 - this document
 
 as the ground truth before architecture changes.

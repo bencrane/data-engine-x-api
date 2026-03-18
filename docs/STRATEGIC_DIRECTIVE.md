@@ -1,5 +1,7 @@
 # Strategic Directive: Pragmatic Build Rules for data-engine-x-api
 
+**Last updated:** 2026-03-18T06:30:00Z
+
 This document is the normative doctrine for future AI contributors.
 Build decisions should follow this file unless explicitly overridden by the project owner.
 
@@ -8,7 +10,7 @@ Authority note:
 - This file is normative doctrine.
 - It describes build rules, preferred patterns, and locked design intent.
 - It is not the source of truth for current production state or current live project priority.
-- For live factual state, use `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
+- For live factual state, use `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
 - Historical examples below may preserve earlier planning language or example implementation priorities. Read them as doctrine examples or locked design intent, not as a live roadmap claim unless separately reconfirmed.
 
 ## Mission

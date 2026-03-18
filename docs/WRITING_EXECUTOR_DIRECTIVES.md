@@ -1,12 +1,14 @@
 # Writing Executor Directives
 
+**Last updated:** 2026-03-18T06:30:00Z
+
 How to write directives that executor agents can implement correctly without ambiguity.
 
 Canonical-standard rule: this file is the directive-writing authority for the repo. If any older template or prior directive example conflicts with this file, this file wins.
 
 Chief Agent grounding rule: before writing a directive, route yourself through `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`, then the audited production-truth docs, then `CLAUDE.md`, and only then the workflow/doctrine docs.
 
-Production-truth rule: example directives in this file show structure, not current production truth. Do not infer system health, feature completeness, or production readiness from example wording. Cross-check current reality in `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
+Production-truth rule: example directives in this file show structure, not current production truth. Do not infer system health, feature completeness, or production readiness from example wording. Cross-check current reality in `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
 
 Directive-status rule: existing `docs/EXECUTOR_DIRECTIVE_*.md` files are scope documents and format/style examples. They are not deployment records, not production verification, and not evidence that the described target architecture is live.
 
@@ -36,7 +38,7 @@ If you include current-state claims in a directive background section, tie them 
 ## Before You Draft
 
 1. Start with `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`.
-2. Read `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
+2. Read `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, `docs/DATA_ENGINE_X_ARCHITECTURE.md`, and `CLAUDE.md`.
 3. Use `docs/STRATEGIC_DIRECTIVE.md` and `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` only for doctrine and intended design.
 4. Use `docs/SYSTEM_OVERVIEW.md` only as secondary technical reference if needed.
 5. Use older `docs/EXECUTOR_DIRECTIVE_*.md` files for scope/style calibration, not as proof that the described state is live.

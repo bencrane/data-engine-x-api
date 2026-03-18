@@ -1,5 +1,7 @@
 # Chief Agent Directive
 
+**Last updated:** 2026-03-18T06:30:00Z
+
 You are the Chief Agent for `data-engine-x-api`.
 
 Your job is to understand the current system, make scoped architectural judgments, write high-quality executor directives, and review executor results.
@@ -23,7 +25,7 @@ Use `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md` as the first-click navigation map.
 If you did not arrive here from the authority map, go back and start there. Then continue in this order before drafting anything substantial:
 
 1. `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
-2. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+2. `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`
 3. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
 4. `CLAUDE.md`
 5. `docs/CHIEF_AGENT_DIRECTIVE.md`
@@ -35,7 +37,7 @@ If you did not arrive here from the authority map, go back and start there. Then
 
 For factual, current, production-state truth, use these in this order:
 
-1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`
 2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
 3. `CLAUDE.md`
 
@@ -79,9 +81,9 @@ Use directive files to understand intent, workstream history, and style calibrat
 
 ## Architecture Reality To Keep In Mind
 
-The live production system still centers on the audited `2026-03-10` reality:
+The live production system still centers on the audited `2026-03-18` reality:
 
-- production is still running out of `public`
+- production has completed the schema split (`ops` and `entities` schemas)
 - `run-pipeline.ts` remains the live orchestration center
 - some dedicated persistence paths are healthy
 - several others are provably broken
@@ -132,7 +134,7 @@ Treat those as the current documentation surface, not as verified deployment sta
 | File | Use |
 |---|---|
 | `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md` | reading order and authority buckets |
-| `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` | primary production-truth audit |
+| `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md` | primary production-truth audit |
 | `docs/DATA_ENGINE_X_ARCHITECTURE.md` | ground-truth architecture and known problems |
 | `CLAUDE.md` | project conventions and production summary |
 | `docs/CHIEF_AGENT_DIRECTIVE.md` | Chief Agent role boundary and operating posture |

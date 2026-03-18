@@ -1,12 +1,14 @@
 # Chief Agent Doc Authority Map
 
+**Last updated:** 2026-03-18T06:30:00Z
+
 Use this as the first-click navigation file for Chief Agent onboarding.
 
 ## First Read Path
 
 Start with this file, then continue in this order before drafting directives, judging architecture, or treating any repo claim as current fact:
 
-1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`
 2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
 3. `CLAUDE.md`
 4. `docs/CHIEF_AGENT_DIRECTIVE.md`
@@ -22,7 +24,7 @@ That is the canonical Chief Agent reading path. Do not start with older architec
 
 These are the factual baseline for what is live, healthy, broken, or production-verified:
 
-1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`
 2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
 3. `CLAUDE.md`
 
