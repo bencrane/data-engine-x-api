@@ -75,7 +75,7 @@ def _execute(sql: str, params: list[Any]) -> list[dict[str, Any]]:
     pool = _get_pool()
     with pool.connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute("SET statement_timeout = '30s'")
+            cur.execute("SET statement_timeout = '60s'")
             cur.execute(sql, params)
             rows = cur.fetchall()
             cur.execute("RESET statement_timeout")
@@ -94,7 +94,8 @@ def _new_authorities_by_month(p: dict[str, Any]) -> dict[str, Any]:
             COUNT(*) AS new_authorities,
             COUNT(DISTINCT usdot_number) AS unique_carriers
         FROM entities.operating_authority_histories
-        WHERE final_authority_decision_date >= %s
+        WHERE last_observed_at >= %s
+          AND final_authority_decision_date >= %s
           AND final_authority_decision_date <= %s
           AND final_authority_action_description IS NOT NULL
           AND UPPER(final_authority_action_description) LIKE %s
@@ -102,7 +103,7 @@ def _new_authorities_by_month(p: dict[str, Any]) -> dict[str, Any]:
         ORDER BY month ASC
     """
 
-    rows = _execute(sql, [date_from, date_to, "%GRANT%"])
+    rows = _execute(sql, [date_from, date_from, date_to, "%GRANT%"])
     return {
         "query_type": "new_authorities_by_month",
         "date_range": {"from": date_from, "to": date_to},
@@ -130,14 +131,15 @@ def _insurance_cancellations_by_month(p: dict[str, Any]) -> dict[str, Any]:
             COUNT(*) AS cancellations,
             COUNT(DISTINCT usdot_number) AS unique_carriers
         FROM entities.insurance_policy_history_events
-        WHERE cancel_effective_date >= %s
+        WHERE last_observed_at >= %s
+          AND cancel_effective_date >= %s
           AND cancel_effective_date <= %s
           AND cancel_effective_date IS NOT NULL
         GROUP BY month
         ORDER BY month ASC
     """
 
-    rows = _execute(primary_sql, [date_from, date_to])
+    rows = _execute(primary_sql, [date_from, date_from, date_to])
     source = "insurance_policy_history_events"
 
     # Fallback to fmcsa_carrier_signals if primary returns nothing
