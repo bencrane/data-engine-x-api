@@ -26,8 +26,8 @@ SELECT
     bipd_underlying_limit_amount_thousands_usd,
     bipd_max_coverage_amount_thousands_usd,
     source_feed_name,
-    first_observed_at,
-    last_observed_at,
+    source_observed_at,
+    feed_date,
     created_at
 FROM entities.insurance_policy_history_events
 WHERE cancel_effective_date IS NOT NULL;

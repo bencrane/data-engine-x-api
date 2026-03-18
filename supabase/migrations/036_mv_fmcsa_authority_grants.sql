@@ -20,8 +20,8 @@ SELECT
     final_authority_served_date,
     original_authority_action_description,
     source_feed_name,
-    first_observed_at,
-    last_observed_at,
+    source_observed_at,
+    feed_date,
     created_at
 FROM entities.operating_authority_histories
 WHERE final_authority_action_description IS NOT NULL
