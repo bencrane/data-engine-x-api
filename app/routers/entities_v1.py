@@ -1240,11 +1240,7 @@ async def fmcsa_monthly_summary(
     payload: FmcsaMonthlySummaryRequest,
     auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
-    try:
-        results = get_fmcsa_monthly_summary(months=payload.months)
-    except Exception as e:
-        import traceback
-        return DataEnvelope(data={"error": str(e), "traceback": traceback.format_exc()})
+    results = get_fmcsa_monthly_summary(months=payload.months)
     return DataEnvelope(data=results)
 
 
