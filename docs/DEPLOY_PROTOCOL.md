@@ -1,6 +1,6 @@
 # Deploy Protocol
 
-**Last updated:** 2026-03-18T16:00:00Z
+**Last updated:** 2026-03-18T19:00:00Z
 
 Deploy ordering, common commands, and migration reference for `data-engine-x-api`.
 
@@ -34,6 +34,36 @@ cd trigger && npx trigger.dev@4.4.3 deploy
 ```
 
 Trigger.dev calls FastAPI internal endpoints. If Trigger.dev deploys before Railway, new endpoint calls fail silently — pipeline succeeds but data doesn't persist to dedicated tables. See `docs/troubleshooting-fixes/` for incidents.
+
+## Production Database Access
+
+**Critical:** `$DATABASE_URL` is injected by Doppler at runtime. You must wrap commands in `bash -c` so the variable expands *inside* Doppler's environment, not in your outer shell.
+
+**Wrong** — `$DATABASE_URL` expands before Doppler runs (empty or wrong value):
+
+```bash
+doppler run -p data-engine-x-api -c prd -- psql "$DATABASE_URL" -c "SELECT 1;"
+```
+
+**Right** — `bash -c` ensures `$DATABASE_URL` resolves after Doppler injects env vars:
+
+```bash
+# Single query
+doppler run -p data-engine-x-api -c prd -- bash -c 'psql "$DATABASE_URL" -c "SELECT 1;"'
+
+# Multi-line query
+doppler run -p data-engine-x-api -c prd -- bash -c 'psql "$DATABASE_URL" -c "
+SELECT table_schema, table_name
+FROM information_schema.tables
+WHERE table_schema = '"'"'entities'"'"'
+ORDER BY table_name;
+"'
+
+# Verify which env vars Doppler injects
+doppler run -p data-engine-x-api -c prd -- bash -c 'printenv DATABASE_URL | sed "s/\(:[^:@]*\)@/:***@/"'
+```
+
+Without the `bash -c` wrapper, queries may silently connect to a different database (if `DATABASE_URL` is set in your local shell) or fail with a connection error. This caused a false-negative incident on 2026-03-18 where production tables appeared missing.
 
 ## Database / Migrations
 
