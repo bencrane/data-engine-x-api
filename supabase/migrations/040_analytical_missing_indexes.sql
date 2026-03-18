@@ -26,8 +26,11 @@
 -- on their primary lookup columns.
 --
 -- Additional composite indexes below support common analytical join/filter patterns.
+--
+-- NOTE: No BEGIN/COMMIT wrapper. Index creation on 14.6M+ row tables exceeds
+-- Supabase's default statement_timeout inside a transaction.
 
-BEGIN;
+SET statement_timeout = '0';
 
 -- USASpending: composite indexes for common analytical joins
 CREATE INDEX IF NOT EXISTS idx_usaspending_contracts_uei_action_date
@@ -44,4 +47,4 @@ CREATE INDEX IF NOT EXISTS idx_sam_gov_entities_uei_extract_date
 CREATE INDEX IF NOT EXISTS idx_sba_7a_loans_borrzip
     ON entities.sba_7a_loans (borrzip);
 
-COMMIT;
+RESET statement_timeout;
