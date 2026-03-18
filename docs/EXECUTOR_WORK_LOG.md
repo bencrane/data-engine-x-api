@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T18:45:00Z
+**Last updated:** 2026-03-18T19:45:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_ENIGMA_API_REFERENCE.md`
+**Summary:** Created `docs/ENIGMA_API_REFERENCE.md` consolidating 61 source files from `docs/api-reference-docs/enigma/` into a single actionable reference. 9 sections covering: platform overview, data model (3 core entity types + 4 supporting types with full relationship hierarchy), authentication and rate limits (4 plan tiers), credit/billing model (4 pricing tiers with cost estimation examples), GraphQL endpoint inventory (10 capability domains: search, brand retrieval, operating location data with 20 attribute domains, aggregates, card revenue analytics, person data, KYB verification, screening, enrichment, directives), coverage gap matrix (19 capabilities assessed — 3 with adapters, 16 not built), 4 use case query chains (SMB list building, location-level analysis, vertical discovery, competitive intelligence) with estimated credit costs and query shapes, GraphQL schema quick reference (10 major types, 16 filter operators, pagination patterns), and error handling. 20 files in `09-operating-location/` were empty (0 bytes) — operating location details derived from GraphQL SDL and attribute reference instead. 1 file in `02-verification-and-kyb/` was a duplicate (`02-kyb-api-quickstart.md` contained same content as `03-kyb-response-task-results.md`). MCP tools section flagged `search_negative_news` and `search_gov_archive` as capabilities not documented in the core GraphQL API reference.
+**Flagged:** `09-operating-location/` (20 files, all 0 bytes) — entire subdirectory is placeholder stubs, never populated with content. `02-kyb-api-quickstart.md` is a duplicate of `03-kyb-response-task-results.md` — actual KYB quickstart content (endpoint URL, request body shape) is missing from the source docs. `search_negative_news` and `search_gov_archive` MCP tools expose capabilities with no corresponding GraphQL API documentation — these may be separate REST endpoints. The `enrich` GraphQL query and `OperatingLocationCache` type are present in the SDL but have insufficient documentation for integration — need live API verification.
 
 ---
 
