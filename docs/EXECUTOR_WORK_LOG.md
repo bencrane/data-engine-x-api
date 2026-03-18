@@ -1,10 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T07:00:00Z
+**Last updated:** 2026-03-18T07:15:00Z
 
 Reverse-chronological log of completed executor directive work.
 
 ---
+
+## 2026-03-18
+**Directive:** Migration list update (standalone fix)
+**Summary:** Updated docs/DEPLOY_PROTOCOL.md migration list from 020 to 037, adding 17 missing migrations covering schema split, FMCSA tables, federal data tables, materialized views, and supporting infrastructure.
+**Flagged:** Nothing.
 
 ## 2026-03-18
 **Directive:** CLAUDE.md Restructure and Repo Convention Files
