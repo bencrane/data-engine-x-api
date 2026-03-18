@@ -11,8 +11,9 @@ from app.auth import AuthContext
 from app.auth.models import SuperAdminContext
 from app.auth.super_admin import get_current_super_admin
 from app.auth import get_current_auth
-from app.routers._responses import DataEnvelope, ErrorEnvelope
+from app.routers._responses import DataEnvelope, ErrorEnvelope, error_response
 from app.services.fmcsa_carrier_query import query_fmcsa_carriers
+from app.services.fmcsa_consolidated_analytics import run_fmcsa_analytics
 
 fmcsa_router = APIRouter()
 _security = HTTPBearer(auto_error=False)
@@ -373,3 +374,32 @@ async def get_carrier_signals_endpoint(
         offset=offset,
     )
     return DataEnvelope(data=results)
+
+
+class FmcsaConsolidatedAnalyticsRequest(BaseModel):
+    query_type: str
+    months: int = Field(default=6, ge=1, le=24)
+    date_from: str | None = None
+    date_to: str | None = None
+
+
+@fmcsa_router.post(
+    "/fmcsa-carriers/analytics",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def fmcsa_consolidated_analytics(
+    payload: FmcsaConsolidatedAnalyticsRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    params: dict[str, Any] = {"months": payload.months}
+    if payload.date_from is not None:
+        params["date_from"] = payload.date_from
+    if payload.date_to is not None:
+        params["date_to"] = payload.date_to
+
+    try:
+        result = run_fmcsa_analytics(query_type=payload.query_type, params=params)
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    return DataEnvelope(data=result)

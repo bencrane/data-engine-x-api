@@ -43,6 +43,7 @@ from app.services.federal_leads_insights import (
 )
 from app.services.federal_leads_verticals import get_vertical_summary
 from app.services.fmcsa_analytics import get_fmcsa_monthly_summary
+from app.services.federal_leads_consolidated_analytics import run_federal_analytics
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
@@ -281,6 +282,14 @@ class RepeatCumulativeRequest(BaseModel):
 
 class FmcsaMonthlySummaryRequest(BaseModel):
     months: int = Field(default=6, ge=1, le=24)
+
+
+class FederalConsolidatedAnalyticsRequest(BaseModel):
+    query_type: str
+    date_from: str | None = None
+    date_to: str | None = None
+    naics_prefix: str | None = None
+    limit: int = Field(default=20, ge=1, le=500)
 
 
 class SbaLoansQueryRequest(BaseModel):
@@ -1230,6 +1239,35 @@ async def federal_contract_leads_repeat_cumulative(
 
     results = get_repeat_awardee_cumulative(filters=filters)
     return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/analytics",
+    response_model=DataEnvelope,
+    responses={400: {"model": ErrorEnvelope}},
+)
+async def federal_contract_leads_consolidated_analytics(
+    payload: FederalConsolidatedAnalyticsRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    if not payload.date_from or not payload.date_to:
+        return error_response("date_from and date_to are required", 400)
+    if payload.query_type == "sub_naics_breakdown" and not payload.naics_prefix:
+        return error_response("naics_prefix is required for sub_naics_breakdown", 400)
+
+    params: dict[str, Any] = {
+        "date_from": payload.date_from,
+        "date_to": payload.date_to,
+        "limit": payload.limit,
+    }
+    if payload.naics_prefix is not None:
+        params["naics_prefix"] = payload.naics_prefix
+
+    try:
+        result = run_federal_analytics(query_type=payload.query_type, params=params)
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    return DataEnvelope(data=result)
 
 
 @entity_relationships_router.post(
