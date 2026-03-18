@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T19:45:00Z
+**Last updated:** 2026-03-18T22:30:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_PERSISTENCE_MODEL_AUDIT.md`
+**Summary:** Created `docs/PERSISTENCE_MODEL.md` — 10 sections covering: persistence overview (layered diagram of all write paths), standalone operation execution (operation_runs + operation_attempts, no entity upsert), pipeline execution persistence (batch submit upfront rows, per-step updates, entity state upsert at pipeline end only, 9 auto-persist branches with try/catch swallowing), confirmed writes vs auto-persist comparison (with production evidence), cumulative context durability (volatile — in-memory only, but snapshots stored in step_results.output_payload), array and multi-entity handling (fan-out required for entity materialization), fan-out persistence model, data loss risk inventory (9 risks enumerated), persistence decision tree for new operations, and table-level persistence reference (27+ tables with reliability ratings and production row counts). Traced 15+ source files with line-number references. Cross-referenced all claims against OPERATIONAL_REALITY_CHECK_2026-03-18.
+**Flagged:** Cumulative context is volatile (in-memory only) but recoverable from step_results.output_payload snapshots — no automated recovery exists. Entity state upsert happens once at pipeline END, not per-step — mid-pipeline crashes lose all entity-level persistence from earlier steps. 4 dedicated tables have 0 production rows due to auto-persist silent failures: company_customers, gemini_icp_job_titles, salesnav_prospects, company_ads. salesnav_prospects has a context-shape failure where the auto-persist guard checks for `sourceCompanyDomain` which upstream steps don't provide. Entity relationships are NOT recorded by run-pipeline.ts — all 1,892 rows come from Clay ingestion and fan-out. Timeline events are explicitly best-effort (never raises).
 
 ---
 
