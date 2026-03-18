@@ -36,7 +36,13 @@ from app.services.federal_leads_analytics import (
     get_repeat_awardee_velocity,
     get_award_ceiling_gap,
 )
+from app.services.federal_leads_insights import (
+    get_vertical_insights,
+    get_agency_insights,
+    get_repeat_awardee_cumulative,
+)
 from app.services.federal_leads_verticals import get_vertical_summary
+from app.services.fmcsa_analytics import get_fmcsa_monthly_summary
 from app.services.sba_query import query_sba_loans, get_sba_loans_stats
 from app.services.leads_query import query_leads
 from app.services.salesnav_prospects import query_salesnav_prospects
@@ -240,6 +246,41 @@ class GeographicRequest(BaseModel):
     naics_prefix: str | None = None
     business_size: str | None = None
     awarding_agency_code: str | None = None
+
+
+class VerticalInsightsRequest(BaseModel):
+    group_by: str = Field(default="vertical", pattern="^(vertical|naics_code)$")
+    naics_prefix: str | None = None
+    state: str | None = None
+    business_size: str | None = None
+    awarding_agency_code: str | None = None
+    action_date_from: str | None = None
+    action_date_to: str | None = None
+    awardee_type: str | None = Field(default=None, pattern="^(first_time|repeat)$")
+    limit: int = Field(default=100, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class AgencyInsightsRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    business_size: str | None = None
+    action_date_from: str | None = None
+    action_date_to: str | None = None
+    awardee_type: str | None = Field(default=None, pattern="^(first_time|repeat)$")
+
+
+class RepeatCumulativeRequest(BaseModel):
+    naics_prefix: str | None = None
+    state: str | None = None
+    business_size: str | None = None
+    awarding_agency_code: str | None = None
+    action_date_from: str | None = None
+    action_date_to: str | None = None
+
+
+class FmcsaMonthlySummaryRequest(BaseModel):
+    months: int = Field(default=6, ge=1, le=24)
 
 
 class SbaLoansQueryRequest(BaseModel):
@@ -1120,6 +1161,86 @@ async def federal_contract_leads_ceiling_gap(
             filters[key] = value
 
     results = get_award_ceiling_gap(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/insights/vertical-breakdown",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_vertical_insights(
+    payload: VerticalInsightsRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in (
+        "naics_prefix", "state", "business_size", "awarding_agency_code",
+        "action_date_from", "action_date_to", "awardee_type",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_vertical_insights(
+        filters=filters,
+        group_by=payload.group_by,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/insights/agency-breakdown",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_agency_insights(
+    payload: AgencyInsightsRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in (
+        "naics_prefix", "state", "business_size",
+        "action_date_from", "action_date_to", "awardee_type",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_agency_insights(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/federal-contract-leads/insights/repeat-cumulative",
+    response_model=DataEnvelope,
+)
+async def federal_contract_leads_repeat_cumulative(
+    payload: RepeatCumulativeRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    filters: dict[str, Any] = {}
+    for key in (
+        "naics_prefix", "state", "business_size", "awarding_agency_code",
+        "action_date_from", "action_date_to",
+    ):
+        value = getattr(payload, key)
+        if value is not None:
+            filters[key] = value
+
+    results = get_repeat_awardee_cumulative(filters=filters)
+    return DataEnvelope(data=results)
+
+
+@entity_relationships_router.post(
+    "/fmcsa/analytics/monthly-summary",
+    response_model=DataEnvelope,
+)
+async def fmcsa_monthly_summary(
+    payload: FmcsaMonthlySummaryRequest,
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
+):
+    results = get_fmcsa_monthly_summary(months=payload.months)
     return DataEnvelope(data=results)
 
 
