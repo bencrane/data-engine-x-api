@@ -24,6 +24,7 @@ from app.services.company_operations import (
     execute_company_enrich_profile,
     execute_company_enrich_profile_blitzapi,
     execute_company_enrich_technographics,
+    execute_company_search_enigma_brands,
 )
 from app.services.fmcsa_socrata_operations import (
     execute_company_enrich_fmcsa_carrier_all_history,
@@ -172,6 +173,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.search.blitzapi",
     "company.search.fmcsa",
     "company.search.ecommerce",
+    "company.search.enigma.brands",
     "company.ads.search.linkedin",
     "company.ads.search.meta",
     "company.ads.search.google",
@@ -625,6 +627,17 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.locations":
         result = await execute_company_enrich_locations(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.search.enigma.brands":
+        result = await execute_company_search_enigma_brands(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,

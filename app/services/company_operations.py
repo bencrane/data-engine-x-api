@@ -13,6 +13,8 @@ from app.contracts.company_enrich import (
     CardRevenueOutput,
     CompanyEnrichProfileOutput,
     EcommerceEnrichOutput,
+    EnigmaBrandDiscoveryOutput,
+    EnigmaLocationsEnrichedOutput,
     EnigmaLocationsOutput,
     FMCSACarrierEnrichOutput,
     TechnographicsOutput,
@@ -810,12 +812,31 @@ async def execute_company_enrich_locations(
         enigma_brand_id = _as_non_empty_str(matched.get("enigma_brand_id"))
         brand_name = _as_non_empty_str(matched.get("brand_name"))
 
-    locations_result = await enigma.get_brand_locations(
-        api_key=settings.enigma_api_key,
-        brand_id=enigma_brand_id,
-        limit=limit,
-        operating_status_filter=operating_status_filter,
-    )
+    options = _as_dict(input_data.get("options")) or _as_dict(context.get("options"))
+    include_card_transactions = bool(options.get("include_card_transactions"))
+    include_ranks = bool(options.get("include_ranks"))
+    include_reviews = bool(options.get("include_reviews"))
+    include_roles = bool(options.get("include_roles"))
+    use_enriched = include_card_transactions or include_ranks or include_reviews or include_roles
+
+    if use_enriched:
+        locations_result = await enigma.get_locations_enriched(
+            api_key=settings.enigma_api_key,
+            brand_id=enigma_brand_id,
+            limit=limit,
+            operating_status_filter=operating_status_filter,
+            include_card_transactions=include_card_transactions,
+            include_ranks=include_ranks,
+            include_reviews=include_reviews,
+            include_roles=include_roles,
+        )
+    else:
+        locations_result = await enigma.get_brand_locations(
+            api_key=settings.enigma_api_key,
+            brand_id=enigma_brand_id,
+            limit=limit,
+            operating_status_filter=operating_status_filter,
+        )
     attempts.append(locations_result["attempt"])
 
     locations_mapped = _as_dict(locations_result.get("mapped"))
@@ -849,7 +870,10 @@ async def execute_company_enrich_locations(
     }
 
     try:
-        validated_output = EnigmaLocationsOutput.model_validate(merged_output).model_dump()
+        if use_enriched:
+            validated_output = EnigmaLocationsEnrichedOutput.model_validate(merged_output).model_dump()
+        else:
+            validated_output = EnigmaLocationsOutput.model_validate(merged_output).model_dump()
     except Exception as exc:  # noqa: BLE001
         return {
             "run_id": run_id,
@@ -876,6 +900,84 @@ async def execute_company_enrich_locations(
         "output": {
             **validated_output,
         },
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_search_enigma_brands(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.search.enigma.brands"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    prompt = _as_non_empty_str(input_data.get("prompt")) or _as_non_empty_str(context.get("prompt"))
+    if not prompt:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["prompt"],
+            "provider_attempts": attempts,
+        }
+
+    state = _as_non_empty_str(input_data.get("state")) or _as_non_empty_str(context.get("state"))
+    city = _as_non_empty_str(input_data.get("city")) or _as_non_empty_str(context.get("city"))
+    limit = _as_positive_int(input_data.get("limit")) or _as_positive_int(context.get("limit")) or 10
+    page_token = _as_non_empty_str(input_data.get("page_token")) or _as_non_empty_str(context.get("page_token"))
+
+    settings = get_settings()
+    search_result = await enigma.search_brands_by_prompt(
+        api_key=settings.enigma_api_key,
+        prompt=prompt,
+        state=state,
+        city=city,
+        limit=limit,
+        page_token=page_token,
+    )
+    attempts.append(search_result["attempt"])
+
+    mapped = _as_dict(search_result.get("mapped"))
+    search_status = search_result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": search_status,
+            "provider_attempts": attempts,
+        }
+
+    geography_parts = [p for p in [city, state] if p]
+    geography_filter = ", ".join(geography_parts) if geography_parts else None
+
+    output = {
+        **mapped,
+        "prompt": prompt,
+        "geography_filter": geography_filter,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaBrandDiscoveryOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": "found" if mapped.get("brands") else "not_found",
+        "output": validated_output,
         "provider_attempts": attempts,
     }
 
