@@ -24,7 +24,8 @@ DROP MATERIALIZED VIEW IF EXISTS entities.mv_fmcsa_latest_census CASCADE;
 CREATE MATERIALIZED VIEW entities.mv_fmcsa_latest_census AS
 SELECT DISTINCT ON (dot_number) *
 FROM entities.motor_carrier_census_records
-WHERE feed_date = (SELECT MAX(feed_date) FROM entities.motor_carrier_census_records)
+WHERE feed_date = (SELECT MAX(feed_date) FROM entities.motor_carrier_census_records WHERE source_feed_name != 'test_feed')
+  AND source_feed_name != 'test_feed'
 ORDER BY dot_number, row_position;
 
 -- Unique index enables REFRESH MATERIALIZED VIEW CONCURRENTLY
@@ -94,7 +95,8 @@ SELECT
     MAX(report_date) AS latest_crash_date,
     SUM(CASE WHEN fatalities > 0 THEN 1 ELSE 0 END) AS fatal_crash_count_12mo
 FROM entities.commercial_vehicle_crashes
-WHERE feed_date = (SELECT MAX(feed_date) FROM entities.commercial_vehicle_crashes)
+WHERE feed_date = (SELECT MAX(feed_date) FROM entities.commercial_vehicle_crashes WHERE source_feed_name != 'test_feed')
+  AND source_feed_name != 'test_feed'
   AND report_date >= CURRENT_DATE - INTERVAL '12 months'
 GROUP BY dot_number;
 
