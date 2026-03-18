@@ -8,6 +8,8 @@
 
 SET statement_timeout = '0';
 
+DROP MATERIALIZED VIEW IF EXISTS entities.mv_fmcsa_authority_grants CASCADE;
+
 CREATE MATERIALIZED VIEW entities.mv_fmcsa_authority_grants AS
 SELECT
     id,
@@ -15,26 +17,27 @@ SELECT
     usdot_number,
     sub_number,
     operating_authority_type,
+    original_authority_action_description,
+    original_authority_action_served_date,
     final_authority_action_description,
     final_authority_decision_date,
     final_authority_served_date,
-    original_authority_action_description,
     source_feed_name,
     source_observed_at,
     feed_date,
     created_at
 FROM entities.operating_authority_histories
-WHERE final_authority_action_description IS NOT NULL
-  AND UPPER(final_authority_action_description) LIKE '%GRANT%'
-  AND final_authority_decision_date IS NOT NULL;
+WHERE original_authority_action_description IS NOT NULL
+  AND UPPER(original_authority_action_description) LIKE '%GRANT%'
+  AND original_authority_action_served_date IS NOT NULL;
 
 -- Unique index: enables REFRESH MATERIALIZED VIEW CONCURRENTLY
 CREATE UNIQUE INDEX idx_mv_fmcsa_ag_id
     ON entities.mv_fmcsa_authority_grants (id);
 
--- Primary analytics dimension: decision date
-CREATE INDEX idx_mv_fmcsa_ag_decision_date
-    ON entities.mv_fmcsa_authority_grants (final_authority_decision_date);
+-- Primary analytics dimension: served date
+CREATE INDEX idx_mv_fmcsa_ag_served_date
+    ON entities.mv_fmcsa_authority_grants (original_authority_action_served_date);
 
 -- Carrier lookups
 CREATE INDEX idx_mv_fmcsa_ag_usdot
@@ -46,6 +49,6 @@ CREATE INDEX idx_mv_fmcsa_ag_auth_type
 
 -- Composite for the exact analytics query pattern
 CREATE INDEX idx_mv_fmcsa_ag_date_usdot
-    ON entities.mv_fmcsa_authority_grants (final_authority_decision_date, usdot_number);
+    ON entities.mv_fmcsa_authority_grants (original_authority_action_served_date, usdot_number);
 
 RESET statement_timeout;
