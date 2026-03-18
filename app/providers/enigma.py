@@ -1,3 +1,4 @@
+# Last updated: 2026-03-18T20:15:00Z
 from __future__ import annotations
 
 from typing import Any
@@ -751,6 +752,21 @@ def _build_locations_enriched_query(
                       }
                     }
                   }
+                  legalEntities(first: 1) {
+                    edges {
+                      node {
+                        persons(first: 1) {
+                          edges {
+                            node {
+                              fullName
+                              firstName
+                              lastName
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -877,7 +893,17 @@ def _map_enriched_location(node: dict[str, Any]) -> dict[str, Any]:
             email_node = _first_edge_node(role_node.get("emailAddresses"))
             phone_contact_node = _first_edge_node(role_node.get("phoneNumbers"))
 
+            legal_entity_node = _first_edge_node(role_node.get("legalEntities"))
+            person_node = _first_edge_node(legal_entity_node.get("persons")) if legal_entity_node else {}
+            full_name = _as_str(person_node.get("fullName"))
+            if not full_name:
+                first = _as_str(person_node.get("firstName")) or ""
+                last = _as_str(person_node.get("lastName")) or ""
+                combined = f"{first} {last}".strip()
+                full_name = combined if combined else None
+
             contacts.append({
+                "full_name": full_name,
                 "job_title": _as_str(role_node.get("jobTitle")),
                 "job_function": _as_str(role_node.get("jobFunction")),
                 "management_level": _as_str(role_node.get("managementLevel")),
@@ -1010,11 +1036,20 @@ async def search_brands_by_prompt(
         return {"attempt": attempt, "mapped": None}
 
     attempt["status"] = "found"
+
+    current_offset = 0
+    if page_token is not None:
+        try:
+            current_offset = int(page_token)
+        except (TypeError, ValueError):
+            current_offset = 0
+
+    has_next = len(brands) >= safe_limit
     mapped = {
         "brands": brands,
         "total_returned": len(brands),
-        "has_next_page": False,
-        "next_page_token": None,
+        "has_next_page": has_next,
+        "next_page_token": str(current_offset + safe_limit) if has_next else None,
     }
     return {"attempt": attempt, "mapped": mapped}
 
