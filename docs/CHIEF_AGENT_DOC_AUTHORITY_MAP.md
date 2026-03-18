@@ -1,6 +1,6 @@
 # Chief Agent Doc Authority Map
 
-**Last updated:** 2026-03-18T06:30:00Z
+**Last updated:** 2026-03-18T07:00:00Z
 
 Use this as the first-click navigation file for Chief Agent onboarding.
 
@@ -13,8 +13,9 @@ Start with this file, then continue in this order before drafting directives, ju
 3. `CLAUDE.md`
 4. `docs/CHIEF_AGENT_DIRECTIVE.md`
 5. `docs/WRITING_EXECUTOR_DIRECTIVES.md`
-6. `docs/STRATEGIC_DIRECTIVE.md`
-7. `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` when the work touches entity schema or dedicated intelligence tables
+6. `docs/REPO_CONVENTIONS.md`
+7. `docs/STRATEGIC_DIRECTIVE.md`
+8. `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` when the work touches entity schema or dedicated intelligence tables
 
 That is the canonical Chief Agent reading path. Do not start with older architecture snapshots, handoff notes, or individual executor directives.
 
@@ -44,13 +45,23 @@ These define the Chief Agent role, reading order, and directive-writing standard
 - `docs/CHIEF_AGENT_DOC_AUTHORITY_MAP.md`
 - `docs/CHIEF_AGENT_DIRECTIVE.md`
 - `docs/WRITING_EXECUTOR_DIRECTIVES.md`
+- `docs/REPO_CONVENTIONS.md`
 - `docs/EXECUTOR_AGENT_DIRECTIVE.md` as a secondary aligned template reference
 
 ### Technical Reference
 
 Useful for broad lookup, system orientation, and codebase surface area after you understand the truth hierarchy:
 
+- `docs/AUTH_MODEL.md`
+- `docs/API_SURFACE.md`
+- `docs/DEPLOY_PROTOCOL.md`
 - `docs/SYSTEM_OVERVIEW.md`
+
+### Operational
+
+Executor work history and tracking:
+
+- `docs/EXECUTOR_WORK_LOG.md`
 
 ### Historical / Lower-Authority Context
 
