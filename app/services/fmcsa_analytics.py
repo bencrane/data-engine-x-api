@@ -62,7 +62,7 @@ def get_fmcsa_monthly_summary(
             TO_CHAR(final_authority_decision_date, 'YYYY-MM') AS month,
             COUNT(*) AS count
         FROM entities.operating_authority_histories
-        WHERE final_authority_decision_date >= (CURRENT_DATE - (%s || ' months')::INTERVAL)
+        WHERE final_authority_decision_date >= (CURRENT_DATE - make_interval(months => %s))
           AND final_authority_action_description IS NOT NULL
           AND final_authority_action_description ILIKE '%%GRANT%%'
         GROUP BY month
@@ -75,7 +75,7 @@ def get_fmcsa_monthly_summary(
             TO_CHAR(cancel_effective_date, 'YYYY-MM') AS month,
             COUNT(*) AS count
         FROM entities.insurance_policy_history_events
-        WHERE cancel_effective_date >= (CURRENT_DATE - (%s || ' months')::INTERVAL)
+        WHERE cancel_effective_date >= (CURRENT_DATE - make_interval(months => %s))
           AND cancel_effective_date IS NOT NULL
         GROUP BY month
         ORDER BY month ASC

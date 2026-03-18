@@ -298,7 +298,7 @@ def get_repeat_awardee_cumulative(
                 recipient_uei,
                 SUM(CAST(NULLIF(federal_action_obligation, '') AS NUMERIC)) AS company_total_obligated,
                 COUNT(DISTINCT contract_award_unique_key) AS company_award_count,
-                MAX(CAST(NULLIF(total_awards_count, '') AS INTEGER)) AS total_awards_count_max
+                MAX(total_awards_count) AS total_awards_count_max
             FROM entities.mv_federal_contract_leads
             {where_clause}
             GROUP BY vertical, recipient_uei
