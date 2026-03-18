@@ -1,18 +1,8 @@
-<!-- Last updated: 2026-03-18T06:30:00Z -->
+<!-- Last updated: 2026-03-18T07:00:00Z -->
 
 # CLAUDE.md
 
 Authoritative context for agents working in `data-engine-x-api`.
-
-## Chief Agent Rules
-
-When operating as chief agent (drafting executor directives, reviewing executor reports):
-
-- **You do not write code, run commands, or execute anything.** Your deliverable is a directive document.
-- **Directives specify intent, constraints, and acceptance criteria — not implementation.** Do not write SQL, Python, or TypeScript in directives. The executor writes the implementation. If the executor needs a specific file path, function signature, or API shape, provide that. Do not provide the body.
-- **Use the standard directive boilerplate exactly.** Every directive includes the scope clarification on autonomy verbatim from `docs/WRITING_EXECUTOR_DIRECTIVES.md`. Do not paraphrase it.
-- **Do not read infrastructure/setup docs to plan your own execution.** You are not the executor. Read system docs only to understand what exists, what's broken, and what constraints apply — so you can write an accurate directive.
-- **Follow the template in `docs/WRITING_EXECUTOR_DIRECTIVES.md` exactly.** Reference the example directives in `docs/EXECUTOR_DIRECTIVE_*.md` for quality and format calibration.
 
 ## Strategic Directive (Read First)
 
@@ -33,6 +23,14 @@ Important boundary:
 - `docs/EXECUTOR_DIRECTIVE_*.md` files are scope documents and calibration examples.
 - They are not evidence that the described work is deployed, production-verified, or currently healthy.
 - Treat directives as intent unless the production-truth reports independently confirm the result.
+
+## Repo Conventions
+
+See `docs/REPO_CONVENTIONS.md`.
+
+## Executor Work Log
+
+See `docs/EXECUTOR_WORK_LOG.md`.
 
 ## Production State (as of 2026-03-18)
 
@@ -188,28 +186,6 @@ Read `docs/ENTITY_DATABASE_DESIGN_PRINCIPLES.md` before any schema work on entit
 - **Trigger owns:** `run-pipeline` task execution flow, per-step calls to `/api/v1/execute`, retries/failure propagation, fan-out continuation.
 - Boundary is internal HTTP with service auth.
 
-## Multi-Tenancy Model
-
-Hierarchy:
-
-`Org -> Company -> User`
-
-Execution lineage:
-
-`Company -> Submission -> Pipeline Run -> Step Result`
-
-Roles:
-
-- `org_admin`
-- `company_admin`
-- `member`
-
-Scoping rules:
-
-- Tenant-owned queries are scoped by `org_id`.
-- Company-scoped auth paths enforce `company_id` ownership.
-- Step registry is global; blueprints are org-scoped.
-
 ## Core Concepts
 
 1. **Operations (`/api/v1/execute`)**: canonical operation IDs call provider adapters and return canonical output + provider attempts.
@@ -219,111 +195,17 @@ Scoping rules:
 5. **Entity timeline**: upserts and fan-out discoveries emit timeline events into `entity_timeline`.
 6. **Output chaining**: each succeeded step merges `result.output` into cumulative context for the next step.
 
-## Auth Model
+## Auth & Multi-Tenancy
 
-All protected endpoints use `Authorization: Bearer <token>`, with four supported auth paths:
+See `docs/AUTH_MODEL.md`.
 
-1. **Tenant JWT session**
-   - Decoded by `decode_tenant_session_jwt(...)`.
-   - Produces tenant `AuthContext`.
-2. **Tenant API token**
-   - SHA-256 hash lookup against `api_tokens`.
-   - Produces tenant `AuthContext`.
-3. **Super-admin API key**
-   - Compared to `SUPER_ADMIN_API_KEY`.
-   - Grants `SuperAdminContext` on super-admin endpoints, flexible super-admin routes, and `/api/v1/execute` (requires `org_id` + `company_id` in request body).
-4. **Internal service auth (Trigger.dev -> FastAPI)**
-   - `Authorization: Bearer <INTERNAL_API_KEY>`
-   - `x-internal-org-id: <org_uuid>` (required)
-   - `x-internal-company-id: <company_uuid>` (optional)
+## API Surface
 
-## API Endpoints (Current)
+See `docs/API_SURFACE.md`.
 
-- `GET /health`
-- `POST /api/auth/login`
-- `POST /api/auth/me`
-- `POST /api/super-admin/login`
-- `POST /api/super-admin/me`
-- `POST /api/super-admin/orgs/create`
-- `POST /api/super-admin/orgs/list`
-- `POST /api/super-admin/orgs/get`
-- `POST /api/super-admin/orgs/update`
-- `POST /api/super-admin/companies/create`
-- `POST /api/super-admin/companies/list`
-- `POST /api/super-admin/companies/get`
-- `POST /api/super-admin/users/create`
-- `POST /api/super-admin/users/list`
-- `POST /api/super-admin/users/get`
-- `POST /api/super-admin/users/deactivate`
-- `POST /api/super-admin/steps/register`
-- `POST /api/super-admin/steps/list`
-- `POST /api/super-admin/steps/get`
-- `POST /api/super-admin/steps/update`
-- `POST /api/super-admin/steps/deactivate`
-- `POST /api/super-admin/blueprints/create`
-- `POST /api/super-admin/blueprints/list`
-- `POST /api/super-admin/blueprints/get`
-- `POST /api/super-admin/blueprints/update`
-- `POST /api/super-admin/api-tokens/create`
-- `POST /api/super-admin/api-tokens/list`
-- `POST /api/super-admin/api-tokens/revoke`
-- `POST /api/super-admin/submissions/create`
-- `POST /api/super-admin/submissions/list`
-- `POST /api/super-admin/submissions/get`
-- `POST /api/super-admin/pipeline-runs/list`
-- `POST /api/super-admin/pipeline-runs/get`
-- `POST /api/super-admin/pipeline-runs/retry`
-- `POST /api/super-admin/step-results/list`
-- `POST /api/companies/list`
-- `POST /api/companies/get`
-- `POST /api/blueprints/list`
-- `POST /api/blueprints/get`
-- `POST /api/blueprints/create`
-- `POST /api/steps/list`
-- `POST /api/steps/get`
-- `POST /api/users/list`
-- `POST /api/users/get`
-- `POST /api/submissions/create`
-- `POST /api/submissions/list`
-- `POST /api/submissions/get`
-- `POST /api/pipeline-runs/list`
-- `POST /api/pipeline-runs/get`
-- `POST /api/step-results/list`
-- `POST /api/v1/execute`
-- `POST /api/v1/batch/submit`
-- `POST /api/v1/batch/status`
-- `POST /api/v1/entities/companies`
-- `POST /api/v1/entities/persons`
-- `POST /api/v1/entities/job-postings`
-- `POST /api/v1/entities/timeline`
-- `POST /api/v1/entity-relationships/query`
-- `POST /api/v1/icp-job-titles/query`
-- `POST /api/v1/company-customers/query`
-- `POST /api/v1/gemini-icp-job-titles/query`
-- `POST /api/v1/company-ads/query`
-- `POST /api/v1/salesnav-prospects/query`
-- `POST /api/v1/icp-title-details/query`
-- `POST /api/v1/company-intel-briefings/query`
-- `POST /api/v1/person-intel-briefings/query`
-- `POST /api/internal/pipeline-runs/get`
-- `POST /api/internal/pipeline-runs/update-status`
-- `POST /api/internal/pipeline-runs/fan-out`
-- `POST /api/internal/step-results/update`
-- `POST /api/internal/step-results/mark-remaining-skipped`
-- `POST /api/internal/submissions/update-status`
-- `POST /api/internal/submissions/sync-status`
-- `POST /api/internal/entity-state/upsert`
-- `POST /api/internal/entity-timeline/record-step-event`
-- `POST /api/internal/entity-relationships/record`
-- `POST /api/internal/entity-relationships/record-batch`
-- `POST /api/internal/entity-relationships/invalidate`
-- `POST /api/internal/icp-job-titles/upsert`
-- `POST /api/internal/company-customers/upsert`
-- `POST /api/internal/gemini-icp-job-titles/upsert`
-- `POST /api/internal/company-ads/upsert`
-- `POST /api/internal/salesnav-prospects/upsert`
-- `POST /api/internal/company-intel-briefings/upsert`
-- `POST /api/internal/person-intel-briefings/upsert`
+## Deploy Protocol, Commands & Migrations
+
+See `docs/DEPLOY_PROTOCOL.md`.
 
 ## Trigger.dev Conventions
 
@@ -333,62 +215,6 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
 - `run-pipeline.ts` is the legacy generic orchestrator. It is being replaced by dedicated workflow files — one task per pipeline. Do NOT modify `run-pipeline.ts` for new work.
 - A fan-out router task sits between the DB-backed fan-out path and the dedicated workflows. It receives generic fan-out payloads, determines the target workflow, translates the payload, and triggers the correct task. Falls back to `run-pipeline` for unmigrated pipelines.
 - Generic `execute-step` remains legacy and is not used.
-
-## Common Commands
-
-```bash
-# API tests
-pytest
-
-# Trigger.dev local runtime
-cd trigger && npx trigger.dev@latest dev
-
-# Run API locally with Doppler-injected env
-doppler run -- uvicorn app.main:app --reload
-
-# Run tests with Doppler-injected env
-doppler run -- pytest
-```
-
-## Deploy Protocol
-
-**Deploy Railway FIRST, Trigger.dev SECOND. Never simultaneously.**
-
-```bash
-# Step 1: Push to main (Railway auto-deploys)
-git push origin main
-# WAIT 1-2 minutes for Railway deploy to complete
-
-# Step 2: Deploy Trigger.dev (only after Railway is live)
-cd trigger && npx trigger.dev@4.4.3 deploy
-```
-
-Trigger.dev calls FastAPI internal endpoints. If Trigger.dev deploys before Railway, new endpoint calls fail silently — pipeline succeeds but data doesn't persist to dedicated tables. See `docs/troubleshooting-fixes/` for incidents.
-
-## Database / Migrations
-
-Migration order:
-
-1. `001_initial_schema.sql`
-2. `002_users_password_hash.sql`
-3. `003_api_tokens_user_id.sql`
-4. `004_steps_executor_config.sql`
-5. `005_operation_execution_history.sql`
-6. `006_blueprint_operation_steps.sql`
-7. `007_entity_state.sql`
-8. `008_companies_domain.sql`
-9. `009_entity_timeline.sql`
-10. `010_fan_out.sql`
-11. `011_entity_timeline_submission_lookup.sql`
-12. `012_entity_snapshots.sql`
-13. `013_job_posting_entities.sql`
-14. `014_entity_relationships.sql`
-15. `015_icp_job_titles.sql`
-16. `016_intel_briefing_tables.sql`
-17. `017_icp_title_extraction.sql`
-18. `018_alumnigtm_persistence.sql`
-19. `019_company_ads.sql`
-20. `020_salesnav_prospects.sql`
 
 ## Environment Configuration
 
@@ -446,4 +272,3 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `docs/troubleshooting-fixes/` — incident post-mortems and fixes
   - `docs/api-reference-docs/` — provider API documentation (Enigma, Parallel.ai)
 - `Dockerfile`
-
