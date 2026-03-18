@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T23:45:00Z
+**Last updated:** 2026-03-18T23:59:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_GLOBAL_DATA_MODEL_ANALYSIS.md`
+**Summary:** Produced `docs/GLOBAL_DATA_MODEL_ANALYSIS.md` — 13-section exhaustive analysis covering: executive summary, doctrinal position vs production reality gap (Principles 3/4 never followed for entity tables), complete org-scoping inventory (31 org-scoped tables: 16 identity-scoping, 8 visibility-scoping, 7 lineage-tracking; 22 global tables + 1 MV), global data patterns (FMCSA/federal model), entity identity resolution impact (org_id participates at 3 levels: natural key lookup, UUID5 seed, primary key), dedicated table classification (6 inherently org-specific, 5 globalizable candidates), execution lineage boundary (5 tables stay org-scoped), identity resolution conflict analysis (4 merge strategies evaluated), auth/API surface changes (12 endpoints mapped), migration path estimate (~25-35 files, 4 phases), 8 risks enumerated, 3 alternative approaches compared, recommendation: proceed with Alternative C (Hybrid — global entities, org-scoped dedicated tables) deferred until 4 prerequisites are met. All code paths traced with file-level citations across entity_state.py, entities_v1.py, internal.py, run-pipeline.ts, internal-api.ts, and all 9 dedicated table services. Cross-referenced against all 41 migration files and 4 reference documents.
+**Flagged:** Entity IDs are deterministic UUID5 hashes with org_id baked into the seed string (e.g., `company:{org_id}:domain:{canonical_domain}`) — this means globalization requires re-hashing ALL entity IDs, not just removing an org_id column. `list_company_entities` and `list_person_entities` use `get_current_auth` (tenant-only) instead of `_resolve_flexible_auth` — an existing oversight that would need fixing regardless. `run-pipeline.ts` generic `internalPost()` function does NOT set `x-internal-org-id` headers (unlike the properly-implemented `InternalApiClient` class) — org_id is passed in request body instead, creating an inconsistency with the documented internal auth model.
 
 ---
 
