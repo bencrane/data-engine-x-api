@@ -6,6 +6,7 @@ import { companyEnrichment } from "./company-enrichment.js";
 import { companyIntelBriefing } from "./company-intel-briefing.js";
 import { icpJobTitlesDiscovery } from "./icp-job-titles-discovery.js";
 import { personIntelBriefing } from "./person-intel-briefing.js";
+import { enigmaSmBDiscovery } from "./enigma-smb-discovery.js";
 import { personSearchEnrichment } from "./person-search-enrichment.js";
 import { runPipeline } from "./run-pipeline.js";
 import { PipelineRunRouterPayload, runPipelineRouter } from "../workflows/pipeline-run-router.js";
@@ -30,6 +31,8 @@ export const pipelineRunRouter = task({
           companyIntelBriefing.trigger(childPayload, { idempotencyKey: options.idempotencyKey }),
         personIntelBriefing: (childPayload, options) =>
           personIntelBriefing.trigger(childPayload, { idempotencyKey: options.idempotencyKey }),
+        enigmaSmBDiscovery: (childPayload, options) =>
+          enigmaSmBDiscovery.trigger(childPayload, { idempotencyKey: options.idempotencyKey }),
         runPipeline: (childPayload, options) =>
           runPipeline.trigger(childPayload, { idempotencyKey: options.idempotencyKey }),
       },

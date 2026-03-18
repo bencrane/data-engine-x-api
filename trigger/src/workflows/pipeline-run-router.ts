@@ -3,6 +3,7 @@ import { logger } from "@trigger.dev/sdk/v3";
 import type { CompanyEnrichmentWorkflowPayload } from "./company-enrichment.js";
 import { normalizeCompanyDomain, WorkflowContext } from "./context.js";
 import type { CompanyIntelBriefingWorkflowPayload } from "./company-intel-briefing.js";
+import type { EnigmaSmBDiscoveryWorkflowPayload } from "./enigma-smb-discovery.js";
 import { createInternalApiClient, InternalApiClient } from "./internal-api.js";
 import type { IcpJobTitlesDiscoveryWorkflowPayload } from "./icp-job-titles-discovery.js";
 import type { JobPostingDiscoveryWorkflowPayload } from "./job-posting-discovery.js";
@@ -26,7 +27,8 @@ type SupportedRouteKey =
   | "person-search-enrichment"
   | "icp-job-titles-discovery"
   | "company-intel-briefing"
-  | "person-intel-briefing";
+  | "person-intel-briefing"
+  | "enigma-smb-discovery";
 
 type StepConfig = Record<string, unknown>;
 
@@ -88,6 +90,7 @@ export interface PipelineRunRouterDispatchers {
   icpJobTitlesDiscovery: TriggerDispatcher<IcpJobTitlesDiscoveryWorkflowPayload>;
   companyIntelBriefing: TriggerDispatcher<CompanyIntelBriefingWorkflowPayload>;
   personIntelBriefing: TriggerDispatcher<PersonIntelBriefingWorkflowPayload>;
+  enigmaSmBDiscovery: TriggerDispatcher<EnigmaSmBDiscoveryWorkflowPayload>;
   runPipeline: TriggerDispatcher<PipelineRunRouterPayload>;
 }
 
@@ -112,7 +115,8 @@ type RoutePayload =
   | PersonSearchEnrichmentWorkflowPayload
   | IcpJobTitlesDiscoveryWorkflowPayload
   | CompanyIntelBriefingWorkflowPayload
-  | PersonIntelBriefingWorkflowPayload;
+  | PersonIntelBriefingWorkflowPayload
+  | EnigmaSmBDiscoveryWorkflowPayload;
 
 interface ResolvedRoute {
   routeKey: SupportedRouteKey;
@@ -637,6 +641,60 @@ const ROUTES: RouteCandidate[] = [
       };
     },
   },
+  {
+    routeKey: "enigma-smb-discovery",
+    taskId: "enigma-smb-discovery",
+    operationIds: ["company.search.enigma.brands", "company.enrich.card_revenue", "company.enrich.locations"],
+    isSupportedShape: (steps) =>
+      steps.every(
+        (step) =>
+          step.fan_out !== true &&
+          configsOnlyUseAllowedKeys(step.step_config, [
+            "prompt",
+            "geography_state",
+            "geography_city",
+            "brand_limit",
+            "enrich_card_revenue",
+            "enrich_locations",
+            "location_limit",
+            "include_location_card_transactions",
+            "include_location_ranks",
+            "include_location_reviews",
+            "include_location_roles",
+          ]),
+      ),
+    buildPayload: ({ routerPayload, run, context, steps, stepResults }) => {
+      const prompt = getOptionalString(context, ["prompt"]) ??
+        getOptionalString(steps[0]?.step_config as WorkflowContext, ["prompt"]);
+      if (!prompt) return null;
+
+      const firstStepConfig = (steps[0]?.step_config ?? {}) as WorkflowContext;
+
+      return {
+        pipeline_run_id: routerPayload.pipeline_run_id,
+        org_id: routerPayload.org_id,
+        company_id: routerPayload.company_id,
+        submission_id: run.submission_id,
+        step_results: stepResults,
+        initial_context: context,
+        prompt,
+        geography_state: getOptionalString(context, ["geography_state"]) ??
+          getOptionalString(firstStepConfig, ["geography_state"]),
+        geography_city: getOptionalString(context, ["geography_city"]) ??
+          getOptionalString(firstStepConfig, ["geography_city"]),
+        brand_limit: getNumberConfig(firstStepConfig, ["brand_limit"]),
+        enrich_card_revenue: getBooleanConfig(firstStepConfig, ["enrich_card_revenue"]),
+        enrich_locations: getBooleanConfig(firstStepConfig, ["enrich_locations"]),
+        location_limit: getNumberConfig(firstStepConfig, ["location_limit"]),
+        include_location_card_transactions: getBooleanConfig(firstStepConfig, ["include_location_card_transactions"]),
+        include_location_ranks: getBooleanConfig(firstStepConfig, ["include_location_ranks"]),
+        include_location_reviews: getBooleanConfig(firstStepConfig, ["include_location_reviews"]),
+        include_location_roles: getBooleanConfig(firstStepConfig, ["include_location_roles"]),
+        api_url: routerPayload.api_url,
+        internal_api_key: routerPayload.internal_api_key,
+      };
+    },
+  },
 ];
 
 function matchesOperationSequence(
@@ -760,6 +818,7 @@ export async function runPipelineRouter(
     "icp-job-titles-discovery": dependencies.dispatchers.icpJobTitlesDiscovery,
     "company-intel-briefing": dependencies.dispatchers.companyIntelBriefing,
     "person-intel-briefing": dependencies.dispatchers.personIntelBriefing,
+    "enigma-smb-discovery": dependencies.dispatchers.enigmaSmBDiscovery,
   }[resolvedRoute.routeKey];
 
   const handle = await dispatcher(resolvedRoute.payload as never, {
