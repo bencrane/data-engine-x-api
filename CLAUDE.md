@@ -1,3 +1,5 @@
+<!-- Last updated: 2026-03-18T06:30:00Z -->
+
 # CLAUDE.md
 
 Authoritative context for agents working in `data-engine-x-api`.
@@ -22,7 +24,7 @@ Before relying on repo documentation beyond the audited reports, read `docs/CHIE
 
 Production-truth precedence is:
 
-1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`
+1. `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`
 2. `docs/DATA_ENGINE_X_ARCHITECTURE.md`
 3. `CLAUDE.md`
 
@@ -32,13 +34,15 @@ Important boundary:
 - They are not evidence that the described work is deployed, production-verified, or currently healthy.
 - Treat directives as intent unless the production-truth reports independently confirm the result.
 
-## Production State (as of 2026-03-10)
+## Production State (as of 2026-03-18)
 
-This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which was verified against live production SQL.
+This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, which was verified against live production SQL.
 
 ### What Works End-to-End
 
-- The core pipeline loop works: submission -> pipeline run -> step execution -> entity state upsert. Production has `48` `submissions`, `837` `pipeline_runs`, `3283` `step_results`, `88` `company_entities`, `503` `person_entities`, `1` `job_posting_entities`, `4345` `entity_timeline` rows, and `93` `entity_snapshots`.
+- Schema split is complete: application tables live in `ops` (orchestration) and `entities` (domain data) schemas. `public` no longer contains application tables.
+- The core pipeline loop works: submission -> pipeline run -> step execution -> entity state upsert. Production has `48` `submissions`, `837` `pipeline_runs`, `3283` `step_results`, `45,679` `company_entities`, `2,116` `person_entities`, `1` `job_posting_entities`, `4,345` `entity_timeline` rows, and `6,407` `entity_snapshots`.
+- All previously stuck `running` pipeline runs and step results have resolved. No stuck runs remain.
 - Blueprints with at least one completed production submission:
   - `AlumniGTM Company Resolution Only v1` - `2` completed submissions
   - `AlumniGTM Company Workflow v1` - `5` completed submissions
@@ -52,20 +56,24 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
   - `icp_job_titles` - healthy; `161` successful found steps materialized into `156` distinct table rows with `0` missing matches
   - `company_intel_briefings` - healthy; `3` successful steps materialized into `3` rows
   - `person_intel_briefings` - healthy; `1` successful step materialized into `1` row
+  - `entity_relationships` - healthy; `1,892` rows (all `person` → `works_at` → `company`, from Clay ingestion)
+- FMCSA infrastructure: `18` canonical tables with `~75.8M` total rows, daily feed ingestion active with data current as of `2026-03-17`.
+- Federal data: `sam_gov_entities` (`867,137`), `sba_7a_loans` (`356,375`), `usaspending_contracts` (`14,665,610`), `mv_federal_contract_leads` materialized view (`1,340,862`).
+- Clay ingestion: `45,591` company entities and `1,613` person entities added since March 10 via `external.ingest.clay.find_companies` and `external.ingest.clay.find_people`.
 
 ### What Is Broken
 
-- `company_customers` is broken. Production has `17` successful customer-producing steps and `331` emitted customer items, but the table has `0` rows.
-- `gemini_icp_job_titles` is broken. Production has `20` successful upstream steps over `12` distinct company domains, but the table has `0` rows.
-- `salesnav_prospects` is broken. Production has `17` successful prospect-producing steps and `349` emitted prospect rows, but the table has `0` rows. The most likely cause is context shape failure: successful `person.search.sales_nav_url` steps do not carry a usable `source_company_domain`, so the Trigger auto-persist branch never fires.
-- `company_ads` is broken harder than the others. The prod table does not exist at all. The repo has `supabase/migrations/019_company_ads.sql`, but migration `019` never reached production.
-- `8` `pipeline_runs` are stuck in `running` for `7-14` days.
-- `7` `step_results` are stuck in `running`, and `190` are still `queued`.
+- `company_customers` is broken. Production has `18` successful customer-producing steps, but the table has `0` rows.
+- `gemini_icp_job_titles` is broken. Production has `20` successful upstream steps, but the table has `0` rows.
+- `salesnav_prospects` is broken. Production has `35` successful prospect-producing steps, but the table has `0` rows. The most likely cause is context shape failure: successful `person.search.sales_nav_url` steps do not carry a usable `source_company_domain`, so the Trigger auto-persist branch never fires.
+- `company_ads` exists in production (was missing in March 10) but has `0` rows.
+- `fmcsa_carrier_signals` table exists but has `0` rows — signal detection has not populated it.
+- `mv_fmcsa_authority_grants` and `mv_fmcsa_insurance_cancellations` do not exist in production — migrations 036 and 037 have not been applied.
 - End-to-end pipeline reliability is not clean. Pipelines frequently fail to complete cleanly due to silent auto-persist failures, context-shape issues, and the deploy-sequencing landmine between Railway and Trigger.dev.
 
 ### What Has Never Been Used
 
-- `46` executable operations in the current code catalog have never been called in production:
+- `54` executable operations in the current code catalog have never been called in production:
   - `address.search`
   - `address.search.residents`
   - `company.analyze.sec_10k`
@@ -73,8 +81,14 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
   - `company.analyze.sec_8k_executive`
   - `company.derive.detect_changes`
   - `company.derive.extract_icp_titles`
+  - `company.enrich.bulk_profile`
+  - `company.enrich.bulk_prospeo`
   - `company.enrich.ecommerce`
   - `company.enrich.fmcsa`
+  - `company.enrich.fmcsa.carrier_all_history`
+  - `company.enrich.fmcsa.company_census`
+  - `company.enrich.fmcsa.insur_all_history`
+  - `company.enrich.fmcsa.revocation_all_history`
   - `company.enrich.hiring_signals`
   - `company.enrich.locations`
   - `company.enrich.tech_stack`
@@ -109,6 +123,8 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
   - `person.contact.resolve_mobile_phone`
   - `person.contact.verify_email`
   - `person.derive.detect_changes`
+  - `person.resolve.from_email`
+  - `person.resolve.from_phone`
   - `person.resolve.linkedin_from_email`
   - `person.search.employee_finder_blitzapi`
   - `person.search.waterfall_icp_blitzapi`
@@ -121,7 +137,6 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
   - `Staffing Activation / CRM Cleanup v1`
   - `Staffing Activation / CRM Enrichment v1`
 - Tables with zero production usage:
-  - `entity_relationships` has `0` rows
   - `extracted_icp_job_title_details` has `0` rows
 
 ### Known Architectural Problems
@@ -134,7 +149,7 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md`, which w
 
 ## Diagnostic Reports
 
-- `docs/OPERATIONAL_REALITY_CHECK_2026-03-10.md` - live production state audit
+- `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md` - live production state audit
 - `docs/DATA_ENGINE_X_ARCHITECTURE.md` - full architecture doc including known problems
 
 If `CLAUDE.md` or `docs/SYSTEM_OVERVIEW.md` conflict with these reports, the reports are correct.
