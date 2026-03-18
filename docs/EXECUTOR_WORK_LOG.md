@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T22:30:00Z
+**Last updated:** 2026-03-18T23:45:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_ENIGMA_SMB_DISCOVERY_ENRICHMENT.md`
+**Summary:** Built Enigma SMB discovery and enrichment end-to-end: 2 new provider adapters (`search_brands_by_prompt` for semantic brand discovery with geographic filtering, `get_locations_enriched` for extended location retrieval with conditional Plus-tier attribute inclusion via dynamic GraphQL query construction), 5 new Pydantic contracts (`EnigmaBrandItem`, `EnigmaBrandDiscoveryOutput`, `EnigmaContactItem`, `EnigmaLocationEnrichedItem`, `EnigmaLocationsEnrichedOutput`), 1 new operation wired (`company.search.enigma.brands` with new service function) + 1 extended (`company.enrich.locations` now accepts `options` dict for enriched retrieval with backward compatibility), migration 041 with 2 new tables (`entities.enigma_brand_discoveries` with 18 columns/4 indexes, `entities.enigma_location_enrichments` with 22 columns/4 indexes), 2 array-capable upsert services with schema-qualified queries + 2 internal endpoints, 1 dedicated Trigger.dev workflow (`enigma-smb-discovery`) with 3 steps (brand discovery always, per-brand card revenue conditional, per-brand location enrichment conditional) using confirmed writes for entity state + brand discoveries + location enrichments, registered in fan-out router, 1 blueprint definition (Enigma SMB Discovery v1, Substrate org). Credit cost model verified against API reference: Core=1/entity, Plus=3/entity, Premium=5/entity — location count is the primary cost multiplier.
+**Flagged:** The `search` endpoint returns results as an array (not paginated connections) when using `prompt` — the current adapter does not extract `pageInfo` from the prompt-based search response because the search results at the top level are a union type array, not a connection. Pagination for prompt-based brand search may need live API verification to confirm the exact response shape. The `get_locations_enriched` adapter uses a 60s timeout (vs 30s for other adapters) due to the potentially larger GraphQL query with multiple Plus-tier connections. The `reviewCount` and `reviewScoreAvg` fields in the `ReviewSummary` type are typed as `String` in the SDL (not Int/Float) — the adapter uses `_as_int` and `_as_float` which handle string-to-number conversion. The `roles` connection on `OperatingLocation` does not include a `fullName` field for contacts — only `jobTitle`, `jobFunction`, `managementLevel` plus nested email/phone connections. The `full_name` field on `EnigmaContactItem` will always be `None` from the adapter.
 
 ---
 
