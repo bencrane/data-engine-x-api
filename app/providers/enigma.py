@@ -638,3 +638,511 @@ async def get_brand_locations(
         "end_cursor": end_cursor,
     }
     return {"attempt": attempt, "mapped": mapped}
+
+
+SEARCH_BRANDS_BY_PROMPT_QUERY = """
+query SearchBrandsByPrompt($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      names(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      websites(first: 1) {
+        edges {
+          node {
+            website
+          }
+        }
+      }
+      count(field: "operatingLocations")
+      industries(first: 3) {
+        edges {
+          node {
+            industryDesc
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+def _build_locations_enriched_query(
+    *,
+    include_card_transactions: bool = False,
+    include_ranks: bool = False,
+    include_reviews: bool = False,
+    include_roles: bool = False,
+) -> str:
+    card_txn_fragment = ""
+    if include_card_transactions:
+        card_txn_fragment = """
+            twelveMonthRevenueConnection: cardTransactions(
+              first: 1,
+              conditions: {filter: {AND: [{EQ: ["period", "12m"]}, {EQ: ["quantityType", "card_revenue_amount"]}]}}
+            ) { edges { node { projectedQuantity } } }
+            twelveMonthGrowthConnection: cardTransactions(
+              first: 1,
+              conditions: {filter: {AND: [{EQ: ["period", "12m"]}, {EQ: ["quantityType", "card_revenue_yoy_growth"]}]}}
+            ) { edges { node { projectedQuantity } } }
+            twelveMonthCustomersConnection: cardTransactions(
+              first: 1,
+              conditions: {filter: {AND: [{EQ: ["period", "12m"]}, {EQ: ["quantityType", "card_customers_average_daily_count"]}]}}
+            ) { edges { node { projectedQuantity } } }
+            twelveMonthTransactionsConnection: cardTransactions(
+              first: 1,
+              conditions: {filter: {AND: [{EQ: ["period", "12m"]}, {EQ: ["quantityType", "card_transactions_count"]}]}}
+            ) { edges { node { projectedQuantity } } }
+"""
+
+    ranks_fragment = ""
+    if include_ranks:
+        ranks_fragment = """
+            ranks(first: 1) {
+              edges {
+                node {
+                  position
+                  cohortSize
+                }
+              }
+            }
+"""
+
+    reviews_fragment = ""
+    if include_reviews:
+        reviews_fragment = """
+            reviewSummaries(first: 1) {
+              edges {
+                node {
+                  reviewCount
+                  reviewScoreAvg
+                }
+              }
+            }
+"""
+
+    roles_fragment = ""
+    if include_roles:
+        roles_fragment = """
+            roles(first: 10) {
+              edges {
+                node {
+                  jobTitle
+                  jobFunction
+                  managementLevel
+                  emailAddresses(first: 3) {
+                    edges {
+                      node {
+                        emailAddress
+                      }
+                    }
+                  }
+                  phoneNumbers(first: 3) {
+                    edges {
+                      node {
+                        phoneNumber
+                      }
+                    }
+                  }
+                }
+              }
+            }
+"""
+
+    return f"""
+query GetLocationsEnriched($searchInput: SearchInput!, $locationLimit: Int!, $locationConditions: ConnectionConditions) {{
+  search(searchInput: $searchInput) {{
+    ... on Brand {{
+      id
+      namesConnection(first: 1) {{
+        edges {{
+          node {{
+            name
+          }}
+        }}
+      }}
+      totalLocationCount: count(field: "operatingLocations")
+      operatingLocationsConnection(first: $locationLimit, conditions: $locationConditions) {{
+        totalCount
+        edges {{
+          node {{
+            id
+            names(first: 1) {{
+              edges {{
+                node {{
+                  name
+                }}
+              }}
+            }}
+            addresses(first: 1) {{
+              edges {{
+                node {{
+                  fullAddress
+                  streetAddress1
+                  city
+                  state
+                  postalCode
+                }}
+              }}
+            }}
+            operatingStatuses(first: 1) {{
+              edges {{
+                node {{
+                  operatingStatus
+                }}
+              }}
+            }}
+            phoneNumbers(first: 1) {{
+              edges {{
+                node {{
+                  phoneNumber
+                }}
+              }}
+            }}
+            websites(first: 1) {{
+              edges {{
+                node {{
+                  website
+                }}
+              }}
+            }}
+            {card_txn_fragment}
+            {ranks_fragment}
+            {reviews_fragment}
+            {roles_fragment}
+          }}
+        }}
+        pageInfo {{
+          hasNextPage
+          endCursor
+        }}
+      }}
+    }}
+  }}
+}}
+""".strip()
+
+
+def _map_enriched_location(node: dict[str, Any]) -> dict[str, Any]:
+    base = _map_operating_location(node)
+
+    phone_node = _first_edge_node(node.get("phoneNumbers"))
+    base["phone"] = _as_str(phone_node.get("phoneNumber"))
+
+    website_node = _first_edge_node(node.get("websites"))
+    base["website"] = _as_str(website_node.get("website"))
+
+    revenue_node = _first_edge_node(node.get("twelveMonthRevenueConnection"))
+    if revenue_node:
+        base["annual_card_revenue"] = _as_float(revenue_node.get("projectedQuantity"))
+
+    growth_node = _first_edge_node(node.get("twelveMonthGrowthConnection"))
+    if growth_node:
+        base["annual_card_revenue_yoy_growth"] = _as_float(growth_node.get("projectedQuantity"))
+
+    customers_node = _first_edge_node(node.get("twelveMonthCustomersConnection"))
+    if customers_node:
+        base["annual_avg_daily_customers"] = _as_float(customers_node.get("projectedQuantity"))
+
+    txn_node = _first_edge_node(node.get("twelveMonthTransactionsConnection"))
+    if txn_node:
+        base["annual_transaction_count"] = _as_float(txn_node.get("projectedQuantity"))
+
+    rank_node = _first_edge_node(node.get("ranks"))
+    if rank_node:
+        base["competitive_rank"] = _as_int(rank_node.get("position"))
+        base["competitive_rank_total"] = _as_int(rank_node.get("cohortSize"))
+
+    review_node = _first_edge_node(node.get("reviewSummaries"))
+    if review_node:
+        base["review_count"] = _as_int(review_node.get("reviewCount"))
+        base["review_avg_rating"] = _as_float(review_node.get("reviewScoreAvg"))
+
+    roles_connection = _as_dict(node.get("roles"))
+    roles_edges = _as_list(roles_connection.get("edges"))
+    if roles_edges:
+        contacts: list[dict[str, Any]] = []
+        for role_edge in roles_edges:
+            role_node = _as_dict(_as_dict(role_edge).get("node"))
+            if not role_node:
+                continue
+
+            email_node = _first_edge_node(role_node.get("emailAddresses"))
+            phone_contact_node = _first_edge_node(role_node.get("phoneNumbers"))
+
+            contacts.append({
+                "job_title": _as_str(role_node.get("jobTitle")),
+                "job_function": _as_str(role_node.get("jobFunction")),
+                "management_level": _as_str(role_node.get("managementLevel")),
+                "email": _as_str(email_node.get("emailAddress")),
+                "phone": _as_str(phone_contact_node.get("phoneNumber")),
+            })
+        if contacts:
+            base["contacts"] = contacts
+
+    return base
+
+
+async def search_brands_by_prompt(
+    *,
+    api_key: str | None,
+    prompt: str,
+    state: str | None = None,
+    city: str | None = None,
+    limit: int = 10,
+    page_token: str | None = None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "search_brands_by_prompt",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_prompt = _as_str(prompt)
+    if not normalized_prompt:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "search_brands_by_prompt",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    safe_limit = max(1, min(int(limit), 100))
+
+    search_input: dict[str, Any] = {
+        "entityType": "BRAND",
+        "prompt": normalized_prompt,
+        "conditions": {"limit": safe_limit},
+    }
+    if page_token:
+        search_input["conditions"]["pageToken"] = page_token
+
+    normalized_state = _as_str(state)
+    normalized_city = _as_str(city)
+    if normalized_state or normalized_city:
+        address: dict[str, str] = {}
+        if normalized_state:
+            address["state"] = normalized_state
+        if normalized_city:
+            address["city"] = normalized_city
+        search_input["address"] = address
+
+    request_payload = {
+        "query": SEARCH_BRANDS_BY_PROMPT_QUERY,
+        "variables": {"searchInput": search_input},
+    }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            ENIGMA_GRAPHQL_URL,
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=request_payload,
+        )
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": "search_brands_by_prompt",
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return {"attempt": attempt, "mapped": None}
+
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors:
+        attempt["status"] = "failed"
+        return {"attempt": attempt, "mapped": None}
+
+    data = _as_dict(body.get("data"))
+    search_results = _as_list(data.get("search"))
+    if not search_results:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    brands: list[dict[str, Any]] = []
+    for result_item in search_results:
+        brand = _as_dict(result_item)
+        if not brand:
+            continue
+
+        brand_id = _as_str(brand.get("id")) or _as_str(brand.get("enigmaId"))
+        if not brand_id:
+            continue
+
+        website_node = _first_edge_node(brand.get("websites"))
+        industries_connection = _as_dict(brand.get("industries"))
+        industries_edges = _as_list(industries_connection.get("edges"))
+        industry_list: list[str] = []
+        for ind_edge in industries_edges:
+            ind_node = _as_dict(_as_dict(ind_edge).get("node"))
+            desc = _as_str(ind_node.get("industryDesc"))
+            if desc:
+                industry_list.append(desc)
+
+        brands.append({
+            "enigma_brand_id": brand_id,
+            "brand_name": _extract_brand_name(brand),
+            "website": _as_str(website_node.get("website")),
+            "location_count": _as_int(brand.get("count")),
+            "industries": industry_list,
+        })
+
+    if not brands:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    attempt["status"] = "found"
+    mapped = {
+        "brands": brands,
+        "total_returned": len(brands),
+        "has_next_page": False,
+        "next_page_token": None,
+    }
+    return {"attempt": attempt, "mapped": mapped}
+
+
+async def get_locations_enriched(
+    *,
+    api_key: str | None,
+    brand_id: str,
+    limit: int = 25,
+    operating_status_filter: str | None = None,
+    include_card_transactions: bool = False,
+    include_ranks: bool = False,
+    include_reviews: bool = False,
+    include_roles: bool = False,
+    page_token: str | None = None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_locations_enriched",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_locations_enriched",
+                "status": "skipped",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    try:
+        parsed_limit = int(limit)
+    except (TypeError, ValueError):
+        parsed_limit = 25
+    safe_limit = max(1, min(parsed_limit, 100))
+
+    normalized_status_filter = _as_str(operating_status_filter)
+    location_conditions: dict[str, Any] | None = None
+    if normalized_status_filter:
+        location_conditions = {
+            "filter": {"EQ": ["operatingStatuses.operatingStatus", normalized_status_filter]},
+        }
+    if page_token:
+        if location_conditions is None:
+            location_conditions = {}
+        location_conditions["pageToken"] = page_token
+
+    query = _build_locations_enriched_query(
+        include_card_transactions=include_card_transactions,
+        include_ranks=include_ranks,
+        include_reviews=include_reviews,
+        include_roles=include_roles,
+    )
+
+    variables = {
+        "searchInput": _analytics_search_input(brand_id=normalized_brand_id),
+        "locationLimit": safe_limit,
+        "locationConditions": location_conditions,
+    }
+
+    request_payload = {
+        "query": query,
+        "variables": variables,
+    }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            ENIGMA_GRAPHQL_URL,
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=request_payload,
+        )
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": "get_locations_enriched",
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return {"attempt": attempt, "mapped": None}
+
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors:
+        attempt["status"] = "failed"
+        return {"attempt": attempt, "mapped": None}
+
+    brand = _first_brand(body)
+    if not brand:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    attempt["status"] = "found"
+
+    locations_connection = _as_dict(brand.get("operatingLocationsConnection"))
+    edges = _as_list(locations_connection.get("edges"))
+    locations = [
+        _map_enriched_location(_as_dict(_as_dict(edge).get("node")))
+        for edge in edges
+        if _as_dict(_as_dict(edge).get("node"))
+    ]
+    page_info = _as_dict(locations_connection.get("pageInfo"))
+    has_next_page_raw = page_info.get("hasNextPage")
+    has_next_page = has_next_page_raw if isinstance(has_next_page_raw, bool) else None
+    end_cursor = _as_str(page_info.get("endCursor"))
+
+    mapped = {
+        "brand_name": _extract_brand_name(brand),
+        "enigma_brand_id": _as_str(brand.get("id")),
+        "total_location_count": _as_int(brand.get("totalLocationCount")),
+        "locations": locations,
+        "location_count": len(locations),
+        "open_count": sum(1 for loc in locations if loc.get("operating_status") == "Open"),
+        "closed_count": sum(
+            1 for loc in locations if loc.get("operating_status") in ("Closed", "Temporarily Closed")
+        ),
+        "has_next_page": has_next_page,
+        "end_cursor": end_cursor,
+    }
+    return {"attempt": attempt, "mapped": mapped}
