@@ -18,6 +18,8 @@ from app.services.carrier_safety_basic_percentiles import upsert_carrier_safety_
 from app.services.commercial_vehicle_crashes import upsert_commercial_vehicle_crashes
 from app.services.company_ads import upsert_company_ads
 from app.services.company_customers import upsert_company_customers
+from app.services.enigma_brand_discoveries import upsert_enigma_brand_discoveries
+from app.services.enigma_location_enrichments import upsert_enigma_location_enrichments
 from app.services.insurance_filing_rejections import upsert_insurance_filing_rejections
 from app.services.insurance_policies import upsert_insurance_policies
 from app.services.insurance_policy_filings import upsert_insurance_policy_filings
@@ -301,6 +303,27 @@ class InternalUpsertPersonIntelBriefingsRequest(BaseModel):
     raw_parallel_output: dict[str, Any]
     parallel_run_id: str | None = None
     processor: str | None = None
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertEnigmaBrandDiscoveriesRequest(BaseModel):
+    discovery_prompt: str
+    brands: list[dict[str, Any]]
+    company_id: str | None = None
+    geography_state: str | None = None
+    geography_city: str | None = None
+    discovered_by_operation_id: str = "company.search.enigma.brands"
+    source_submission_id: str | None = None
+    source_pipeline_run_id: str | None = None
+
+
+class InternalUpsertEnigmaLocationEnrichmentsRequest(BaseModel):
+    enigma_brand_id: str
+    locations: list[dict[str, Any]]
+    brand_name: str | None = None
+    company_id: str | None = None
+    enriched_by_operation_id: str = "company.enrich.locations"
     source_submission_id: str | None = None
     source_pipeline_run_id: str | None = None
 
@@ -797,6 +820,47 @@ async def internal_upsert_person_intel_briefings(
         raw_parallel_output=payload.raw_parallel_output,
         parallel_run_id=payload.parallel_run_id,
         processor=payload.processor,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/enigma-brand-discoveries/upsert", response_model=DataEnvelope)
+async def internal_upsert_enigma_brand_discoveries(
+    payload: InternalUpsertEnigmaBrandDiscoveriesRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_enigma_brand_discoveries(
+        org_id=org_id,
+        company_id=payload.company_id,
+        discovery_prompt=payload.discovery_prompt,
+        geography_state=payload.geography_state,
+        geography_city=payload.geography_city,
+        brands=payload.brands,
+        discovered_by_operation_id=payload.discovered_by_operation_id,
+        source_submission_id=payload.source_submission_id,
+        source_pipeline_run_id=payload.source_pipeline_run_id,
+    )
+    return DataEnvelope(data=result)
+
+
+@router.post("/enigma-location-enrichments/upsert", response_model=DataEnvelope)
+async def internal_upsert_enigma_location_enrichments(
+    payload: InternalUpsertEnigmaLocationEnrichmentsRequest,
+    request: Request,
+    _: None = Depends(require_internal_key),
+):
+    org_id = _require_internal_org_id(request)
+    result = upsert_enigma_location_enrichments(
+        org_id=org_id,
+        company_id=payload.company_id,
+        enigma_brand_id=payload.enigma_brand_id,
+        brand_name=payload.brand_name,
+        locations=payload.locations,
+        enriched_by_operation_id=payload.enriched_by_operation_id,
         source_submission_id=payload.source_submission_id,
         source_pipeline_run_id=payload.source_pipeline_run_id,
     )
