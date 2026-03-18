@@ -1577,6 +1577,39 @@ async def internal_federal_contract_leads_refresh(
     return DataEnvelope(data=result)
 
 
+# ── FMCSA Analytics MV Refresh ─────────────────────────────────────────────
+
+
+class InternalFmcsaAnalyticsRefreshRequest(BaseModel):
+    concurrent: bool = True
+    views: str = "all"  # "all", "authority_grants", "insurance_cancellations"
+
+
+@router.post("/fmcsa-analytics/refresh", response_model=DataEnvelope)
+async def internal_fmcsa_analytics_refresh(
+    payload: InternalFmcsaAnalyticsRefreshRequest,
+    _: None = Depends(require_internal_key),
+):
+    from app.services.fmcsa_analytics_refresh import (
+        refresh_all_fmcsa_analytics,
+        refresh_fmcsa_authority_grants,
+        refresh_fmcsa_insurance_cancellations,
+    )
+
+    if payload.views == "all":
+        result = refresh_all_fmcsa_analytics(concurrent=payload.concurrent)
+    elif payload.views == "authority_grants":
+        result = refresh_fmcsa_authority_grants(concurrent=payload.concurrent)
+    elif payload.views == "insurance_cancellations":
+        result = refresh_fmcsa_insurance_cancellations(concurrent=payload.concurrent)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid views value: {payload.views!r}. Must be 'all', 'authority_grants', or 'insurance_cancellations'.",
+        )
+    return DataEnvelope(data=result)
+
+
 # ── USASpending.gov Contract Ingest ────────────────────────────────────────
 
 
