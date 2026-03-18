@@ -1,0 +1,50 @@
+{
+  "name": "Enigma SMB Discovery v1",
+  "description": "Discover SMB brands by vertical/geography using Enigma semantic search, optionally enrich with card revenue and location data",
+  "entity_type": "company",
+  "org_id": "7612fd45-8fda-4b6b-af7f-c8b0ebaa3a19",
+  "steps": [
+    {
+      "position": 1,
+      "operation_id": "company.search.enigma.brands",
+      "step_config": {}
+    },
+    {
+      "position": 2,
+      "operation_id": "company.enrich.card_revenue",
+      "step_config": {},
+      "condition": {
+        "exists": "brands"
+      }
+    },
+    {
+      "position": 3,
+      "operation_id": "company.enrich.locations",
+      "step_config": {},
+      "condition": {
+        "exists": "brands"
+      }
+    }
+  ],
+  "_registration_sql": [
+    "-- Blueprint registration (DO NOT RUN — chief agent handles this)",
+    "INSERT INTO ops.blueprints (id, name, description, entity_type, org_id, is_active, created_at, updated_at)",
+    "VALUES (",
+    "  gen_random_uuid(),",
+    "  'Enigma SMB Discovery v1',",
+    "  'Discover SMB brands by vertical/geography using Enigma semantic search, optionally enrich with card revenue and location data',",
+    "  'company',",
+    "  '7612fd45-8fda-4b6b-af7f-c8b0ebaa3a19',",
+    "  true,",
+    "  NOW(),",
+    "  NOW()",
+    ");",
+    "",
+    "-- Then insert steps referencing the new blueprint_id:",
+    "INSERT INTO ops.blueprint_steps (id, blueprint_id, position, operation_id, step_config, condition, created_at, updated_at)",
+    "VALUES",
+    "  (gen_random_uuid(), '<blueprint_id>', 1, 'company.search.enigma.brands', '{}', NULL, NOW(), NOW()),",
+    "  (gen_random_uuid(), '<blueprint_id>', 2, 'company.enrich.card_revenue', '{}', '{\"exists\": \"brands\"}', NOW(), NOW()),",
+    "  (gen_random_uuid(), '<blueprint_id>', 3, 'company.enrich.locations', '{}', '{\"exists\": \"brands\"}', NOW(), NOW());"
+  ]
+}
