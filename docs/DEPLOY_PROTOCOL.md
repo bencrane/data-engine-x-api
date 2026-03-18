@@ -1,6 +1,6 @@
 # Deploy Protocol
 
-**Last updated:** 2026-03-18T07:15:00Z
+**Last updated:** 2026-03-18T16:00:00Z
 
 Deploy ordering, common commands, and migration reference for `data-engine-x-api`.
 
@@ -76,3 +76,6 @@ Migration order:
 35. `035_fmcsa_carrier_signals.sql`
 36. `036_mv_fmcsa_authority_grants.sql`
 37. `037_mv_fmcsa_insurance_cancellations.sql`
+38. `038_mv_usaspending_analytical.sql` — USASpending typed base MV + first-contract MV (**heavy: 10-30 min on 14.6M rows, run during low-traffic window**)
+39. `039_mv_fmcsa_analytical.sql` — FMCSA latest census, safety percentiles, crash counts, master carrier MVs (**heavy: run during low-traffic window**)
+40. `040_analytical_missing_indexes.sql` — supplemental composite indexes for USASpending, SAM.gov, SBA
