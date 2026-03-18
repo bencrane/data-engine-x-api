@@ -42,35 +42,28 @@ def get_fmcsa_monthly_summary(
 
     months: how many months back to look (default 6).
 
-    Uses last_observed_at (indexed) as the date filter proxy to avoid
-    full table scans, then groups by the domain-specific date columns.
+    Queries pre-filtered materialized views (mv_fmcsa_authority_grants,
+    mv_fmcsa_insurance_cancellations) to avoid full base table scans.
     """
     safe_months = max(1, min(months, 24))
     cutoff_date = date.today() - timedelta(days=safe_months * 31)
 
-    # Use last_observed_at (indexed) to limit scan, then group by decision date
     new_auth_sql = """
         SELECT
             TO_CHAR(final_authority_decision_date, 'YYYY-MM') AS month,
             COUNT(*) AS count
-        FROM entities.operating_authority_histories
-        WHERE last_observed_at >= %s
-          AND final_authority_decision_date >= %s
-          AND final_authority_action_description IS NOT NULL
-          AND UPPER(final_authority_action_description) LIKE %s
+        FROM entities.mv_fmcsa_authority_grants
+        WHERE final_authority_decision_date >= %s
         GROUP BY month
         ORDER BY month ASC
     """
 
-    # Use last_observed_at (indexed) to limit scan
     cancel_sql = """
         SELECT
             TO_CHAR(cancel_effective_date, 'YYYY-MM') AS month,
             COUNT(*) AS count
-        FROM entities.insurance_policy_history_events
-        WHERE last_observed_at >= %s
-          AND cancel_effective_date >= %s
-          AND cancel_effective_date IS NOT NULL
+        FROM entities.mv_fmcsa_insurance_cancellations
+        WHERE cancel_effective_date >= %s
         GROUP BY month
         ORDER BY month ASC
     """
@@ -78,12 +71,12 @@ def get_fmcsa_monthly_summary(
     pool = _get_pool()
     with pool.connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute("SET statement_timeout = '60s'")
+            cur.execute("SET statement_timeout = '30s'")
 
-            cur.execute(new_auth_sql, [cutoff_date, cutoff_date, "%GRANT%"])
+            cur.execute(new_auth_sql, [cutoff_date])
             new_auth_rows = cur.fetchall()
 
-            cur.execute(cancel_sql, [cutoff_date, cutoff_date])
+            cur.execute(cancel_sql, [cutoff_date])
             cancel_rows = cur.fetchall()
 
             cur.execute("RESET statement_timeout")

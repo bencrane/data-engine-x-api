@@ -93,16 +93,14 @@ def _new_authorities_by_month(p: dict[str, Any]) -> dict[str, Any]:
             TO_CHAR(final_authority_decision_date, 'YYYY-MM') AS month,
             COUNT(*) AS new_authorities,
             COUNT(DISTINCT usdot_number) AS unique_carriers
-        FROM entities.operating_authority_histories
+        FROM entities.mv_fmcsa_authority_grants
         WHERE final_authority_decision_date >= %s
           AND final_authority_decision_date <= %s
-          AND final_authority_action_description IS NOT NULL
-          AND UPPER(final_authority_action_description) LIKE %s
         GROUP BY month
         ORDER BY month ASC
     """
 
-    rows = _execute(sql, [date_from, date_to, "%GRANT%"])
+    rows = _execute(sql, [date_from, date_to])
     return {
         "query_type": "new_authorities_by_month",
         "date_range": {"from": date_from, "to": date_to},
@@ -123,22 +121,21 @@ def _new_authorities_by_month(p: dict[str, Any]) -> dict[str, Any]:
 def _insurance_cancellations_by_month(p: dict[str, Any]) -> dict[str, Any]:
     date_from, date_to = _resolve_date_range(p)
 
-    # Primary source: insurance_policy_history_events
+    # Primary source: materialized view (pre-filtered to non-null cancel dates)
     primary_sql = """
         SELECT
             TO_CHAR(cancel_effective_date, 'YYYY-MM') AS month,
             COUNT(*) AS cancellations,
             COUNT(DISTINCT usdot_number) AS unique_carriers
-        FROM entities.insurance_policy_history_events
+        FROM entities.mv_fmcsa_insurance_cancellations
         WHERE cancel_effective_date >= %s
           AND cancel_effective_date <= %s
-          AND cancel_effective_date IS NOT NULL
         GROUP BY month
         ORDER BY month ASC
     """
 
     rows = _execute(primary_sql, [date_from, date_to])
-    source = "insurance_policy_history_events"
+    source = "mv_fmcsa_insurance_cancellations"
 
     # Fallback to fmcsa_carrier_signals if primary returns nothing
     if not rows:
