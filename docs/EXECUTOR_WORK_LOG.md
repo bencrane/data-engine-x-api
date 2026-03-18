@@ -1,10 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T07:15:00Z
+**Last updated:** 2026-03-18T15:30:00Z
 
 Reverse-chronological log of completed executor directive work.
 
 ---
+
+## 2026-03-18
+**Directive:** `docs/EXECUTOR_DIRECTIVE_DATA_ACCESS_AND_AUTH_GUIDE.md`
+**Summary:** Created `docs/DATA_ACCESS_AND_AUTH_GUIDE.md` covering 4 auth types (tenant JWT, tenant API token, super-admin key/JWT, internal service auth), data visibility by auth context, connection patterns for 4 client types (frontend, notebook/Hex, script, Trigger.dev), 5 write paths (batch submit, single execute, internal callbacks, Clay ingest, FMCSA feed ingest), credential disambiguation table, schema/table scoping reference (46 tables: 24 org-scoped, 22+ global), and 6 practical curl examples. All claims traced to actual code paths.
+**Flagged:** Auth gap: `/api/v1/entities/companies` and `/api/v1/entities/persons` use `get_current_auth` instead of `_resolve_flexible_auth`, so super-admin API key/JWT cannot query these two endpoints (all other entity endpoints accept super-admin). Internal auth produces `auth_method="api_token"` making it indistinguishable from tenant API tokens in audit logs. AUTH_MODEL.md does not mention super-admin JWT path (only API key), but code supports both.
 
 ## 2026-03-18
 **Directive:** Migration list update (standalone fix)
