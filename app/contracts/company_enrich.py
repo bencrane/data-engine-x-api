@@ -285,3 +285,172 @@ class FMCSACarrierEnrichOutput(BaseModel):
     authority_status: str | None = None
     authority_grant_date: str | None = None
     source_provider: str = "fmcsa"
+
+
+# ---------------------------------------------------------------------------
+# Enigma additional operation contracts
+# ---------------------------------------------------------------------------
+
+
+class EnigmaAggregateOutput(BaseModel):
+    brands_count: int | None = None
+    locations_count: int | None = None
+    legal_entities_count: int | None = None
+    geography_state: str | None = None
+    geography_city: str | None = None
+    operating_status_filter: str | None = None
+    source_provider: str = "enigma"
+
+
+class EnigmaRegistrationItem(BaseModel):
+    enigma_registration_id: str | None = None
+    registration_type: str | None = None
+    registration_state: str | None = None
+    jurisdiction_type: str | None = None
+    registered_name: str | None = None
+    file_number: str | None = None
+    issue_date: str | None = None
+    status: str | None = None
+    sub_status: str | None = None
+
+
+class EnigmaRegisteredEntityItem(BaseModel):
+    enigma_registered_entity_id: str | None = None
+    name: str | None = None
+    registered_entity_type: str | None = None
+    formation_date: str | None = None
+    formation_year: int | None = None
+    registrations: list[EnigmaRegistrationItem] | None = None
+
+
+class EnigmaLegalEntityPersonItem(BaseModel):
+    enigma_person_id: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None
+    date_of_birth: str | None = None
+
+
+class EnigmaLegalEntityItem(BaseModel):
+    enigma_legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
+    legal_entity_type: str | None = None
+    registered_entities: list[EnigmaRegisteredEntityItem] | None = None
+    persons: list[EnigmaLegalEntityPersonItem] | None = None
+
+
+class EnigmaLegalEntitiesOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    legal_entities: list[EnigmaLegalEntityItem] | None = None
+    legal_entity_count: int | None = None
+    source_provider: str = "enigma"
+
+
+class EnigmaDeliverabilityItem(BaseModel):
+    enigma_location_id: str | None = None
+    location_name: str | None = None
+    full_address: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    operating_status: str | None = None
+    rdi: str | None = None
+    delivery_type: str | None = None
+    deliverable: str | None = None
+    virtual: str | None = None
+
+
+class EnigmaAddressDeliverabilityOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    total_location_count: int | None = None
+    locations: list[EnigmaDeliverabilityItem] | None = None
+    location_count: int | None = None
+    deliverable_count: int | None = None
+    vacant_count: int | None = None
+    not_deliverable_count: int | None = None
+    virtual_count: int | None = None
+    source_provider: str = "enigma"
+
+
+class EnigmaTechnologyItem(BaseModel):
+    technology: str | None = None
+    category: str | None = None
+    first_observed_date: str | None = None
+    last_observed_date: str | None = None
+
+
+class EnigmaLocationTechnologyItem(BaseModel):
+    enigma_location_id: str | None = None
+    location_name: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    operating_status: str | None = None
+    technologies: list[EnigmaTechnologyItem] | None = None
+
+
+class EnigmaTechnologiesOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    total_location_count: int | None = None
+    locations: list[EnigmaLocationTechnologyItem] | None = None
+    location_count: int | None = None
+    locations_with_technology_count: int | None = None
+    technology_summary: dict[str, int] | None = None
+    source_provider: str = "enigma"
+
+
+class EnigmaPersonBrandResult(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    website: str | None = None
+    location_count: int | None = None
+    industries: list[str] | None = None
+
+
+class EnigmaPersonLocationResult(BaseModel):
+    enigma_location_id: str | None = None
+    location_name: str | None = None
+    full_address: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    operating_status: str | None = None
+    website: str | None = None
+    phone: str | None = None
+    parent_brand_id: str | None = None
+    parent_brand_name: str | None = None
+
+
+class EnigmaPersonLegalEntityResult(BaseModel):
+    enigma_legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
+    legal_entity_type: str | None = None
+
+
+class EnigmaPersonSearchOutput(BaseModel):
+    brands: list[EnigmaPersonBrandResult] | None = None
+    operating_locations: list[EnigmaPersonLocationResult] | None = None
+    legal_entities: list[EnigmaPersonLegalEntityResult] | None = None
+    total_returned: int | None = None
+    source_provider: str = "enigma"
+
+
+class EnigmaIndustryItem(BaseModel):
+    industry_desc: str | None = None
+    industry_code: str | None = None
+    industry_type: str | None = None
+
+
+class EnigmaIndustriesOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    industries: list[EnigmaIndustryItem] | None = None
+    industry_count: int | None = None
+    naics_codes: list[str] | None = None
+    sic_codes: list[str] | None = None
+    source_provider: str = "enigma"
