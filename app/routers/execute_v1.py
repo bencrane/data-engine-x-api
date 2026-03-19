@@ -17,10 +17,15 @@ from app.services.email_operations import (
 from app.services.company_operations import (
     execute_company_enrich_bulk_profile,
     execute_company_enrich_bulk_prospeo,
+    execute_company_enrich_enigma_activity_flags,
     execute_company_enrich_enigma_address_deliverability,
+    execute_company_enrich_enigma_affiliated_brands,
+    execute_company_enrich_enigma_bankruptcy,
     execute_company_enrich_enigma_industries,
     execute_company_enrich_enigma_legal_entities,
+    execute_company_enrich_enigma_marketability,
     execute_company_enrich_enigma_technologies,
+    execute_company_enrich_enigma_watchlist,
     execute_company_enrich_fmcsa,
     execute_company_enrich_card_revenue,
     execute_company_enrich_ecommerce,
@@ -31,6 +36,9 @@ from app.services.company_operations import (
     execute_company_search_enigma_aggregate,
     execute_company_search_enigma_brands,
     execute_company_search_enigma_person,
+    execute_company_verify_enigma_kyb,
+    execute_person_enrich_enigma_profile,
+    execute_person_search_enigma_roles,
 )
 from app.services.fmcsa_socrata_operations import (
     execute_company_enrich_fmcsa_carrier_all_history,
@@ -187,6 +195,14 @@ SUPPORTED_OPERATION_IDS = {
     "company.enrich.enigma.address_deliverability",
     "company.enrich.enigma.technologies",
     "company.enrich.enigma.industries",
+    "company.enrich.enigma.affiliated_brands",
+    "company.enrich.enigma.marketability",
+    "company.enrich.enigma.activity_flags",
+    "company.enrich.enigma.bankruptcy",
+    "company.enrich.enigma.watchlist",
+    "company.verify.enigma.kyb",
+    "person.search.enigma.roles",
+    "person.enrich.enigma.profile",
     "company.ads.search.linkedin",
     "company.ads.search.meta",
     "company.ads.search.google",
@@ -731,6 +747,38 @@ async def execute_v1(
 
     if payload.operation_id == "address.search":
         result = await execute_address_search(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.enrich.enigma.affiliated_brands":
+        result = await execute_company_enrich_enigma_affiliated_brands(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.enrich.enigma.marketability":
+        result = await execute_company_enrich_enigma_marketability(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.enrich.enigma.activity_flags":
+        result = await execute_company_enrich_enigma_activity_flags(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.enrich.enigma.bankruptcy":
+        result = await execute_company_enrich_enigma_bankruptcy(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.enrich.enigma.watchlist":
+        result = await execute_company_enrich_enigma_watchlist(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "person.search.enigma.roles":
+        result = await execute_person_search_enigma_roles(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "person.enrich.enigma.profile":
+        result = await execute_person_enrich_enigma_profile(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.verify.enigma.kyb":
+        result = await execute_company_verify_enigma_kyb(input_data=payload.input)
         return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     return error_response(f"Unsupported operation_id: {payload.operation_id}", 400)
