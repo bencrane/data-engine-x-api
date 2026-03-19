@@ -17,6 +17,10 @@ from app.services.email_operations import (
 from app.services.company_operations import (
     execute_company_enrich_bulk_profile,
     execute_company_enrich_bulk_prospeo,
+    execute_company_enrich_enigma_address_deliverability,
+    execute_company_enrich_enigma_industries,
+    execute_company_enrich_enigma_legal_entities,
+    execute_company_enrich_enigma_technologies,
     execute_company_enrich_fmcsa,
     execute_company_enrich_card_revenue,
     execute_company_enrich_ecommerce,
@@ -24,7 +28,9 @@ from app.services.company_operations import (
     execute_company_enrich_profile,
     execute_company_enrich_profile_blitzapi,
     execute_company_enrich_technographics,
+    execute_company_search_enigma_aggregate,
     execute_company_search_enigma_brands,
+    execute_company_search_enigma_person,
 )
 from app.services.fmcsa_socrata_operations import (
     execute_company_enrich_fmcsa_carrier_all_history,
@@ -174,6 +180,12 @@ SUPPORTED_OPERATION_IDS = {
     "company.search.fmcsa",
     "company.search.ecommerce",
     "company.search.enigma.brands",
+    "company.search.enigma.aggregate",
+    "company.search.enigma.person",
+    "company.enrich.enigma.legal_entities",
+    "company.enrich.enigma.address_deliverability",
+    "company.enrich.enigma.technologies",
+    "company.enrich.enigma.industries",
     "company.ads.search.linkedin",
     "company.ads.search.meta",
     "company.ads.search.google",
@@ -638,6 +650,72 @@ async def execute_v1(
 
     if payload.operation_id == "company.search.enigma.brands":
         result = await execute_company_search_enigma_brands(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.search.enigma.aggregate":
+        result = await execute_company_search_enigma_aggregate(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.search.enigma.person":
+        result = await execute_company_search_enigma_person(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.enigma.legal_entities":
+        result = await execute_company_enrich_enigma_legal_entities(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.enigma.address_deliverability":
+        result = await execute_company_enrich_enigma_address_deliverability(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.enigma.technologies":
+        result = await execute_company_enrich_enigma_technologies(input_data=payload.input)
+        persist_operation_execution(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_payload=payload.input,
+            result=result,
+        )
+        return DataEnvelope(data=result)
+
+    if payload.operation_id == "company.enrich.enigma.industries":
+        result = await execute_company_enrich_enigma_industries(input_data=payload.input)
         persist_operation_execution(
             auth=auth,
             entity_type=payload.entity_type,
