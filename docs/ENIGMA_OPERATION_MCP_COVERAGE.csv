@@ -1,0 +1,18 @@
+our_operation,has_mcp_equivalent,mcp_tools,mapping_status,notes
+company.search.enigma.aggregate,false,none,missing,Aggregate market sizing exists in our GraphQL adapter but no same-scope MCP tool in this server package.
+company.search.enigma.brands,true,generate_brands_segment,partial,Conceptual overlap on brand discovery; MCP exposes broader segment filter surface.
+company.search.enigma.person,false,none,missing,Person-based reverse business lookup has no MCP tool counterpart.
+company.enrich.card_revenue,true,get_brand_card_analytics;search_business,direct,Direct analytics mapping with optional pre-match semantics from search_business.
+company.enrich.locations,true,get_brand_locations;search_business,direct,Direct location mapping with optional brand match semantics.
+company.enrich.enigma.legal_entities,true,get_brand_legal_entities,direct,Direct legal-entity traversal mapping.
+company.enrich.enigma.address_deliverability,false,none,missing,No corresponding MCP tool for deliverability enrichment.
+company.enrich.enigma.technologies,false,none,missing,No corresponding MCP tool for technologies enrichment.
+company.enrich.enigma.industries,false,none,missing,No corresponding MCP tool for industries enrichment.
+company.enrich.enigma.affiliated_brands,false,none,missing,No corresponding MCP tool for affiliated brands traversal.
+company.enrich.enigma.marketability,false,none,missing,No corresponding MCP tool for marketability flags.
+company.enrich.enigma.activity_flags,false,none,missing,No corresponding MCP tool for activity/compliance flags.
+company.enrich.enigma.bankruptcy,false,none,missing,No corresponding MCP tool for bankruptcy traversal.
+company.enrich.enigma.watchlist,false,none,missing,No corresponding MCP tool for watchlist traversal.
+person.search.enigma.roles,false,none,missing,No corresponding MCP tool for brand->location->role contact traversal.
+person.enrich.enigma.profile,false,none,missing,No corresponding MCP tool for officer/person profile traversal.
+company.verify.enigma.kyb,true,search_kyb,direct,Direct KYB mapping.

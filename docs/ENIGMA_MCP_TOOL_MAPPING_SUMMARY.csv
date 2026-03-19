@@ -1,0 +1,11 @@
+mcp_tool,mapped_operations,mapping_status,notes
+search_business,company.enrich.card_revenue;company.enrich.locations,partial,No dedicated company.search.enigma.business operation; behavior covered via internal match-by-name/domain in enrichment ops.
+search_kyb,company.verify.enigma.kyb,direct,Direct KYB verification counterpart.
+search_negative_news,none,missing,No current execute_v1 operation counterpart.
+search_gov_archive,none,missing,No current execute_v1 operation counterpart.
+generate_locations_segment,none,missing,No open-market location segment operation in current API surface.
+generate_brands_segment,company.search.enigma.brands,partial,Our operation is prompt-driven brand discovery and does not expose full segment filter parity.
+get_brand_card_analytics,company.enrich.card_revenue,direct,Brand card analytics covered directly.
+get_brands_by_legal_entity,none,missing,Reverse legal-entity-to-brands traversal not exposed as operation.
+get_brand_legal_entities,company.enrich.enigma.legal_entities,direct,Legal-entity traversal covered directly.
+get_brand_locations,company.enrich.locations,direct,Brand location retrieval covered directly.
