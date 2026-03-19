@@ -88,6 +88,8 @@ interface InternalEnvelope<TData> {
 interface InternalConfig {
   apiUrl: string;
   internalApiKey: string;
+  orgId: string;
+  companyId: string;
 }
 
 interface InternalStepResult {
@@ -1549,7 +1551,7 @@ function resolveInternalConfig(payload: RunPipelinePayload): InternalConfig {
   const internalApiKey = payload.internal_api_key || process.env.DATA_ENGINE_INTERNAL_API_KEY;
   if (!apiUrl) throw new Error("DATA_ENGINE_API_URL is not configured");
   if (!internalApiKey) throw new Error("DATA_ENGINE_INTERNAL_API_KEY is not configured");
-  return { apiUrl, internalApiKey };
+  return { apiUrl, internalApiKey, orgId: payload.org_id, companyId: payload.company_id };
 }
 
 async function internalPost<TResponse>(
@@ -1562,6 +1564,8 @@ async function internalPost<TResponse>(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${internalConfig.internalApiKey}`,
+      "x-internal-org-id": internalConfig.orgId,
+      "x-internal-company-id": internalConfig.companyId,
     },
     body: JSON.stringify(payload),
   });
