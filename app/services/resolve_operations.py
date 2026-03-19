@@ -288,6 +288,51 @@ async def execute_company_resolve_linkedin_from_domain_blitzapi(
     }
 
 
+async def execute_company_resolve_domain_from_linkedin_blitzapi(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.resolve.domain_from_linkedin_blitzapi"
+    attempts: list[dict[str, Any]] = []
+
+    company_linkedin_url = _extract_company_linkedin_url(input_data)
+    if not company_linkedin_url:
+        return _missing_input_result(
+            run_id=run_id,
+            operation_id=operation_id,
+            missing_input="company_linkedin_url",
+            attempts=attempts,
+        )
+
+    settings = get_settings()
+    result = await blitzapi.linkedin_to_domain(
+        api_key=settings.blitzapi_api_key,
+        company_linkedin_url=company_linkedin_url,
+    )
+    attempt = result.get("attempt", {})
+    attempts.append(attempt if isinstance(attempt, dict) else {})
+    mapped = result.get("mapped")
+    status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+
+    if not isinstance(mapped, dict):
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    output = ResolveDomainOutput.model_validate({**mapped, "source_provider": "blitzapi"}).model_dump()
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
 async def execute_person_resolve_linkedin_from_email(
     *,
     input_data: dict[str, Any],

@@ -60,12 +60,14 @@ from app.services.adyntel_operations import (
 )
 from app.services.blitzapi_person_operations import (
     execute_person_contact_resolve_email_blitzapi,
+    execute_person_contact_resolve_mobile_phone_blitzapi,
+    execute_person_contact_verify_email_blitzapi,
     execute_person_resolve_from_email,
     execute_person_resolve_from_phone,
     execute_person_search_employee_finder_blitzapi,
     execute_person_search_waterfall_icp_blitzapi,
 )
-from app.services.blitzapi_company_search import execute_company_search_blitzapi
+from app.services.blitzapi_company_search import execute_company_enrich_blitzapi, execute_company_search_blitzapi
 from app.services.operation_history import persist_operation_execution
 from app.services.persistence_routing import persist_standalone_result
 from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
@@ -128,6 +130,7 @@ from app.services.courtlistener_operations import (
 from app.services.resolve_operations import (
     execute_company_resolve_domain_from_email,
     execute_company_resolve_domain_from_linkedin,
+    execute_company_resolve_domain_from_linkedin_blitzapi,
     execute_company_resolve_domain_from_name,
     execute_company_resolve_linkedin_from_domain_blitzapi,
     execute_company_resolve_linkedin_from_domain,
@@ -154,7 +157,9 @@ SUPPORTED_OPERATION_IDS = {
     "person.contact.resolve_email",
     "person.contact.resolve_email_blitzapi",
     "person.contact.resolve_mobile_phone",
+    "person.contact.resolve_mobile_phone_blitzapi",
     "person.contact.verify_email",
+    "person.contact.verify_email_blitzapi",
     "person.resolve.from_phone",
     "person.resolve.from_email",
     "person.resolve.linkedin_from_email",
@@ -166,6 +171,7 @@ SUPPORTED_OPERATION_IDS = {
     "person.derive.detect_changes",
     "company.enrich.profile",
     "company.enrich.profile_blitzapi",
+    "company.enrich.blitzapi",
     "company.enrich.fmcsa",
     "company.enrich.fmcsa.company_census",
     "company.enrich.fmcsa.carrier_all_history",
@@ -183,6 +189,7 @@ SUPPORTED_OPERATION_IDS = {
     "company.resolve.domain_from_name_hq",
     "company.resolve.linkedin_from_domain",
     "company.resolve.linkedin_from_domain_blitzapi",
+    "company.resolve.domain_from_linkedin_blitzapi",
     "company.resolve.location_from_domain",
     "company.search",
     "company.search.blitzapi",
@@ -395,6 +402,14 @@ async def execute_v1(
         result = await execute_person_contact_resolve_mobile_phone(input_data=payload.input)
         return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
+    if payload.operation_id == "person.contact.resolve_mobile_phone_blitzapi":
+        result = await execute_person_contact_resolve_mobile_phone_blitzapi(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "person.contact.verify_email_blitzapi":
+        result = await execute_person_contact_verify_email_blitzapi(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
     if payload.operation_id == "person.contact.verify_email":
         result = await execute_person_contact_verify_email(input_data=payload.input)
         return _finalize_execute_response(auth=auth, payload=payload, result=result)
@@ -421,6 +436,10 @@ async def execute_v1(
 
     if payload.operation_id == "company.resolve.linkedin_from_domain_blitzapi":
         result = await execute_company_resolve_linkedin_from_domain_blitzapi(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.resolve.domain_from_linkedin_blitzapi":
+        result = await execute_company_resolve_domain_from_linkedin_blitzapi(input_data=payload.input)
         return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.resolve.linkedin_from_email":
@@ -461,6 +480,10 @@ async def execute_v1(
 
     if payload.operation_id == "company.enrich.profile_blitzapi":
         result = await execute_company_enrich_profile_blitzapi(input_data=payload.input)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
+
+    if payload.operation_id == "company.enrich.blitzapi":
+        result = await execute_company_enrich_blitzapi(input_data=payload.input)
         return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.fmcsa":

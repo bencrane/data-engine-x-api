@@ -24,6 +24,20 @@ class FindWorkEmailOutput(BaseModel):
     source_provider: str = "blitzapi"
 
 
+class ResolveMobilePhoneBlitzapiOutput(BaseModel):
+    mobile_phone: str | None = None
+    source_provider: str = "blitzapi"
+
+
+class ValidateEmailBlitzapiOutput(BaseModel):
+    email: str | None = None
+    valid: bool | None = None
+    deliverable: bool | None = None
+    catch_all: bool | None = None
+    disposable: bool | None = None
+    source_provider: str = "blitzapi"
+
+
 class ReversePersonLookupOutput(BaseModel):
     full_name: str | None = None
     first_name: str | None = None

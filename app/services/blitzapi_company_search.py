@@ -5,8 +5,9 @@ from typing import Any
 
 from app.config import get_settings
 from app.contracts.blitzapi_company_search import BlitzAPICompanySearchOutput
+from app.contracts.company_enrich import BlitzAPICompanyEnrichOutput
 from app.providers import blitzapi
-from app.services._input_extraction import extract_company_name, extract_domain
+from app.services._input_extraction import extract_company_linkedin_url, extract_company_name, extract_domain
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -223,6 +224,74 @@ async def execute_company_search_blitzapi(
         }
 
     status = attempt.get("status", "failed") if isinstance(attempt, dict) else "failed"
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": status,
+        "output": output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_blitzapi(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.blitzapi"
+    attempts: list[dict[str, Any]] = []
+
+    company_linkedin_url = extract_company_linkedin_url(input_data)
+    company_domain = extract_domain(input_data)
+
+    if not company_linkedin_url and not company_domain:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["company_linkedin_url|company_domain"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    if not company_linkedin_url and company_domain:
+        bridge_result = await blitzapi.resolve_linkedin_from_domain(
+            api_key=settings.blitzapi_api_key,
+            domain=company_domain,
+        )
+        attempts.append(bridge_result["attempt"])
+        bridge_mapped = _as_dict(bridge_result.get("mapped"))
+        company_linkedin_url = _as_non_empty_str(bridge_mapped.get("company_linkedin_url"))
+
+    provider_result = await blitzapi.enrich_company_profile(
+        api_key=settings.blitzapi_api_key,
+        company_linkedin_url=company_linkedin_url,
+    )
+    attempts.append(provider_result["attempt"])
+
+    mapped = provider_result.get("mapped")
+    if not isinstance(mapped, dict):
+        attempt_status = provider_result["attempt"].get("status", "failed")
+        status = "found" if attempt_status == "found" else "not_found" if attempt_status == "not_found" else "failed"
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": status,
+            "provider_attempts": attempts,
+        }
+
+    try:
+        output = BlitzAPICompanyEnrichOutput.model_validate(mapped).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {"code": "output_validation_failed", "message": str(exc)},
+        }
+
+    status = provider_result["attempt"].get("status", "failed")
     return {
         "run_id": run_id,
         "operation_id": operation_id,

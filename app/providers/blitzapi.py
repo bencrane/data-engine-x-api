@@ -850,6 +850,133 @@ async def email_to_person(
     }
 
 
+async def linkedin_to_domain(
+    *,
+    api_key: str | None,
+    company_linkedin_url: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "linkedin_to_domain", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not company_linkedin_url:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "linkedin_to_domain", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/enrichment/linkedin-to-domain",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"company_linkedin_url": company_linkedin_url},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "linkedin_to_domain",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    if body.get("found"):
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "linkedin_to_domain",
+                "status": "found",
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": {
+                "domain": body.get("email_domain"),
+                "resolve_source": "blitzapi",
+            },
+        }
+
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "linkedin_to_domain",
+            "status": "not_found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "domain": None,
+            "resolve_source": "blitzapi",
+        },
+    }
+
+
+async def validate_email(
+    *,
+    api_key: str | None,
+    email: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "validate_email", "status": "skipped", "skip_reason": "missing_provider_api_key"},
+            "mapped": None,
+        }
+    if not email:
+        return {
+            "attempt": {"provider": "blitzapi", "action": "validate_email", "status": "skipped", "skip_reason": "missing_required_inputs"},
+            "mapped": None,
+        }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        res = await _blitzapi_request_with_retry(
+            client,
+            "POST",
+            "https://api.blitz-api.ai/v2/utilities/email/validate",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"email": email},
+        )
+        body = parse_json_or_raw(res.text, res.json)
+
+    if res.status_code >= 400:
+        return {
+            "attempt": {
+                "provider": "blitzapi",
+                "action": "validate_email",
+                "status": "failed",
+                "http_status": res.status_code,
+                "duration_ms": now_ms() - start_ms,
+                "raw_response": body,
+            },
+            "mapped": None,
+        }
+
+    return {
+        "attempt": {
+            "provider": "blitzapi",
+            "action": "validate_email",
+            "status": "found",
+            "duration_ms": now_ms() - start_ms,
+            "raw_response": body,
+        },
+        "mapped": {
+            "email": body.get("email"),
+            "valid": body.get("valid"),
+            "deliverable": body.get("deliverable"),
+            "catch_all": body.get("catch_all"),
+            "disposable": body.get("disposable"),
+            "source_provider": "blitzapi",
+        },
+    }
+
+
 async def enrich_company(
     *,
     api_key: str | None,
