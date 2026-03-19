@@ -1,8 +1,15 @@
 # Executor Work Log
 
-**Last updated:** 2026-03-18T23:59:00Z
+**Last updated:** 2026-03-19T00:00:00Z
 
 Reverse-chronological log of completed executor directive work.
+
+---
+
+## 2026-03-19
+**Directive:** `docs/EXECUTOR_DIRECTIVE_STANDALONE_EXECUTE_PERSISTENCE.md`
+**Summary:** Closed the standalone `/api/v1/execute` persistence gap documented as Risk #1 in `docs/PERSISTENCE_MODEL.md`. Created `app/services/persistence_routing.py` with a `DEDICATED_TABLE_REGISTRY` mapping 11 operation IDs to dedicated table write functions (icp_job_titles, company_intel_briefings, person_intel_briefings, company_customers x2, gemini_icp_job_titles, company_ads x3, salesnav_prospects, enigma_brand_discoveries), and a `persist_standalone_result()` top-level function that attempts entity upsert and dedicated table write independently, returning a status dict for each. Updated `ExecuteV1Request` to add `persist: bool = False`. Added `_finalize_execute_response()` helper to `execute_v1.py` that consolidates `persist_operation_execution` + optional `persist_standalone_result`, then replaced all 93 branch endings in `execute_v1()` with calls to it. When `persist=true`, the response includes `data.persistence.entity_upsert` and `data.persistence.dedicated_table` status fields; when `persist=false`, the field is absent and behavior is identical to before. Persistence errors are captured and reported in the response, not swallowed. 14 tests written and all passing.
+**Flagged:** `company_customers` dedicated table write requires `company_entity_id` (non-optional in the service function) but standalone execute has no cumulative context. Implemented a lookup by `canonical_domain` against `entities.company_entities` before writing; if the entity doesn't exist yet, the dedicated table write returns `skipped/company_entity_not_found` instead of failing. This means calling `company.research.discover_customers_gemini` standalone will only persist to `company_customers` if the company entity already exists in the entities table. `company.ads.search.meta` extracts ads from `output.results` (not `output.ads`) — matches the TypeScript auto-persist branch behavior. Field extraction for `company_customers` and `company_ads` falls back to `input_data` when the operation output doesn't echo back `company_domain` — this is the standalone equivalent of the pipeline's `cumulativeContext` fallback. The `enigma_location_enrichments` table has no auto-persist branch in `run-pipeline.ts` and is not in the registry (it requires `enigma_brand_id` from a prior operation, not naturally available standalone).
 
 ---
 
