@@ -59,6 +59,7 @@ from app.services.blitzapi_person_operations import (
 )
 from app.services.blitzapi_company_search import execute_company_search_blitzapi
 from app.services.operation_history import persist_operation_execution
+from app.services.persistence_routing import persist_standalone_result
 from app.services.submission_flow import create_batch_submission_and_trigger_pipeline_runs
 from app.services.research_operations import (
     execute_company_fetch_icp_candidates,
@@ -259,6 +260,7 @@ class ExecuteV1Request(BaseModel):
     options: dict[str, Any] | None = None
     org_id: str | None = None
     company_id: str | None = None
+    persist: bool = False
 
 
 class BatchEntityInput(BaseModel):
@@ -278,6 +280,34 @@ class BatchSubmitRequest(BaseModel):
 class BatchStatusRequest(BaseModel):
     submission_id: str
     org_id: str | None = None
+
+
+
+
+def _finalize_execute_response(
+    *,
+    auth: AuthContext,
+    payload: ExecuteV1Request,
+    result: dict[str, Any],
+) -> DataEnvelope:
+    persist_operation_execution(
+        auth=auth,
+        entity_type=payload.entity_type,
+        operation_id=payload.operation_id,
+        input_payload=payload.input,
+        result=result,
+    )
+    if payload.persist:
+        persistence_result = persist_standalone_result(
+            auth=auth,
+            entity_type=payload.entity_type,
+            operation_id=payload.operation_id,
+            input_data=payload.input,
+            result=result,
+        )
+        if persistence_result is not None:
+            result["persistence"] = persistence_result
+    return DataEnvelope(data=result)
 
 
 @router.post(
@@ -331,1028 +361,377 @@ async def execute_v1(
 
     if payload.operation_id == "person.contact.resolve_email":
         result = await execute_person_contact_resolve_email(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.contact.resolve_email_blitzapi":
         result = await execute_person_contact_resolve_email_blitzapi(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.resolve.from_phone":
         result = await execute_person_resolve_from_phone(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.resolve.from_email":
         result = await execute_person_resolve_from_email(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.contact.resolve_mobile_phone":
         result = await execute_person_contact_resolve_mobile_phone(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.contact.verify_email":
         result = await execute_person_contact_verify_email(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.domain_from_email":
         result = await execute_company_resolve_domain_from_email(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.domain_from_linkedin":
         result = await execute_company_resolve_domain_from_linkedin(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.domain_from_name":
         result = await execute_company_resolve_domain_from_name(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.domain_from_name_hq":
         result = await execute_company_resolve_domain_from_name_hq(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.linkedin_from_domain":
         result = await execute_company_resolve_linkedin_from_domain(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.linkedin_from_domain_blitzapi":
         result = await execute_company_resolve_linkedin_from_domain_blitzapi(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.resolve.linkedin_from_email":
         result = await execute_person_resolve_linkedin_from_email(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.resolve.location_from_domain":
         result = await execute_company_resolve_location_from_domain(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.search":
         result = await execute_person_search(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.search.waterfall_icp_blitzapi":
         result = await execute_person_search_waterfall_icp_blitzapi(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.search.employee_finder_blitzapi":
         result = await execute_person_search_employee_finder_blitzapi(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.search.sales_nav_url":
         result = await execute_person_search_sales_nav_url(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.enrich.profile":
         result = await execute_person_enrich_profile(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "person.derive.detect_changes":
         result = await execute_person_derive_detect_changes(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.profile":
         result = await execute_company_enrich_profile(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.profile_blitzapi":
         result = await execute_company_enrich_profile_blitzapi(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.fmcsa":
         result = await execute_company_enrich_fmcsa(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.fmcsa.company_census":
         result = await execute_company_enrich_fmcsa_company_census(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.fmcsa.carrier_all_history":
         result = await execute_company_enrich_fmcsa_carrier_all_history(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.fmcsa.revocation_all_history":
         result = await execute_company_enrich_fmcsa_revocation_all_history(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.fmcsa.insur_all_history":
         result = await execute_company_enrich_fmcsa_insur_all_history(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.card_revenue":
         result = await execute_company_enrich_card_revenue(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.locations":
         result = await execute_company_enrich_locations(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.enigma.brands":
         result = await execute_company_search_enigma_brands(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.enigma.aggregate":
         result = await execute_company_search_enigma_aggregate(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.enigma.person":
         result = await execute_company_search_enigma_person(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.enigma.legal_entities":
         result = await execute_company_enrich_enigma_legal_entities(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.enigma.address_deliverability":
         result = await execute_company_enrich_enigma_address_deliverability(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.enigma.technologies":
         result = await execute_company_enrich_enigma_technologies(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.enigma.industries":
         result = await execute_company_enrich_enigma_industries(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.ecommerce":
         result = await execute_company_enrich_ecommerce(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.technographics":
         result = await execute_company_enrich_technographics(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.bulk_prospeo":
         result = await execute_company_enrich_bulk_prospeo(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.bulk_profile":
         result = await execute_company_enrich_bulk_profile(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search":
         result = await execute_company_search(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.blitzapi":
         result = await execute_company_search_blitzapi(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.fmcsa":
         result = await execute_company_search_fmcsa(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.ecommerce":
         result = await execute_company_search_ecommerce(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.ads.search.linkedin":
         result = await execute_company_ads_search_linkedin(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.ads.search.meta":
         result = await execute_company_ads_search_meta(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.ads.search.google":
         result = await execute_company_ads_search_google(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.resolve_g2_url":
         result = await execute_company_research_resolve_g2_url(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.resolve_pricing_page_url":
         result = await execute_company_research_resolve_pricing_page_url(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.discover_competitors":
         result = await execute_company_research_discover_competitors(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.find_similar_companies":
         result = await execute_company_research_find_similar_companies(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.lookup_customers":
         result = await execute_company_research_lookup_customers(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.lookup_customers_resolved":
         result = await execute_company_research_lookup_customers_resolved(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.infer_linkedin_url":
         result = await execute_company_research_infer_linkedin_url(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.icp_job_titles_gemini":
         result = await execute_company_research_icp_job_titles_gemini(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.discover_customers_gemini":
         result = await execute_company_research_discover_customers_gemini(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.fetch.icp_candidates":
         merged_input = {**payload.input, **(payload.options or {})}
         result = await execute_company_fetch_icp_candidates(input_data=merged_input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.lookup_alumni":
         result = await execute_company_research_lookup_alumni(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.lookup_champions":
         result = await execute_company_research_lookup_champions(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.lookup_champion_testimonials":
         result = await execute_company_research_lookup_champion_testimonials(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.check_vc_funding":
         result = await execute_company_research_check_vc_funding(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.check_court_filings":
         result = await execute_company_research_check_court_filings(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.signal.bankruptcy_filings":
         result = await execute_company_signal_bankruptcy_filings(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.get_docket_detail":
         result = await execute_company_research_get_docket_detail(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.research.fetch_sec_filings":
         result = await execute_company_research_fetch_sec_filings(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.analyze.sec_10k":
         result = await execute_company_analyze_sec_10k(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.analyze.sec_10q":
         result = await execute_company_analyze_sec_10q(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.analyze.sec_8k_executive":
         result = await execute_company_analyze_sec_8k_executive(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.derive.pricing_intelligence":
         result = await execute_company_derive_pricing_intelligence(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.derive.icp_criterion":
         result = await execute_company_derive_icp_criterion(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.derive.salesnav_url":
         result = await execute_company_derive_salesnav_url(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.derive.evaluate_icp_fit":
         result = await execute_company_derive_evaluate_icp_fit(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.derive.extract_icp_titles":
         merged_input = {**payload.input, "org_id": auth.org_id}
         result = await execute_company_derive_extract_icp_titles(input_data=merged_input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.derive.detect_changes":
         result = await execute_company_derive_detect_changes(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.by_tech_stack":
         result = await execute_company_search_by_tech_stack(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.search.by_job_postings":
         result = await execute_company_search_by_job_postings(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "job.search":
         result = await execute_job_search(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "job.validate.is_active":
         result = await execute_job_validate_is_active(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.tech_stack":
         result = await execute_company_enrich_tech_stack(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "company.enrich.hiring_signals":
         result = await execute_company_enrich_hiring_signals(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "permit.search":
         result = await execute_permit_search(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "contractor.enrich":
         result = await execute_contractor_enrich(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "contractor.search":
         result = await execute_contractor_search(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "contractor.search.employees":
         result = await execute_contractor_employees(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "address.search.residents":
         result = await execute_address_residents(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.search.cities":
         result = await execute_market_search_cities(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.search.counties":
         result = await execute_market_search_counties(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.search.zipcodes":
         result = await execute_market_search_zipcodes(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.search.jurisdictions":
         result = await execute_market_search_jurisdictions(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.enrich.metrics_monthly":
         result = await execute_market_metrics_monthly(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.enrich.metrics_current":
         result = await execute_market_metrics_current(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "market.enrich.geo_detail":
         result = await execute_market_geo_detail(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     if payload.operation_id == "address.search":
         result = await execute_address_search(input_data=payload.input)
-        persist_operation_execution(
-            auth=auth,
-            entity_type=payload.entity_type,
-            operation_id=payload.operation_id,
-            input_payload=payload.input,
-            result=result,
-        )
-        return DataEnvelope(data=result)
+        return _finalize_execute_response(auth=auth, payload=payload, result=result)
 
     return error_response(f"Unsupported operation_id: {payload.operation_id}", 400)
 
