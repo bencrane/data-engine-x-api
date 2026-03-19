@@ -9,6 +9,7 @@ from app.routers import (
     alumni_gtm,
     auth,
     coverage_v1,
+    enigma_mcp_v1,
     entities_v1,
     execute_v1,
     fmcsa_v1,
@@ -170,3 +171,4 @@ app.include_router(
     prefix="/v1/alumni-gtm",
     tags=["alumni-gtm"],
 )
+app.include_router(enigma_mcp_v1.router, tags=["enigma-mcp"])
