@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "enigma": {
+      "type": "url",
+      "url": "https://mcp.enigma.com/http-key",
+      "headers": {
+        "x-api-key": "${ENIGMA_API_KEY}"
+      }
+    }
+  }
+}
