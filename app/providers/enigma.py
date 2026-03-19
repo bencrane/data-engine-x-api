@@ -1,4 +1,4 @@
-# Last updated: 2026-03-18T21:30:00Z
+# Last updated: 2026-03-18
 from __future__ import annotations
 
 import asyncio
@@ -1544,3 +1544,1021 @@ async def get_locations_enriched(
         "end_cursor": end_cursor,
     }
     return {"attempt": attempt, "mapped": mapped}
+
+
+# ---------------------------------------------------------------------------
+# 1a. aggregate_locations
+# ---------------------------------------------------------------------------
+
+AGGREGATE_MARKET_QUERY = """
+query AggregateMarket($searchInput: SearchInput!) {
+  aggregate(searchInput: $searchInput) {
+    brandsCount: count(field: "brand")
+    operatingLocationsCount: count(field: "operatingLocation")
+    legalEntitiesCount: count(field: "legalEntity")
+  }
+}
+""".strip()
+
+
+async def aggregate_locations(
+    *,
+    api_key: str | None,
+    state: str | None = None,
+    city: str | None = None,
+    operating_status_filter: str | None = None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "aggregate_locations",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_state = _as_str(state)
+    normalized_city = _as_str(city)
+    if not normalized_state and not normalized_city:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "aggregate_locations",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    address: dict[str, str] = {}
+    if normalized_state:
+        address["state"] = normalized_state.upper()
+    if normalized_city:
+        address["city"] = normalized_city.upper()
+
+    search_input: dict[str, Any] = {
+        "entityType": "OPERATING_LOCATION",
+        "address": address,
+    }
+
+    normalized_status = _as_str(operating_status_filter)
+    if normalized_status and normalized_status.lower() == "open":
+        search_input["conditions"] = {
+            "filter": {"EQ": ["operatingStatuses.operatingStatus", "Open"]},
+        }
+
+    payload = {
+        "query": AGGREGATE_MARKET_QUERY,
+        "variables": {"searchInput": search_input},
+    }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            ENIGMA_GRAPHQL_URL,
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": "aggregate_locations",
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+
+    if response.status_code == 429:
+        attempt["status"] = "skipped"
+        attempt["skip_reason"] = "rate_limited"
+        attempt["http_status"] = 429
+        return {"attempt": attempt, "mapped": None}
+
+    if response.status_code == 402:
+        attempt["status"] = "skipped"
+        attempt["skip_reason"] = "insufficient_credits"
+        attempt["http_status"] = 402
+        return {"attempt": attempt, "mapped": None}
+
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return {"attempt": attempt, "mapped": None}
+
+    if isinstance(body, dict):
+        errors = body.get("errors")
+        if isinstance(errors, list) and errors:
+            attempt["status"] = "failed"
+            return {"attempt": attempt, "mapped": None}
+
+    data = _as_dict(_as_dict(body).get("data")) if isinstance(body, dict) else {}
+    agg = _as_dict(data.get("aggregate"))
+
+    attempt["status"] = "found"
+    mapped_agg: dict[str, Any] = {
+        "brands_count": _as_int(agg.get("brandsCount")),
+        "locations_count": _as_int(agg.get("operatingLocationsCount")),
+        "legal_entities_count": _as_int(agg.get("legalEntitiesCount")),
+        "geography_state": normalized_state,
+        "geography_city": normalized_city,
+        "operating_status_filter": normalized_status,
+    }
+    return {"attempt": attempt, "mapped": mapped_agg}
+
+
+# ---------------------------------------------------------------------------
+# 1b. get_brand_legal_entities
+# ---------------------------------------------------------------------------
+
+GET_BRAND_LEGAL_ENTITIES_QUERY = """
+query GetBrandLegalEntities($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      namesConnection(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      legalEntities(first: 10) {
+        edges {
+          node {
+            id
+            enigmaId
+            names(first: 1) {
+              edges {
+                node {
+                  name
+                  legalEntityType
+                }
+              }
+            }
+            registeredEntities(first: 5) {
+              edges {
+                node {
+                  id
+                  name
+                  registeredEntityType
+                  formationDate
+                  formationYear
+                  registrations(first: 20) {
+                    edges {
+                      node {
+                        id
+                        registrationType
+                        registrationState
+                        jurisdictionType
+                        registeredName
+                        fileNumber
+                        issueDate
+                        status
+                        subStatus
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            persons(first: 10) {
+              edges {
+                node {
+                  id
+                  firstName
+                  lastName
+                  fullName
+                  dateOfBirth
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_legal_entities(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_legal_entities",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_legal_entities",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_legal_entities",
+        query=GET_BRAND_LEGAL_ENTITIES_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    legal_entities_connection = _as_dict(brand.get("legalEntities"))
+    le_edges = _as_list(legal_entities_connection.get("edges"))
+
+    if not le_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    legal_entities: list[dict[str, Any]] = []
+    for le_edge in le_edges:
+        le_node = _as_dict(_as_dict(le_edge).get("node"))
+        if not le_node:
+            continue
+
+        name_node = _first_edge_node(le_node.get("names"))
+        enigma_le_id = _as_str(le_node.get("id")) or _as_str(le_node.get("enigmaId"))
+
+        # Map registered entities
+        re_connection = _as_dict(le_node.get("registeredEntities"))
+        re_edges = _as_list(re_connection.get("edges"))
+        registered_entities: list[dict[str, Any]] = []
+        for re_edge in re_edges:
+            re_node = _as_dict(_as_dict(re_edge).get("node"))
+            if not re_node:
+                continue
+
+            reg_connection = _as_dict(re_node.get("registrations"))
+            reg_edges = _as_list(reg_connection.get("edges"))
+            registrations: list[dict[str, Any]] = []
+            for reg_edge in reg_edges:
+                reg_node = _as_dict(_as_dict(reg_edge).get("node"))
+                if not reg_node:
+                    continue
+                registrations.append({
+                    "enigma_registration_id": _as_str(reg_node.get("id")),
+                    "registration_type": _as_str(reg_node.get("registrationType")),
+                    "registration_state": _as_str(reg_node.get("registrationState")),
+                    "jurisdiction_type": _as_str(reg_node.get("jurisdictionType")),
+                    "registered_name": _as_str(reg_node.get("registeredName")),
+                    "file_number": _as_str(reg_node.get("fileNumber")),
+                    "issue_date": _as_str(reg_node.get("issueDate")),
+                    "status": _as_str(reg_node.get("status")),
+                    "sub_status": _as_str(reg_node.get("subStatus")),
+                })
+
+            registered_entities.append({
+                "enigma_registered_entity_id": _as_str(re_node.get("id")),
+                "name": _as_str(re_node.get("name")),
+                "registered_entity_type": _as_str(re_node.get("registeredEntityType")),
+                "formation_date": _as_str(re_node.get("formationDate")),
+                "formation_year": _as_int(re_node.get("formationYear")),
+                "registrations": registrations,
+            })
+
+        # Map persons
+        persons_connection = _as_dict(le_node.get("persons"))
+        persons_edges = _as_list(persons_connection.get("edges"))
+        persons: list[dict[str, Any]] = []
+        for p_edge in persons_edges:
+            p_node = _as_dict(_as_dict(p_edge).get("node"))
+            if not p_node:
+                continue
+            first = _as_str(p_node.get("firstName")) or ""
+            last = _as_str(p_node.get("lastName")) or ""
+            full = _as_str(p_node.get("fullName")) or f"{first} {last}".strip() or None
+            persons.append({
+                "enigma_person_id": _as_str(p_node.get("id")),
+                "first_name": _as_str(p_node.get("firstName")),
+                "last_name": _as_str(p_node.get("lastName")),
+                "full_name": full,
+                "date_of_birth": _as_str(p_node.get("dateOfBirth")),
+            })
+
+        legal_entities.append({
+            "enigma_legal_entity_id": enigma_le_id,
+            "legal_entity_name": _as_str(name_node.get("name")),
+            "legal_entity_type": _as_str(name_node.get("legalEntityType")),
+            "registered_entities": registered_entities,
+            "persons": persons,
+        })
+
+    mapped_le: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "brand_name": _extract_brand_name(brand),
+        "legal_entities": legal_entities,
+        "legal_entity_count": len(legal_entities),
+    }
+    return {"attempt": attempt, "mapped": mapped_le}
+
+
+# ---------------------------------------------------------------------------
+# 1c. get_brand_address_deliverability
+# ---------------------------------------------------------------------------
+
+GET_BRAND_ADDRESS_DELIVERABILITY_QUERY = """
+query GetBrandAddressDeliverability($searchInput: SearchInput!, $locationLimit: Int!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      namesConnection(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      operatingLocationsConnection(first: $locationLimit) {
+        totalCount
+        edges {
+          node {
+            id
+            names(first: 1) {
+              edges {
+                node {
+                  name
+                }
+              }
+            }
+            addresses(first: 1) {
+              edges {
+                node {
+                  fullAddress
+                  streetAddress1
+                  city
+                  state
+                  postalCode
+                  deliverabilities(first: 1) {
+                    edges {
+                      node {
+                        rdi
+                        deliveryType
+                        deliverable
+                        virtual
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            operatingStatuses(first: 1) {
+              edges {
+                node {
+                  operatingStatus
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_address_deliverability(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+    limit: int = 25,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_address_deliverability",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_address_deliverability",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    try:
+        parsed_limit = int(limit)
+    except (TypeError, ValueError):
+        parsed_limit = 25
+    safe_limit = max(1, min(parsed_limit, 100))
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_address_deliverability",
+        query=GET_BRAND_ADDRESS_DELIVERABILITY_QUERY,
+        variables={
+            "searchInput": {"id": normalized_brand_id, "entityType": "BRAND"},
+            "locationLimit": safe_limit,
+        },
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    locations_connection = _as_dict(brand.get("operatingLocationsConnection"))
+    edges = _as_list(locations_connection.get("edges"))
+
+    if not edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    location_items: list[dict[str, Any]] = []
+    deliverable_count = 0
+    vacant_count = 0
+    not_deliverable_count = 0
+    virtual_count = 0
+
+    for edge in edges:
+        loc_node = _as_dict(_as_dict(edge).get("node"))
+        if not loc_node:
+            continue
+
+        address_edge_node = _first_edge_node(loc_node.get("addresses"))
+        status_node = _first_edge_node(loc_node.get("operatingStatuses"))
+
+        deliverability_connection = _as_dict(address_edge_node.get("deliverabilities"))
+        deliverability_node = _first_edge_node(deliverability_connection)
+
+        deliverable_val = _as_str(deliverability_node.get("deliverable"))
+        virtual_val = _as_str(deliverability_node.get("virtual"))
+
+        if deliverable_val == "deliverable":
+            deliverable_count += 1
+        elif deliverable_val == "vacant":
+            vacant_count += 1
+        elif deliverable_val == "not_deliverable":
+            not_deliverable_count += 1
+
+        if virtual_val == "virtual_cmra":
+            virtual_count += 1
+
+        location_items.append({
+            "enigma_location_id": _as_str(loc_node.get("id")),
+            "location_name": _as_str(_first_edge_node(loc_node.get("names")).get("name")),
+            "full_address": _as_str(address_edge_node.get("fullAddress")),
+            "street": _as_str(address_edge_node.get("streetAddress1")),
+            "city": _as_str(address_edge_node.get("city")),
+            "state": _as_str(address_edge_node.get("state")),
+            "postal_code": _as_str(address_edge_node.get("postalCode")),
+            "operating_status": _as_str(status_node.get("operatingStatus")),
+            "rdi": _as_str(deliverability_node.get("rdi")),
+            "delivery_type": _as_str(deliverability_node.get("deliveryType")),
+            "deliverable": deliverable_val,
+            "virtual": virtual_val,
+        })
+
+    mapped_deliv: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "brand_name": _extract_brand_name(brand),
+        "total_location_count": _as_int(locations_connection.get("totalCount")),
+        "locations": location_items,
+        "location_count": len(location_items),
+        "deliverable_count": deliverable_count,
+        "vacant_count": vacant_count,
+        "not_deliverable_count": not_deliverable_count,
+        "virtual_count": virtual_count,
+    }
+    return {"attempt": attempt, "mapped": mapped_deliv}
+
+
+# ---------------------------------------------------------------------------
+# 1d. get_brand_technologies
+# ---------------------------------------------------------------------------
+
+GET_BRAND_TECHNOLOGIES_QUERY = """
+query GetBrandTechnologies($searchInput: SearchInput!, $locationLimit: Int!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      namesConnection(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      operatingLocationsConnection(first: $locationLimit) {
+        totalCount
+        edges {
+          node {
+            id
+            names(first: 1) {
+              edges {
+                node {
+                  name
+                }
+              }
+            }
+            addresses(first: 1) {
+              edges {
+                node {
+                  city
+                  state
+                  postalCode
+                }
+              }
+            }
+            operatingStatuses(first: 1) {
+              edges {
+                node {
+                  operatingStatus
+                }
+              }
+            }
+            technologiesUseds(first: 3) {
+              edges {
+                node {
+                  technology
+                  category
+                  firstObservedDate
+                  lastObservedDate
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+_KNOWN_TECHNOLOGIES = {"Square", "Stripe", "Toast", "Clover", "Shopify", "Paypal"}
+
+
+async def get_brand_technologies(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+    limit: int = 25,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_technologies",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_technologies",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    try:
+        parsed_limit = int(limit)
+    except (TypeError, ValueError):
+        parsed_limit = 25
+    safe_limit = max(1, min(parsed_limit, 100))
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_technologies",
+        query=GET_BRAND_TECHNOLOGIES_QUERY,
+        variables={
+            "searchInput": {"id": normalized_brand_id, "entityType": "BRAND"},
+            "locationLimit": safe_limit,
+        },
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    locations_connection = _as_dict(brand.get("operatingLocationsConnection"))
+    edges = _as_list(locations_connection.get("edges"))
+
+    if not edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    technology_summary: dict[str, int] = {
+        "Square": 0, "Stripe": 0, "Toast": 0, "Clover": 0,
+        "Shopify": 0, "Paypal": 0, "other": 0,
+    }
+    locations_with_technology_count = 0
+    location_items: list[dict[str, Any]] = []
+
+    for edge in edges:
+        loc_node = _as_dict(_as_dict(edge).get("node"))
+        if not loc_node:
+            continue
+
+        address_node = _first_edge_node(loc_node.get("addresses"))
+        status_node = _first_edge_node(loc_node.get("operatingStatuses"))
+
+        tech_connection = _as_dict(loc_node.get("technologiesUseds"))
+        tech_edges = _as_list(tech_connection.get("edges"))
+
+        technologies: list[dict[str, Any]] = []
+        for t_edge in tech_edges:
+            t_node = _as_dict(_as_dict(t_edge).get("node"))
+            if not t_node:
+                continue
+            tech_name = _as_str(t_node.get("technology"))
+            tech_category = _as_str(t_node.get("category"))
+            technologies.append({
+                "technology": tech_name,
+                "category": tech_category,
+                "first_observed_date": _as_str(t_node.get("firstObservedDate")),
+                "last_observed_date": _as_str(t_node.get("lastObservedDate")),
+            })
+            if tech_name:
+                if tech_name in _KNOWN_TECHNOLOGIES:
+                    technology_summary[tech_name] = technology_summary.get(tech_name, 0) + 1
+                else:
+                    technology_summary["other"] = technology_summary.get("other", 0) + 1
+
+        if technologies:
+            locations_with_technology_count += 1
+
+        location_items.append({
+            "enigma_location_id": _as_str(loc_node.get("id")),
+            "location_name": _as_str(_first_edge_node(loc_node.get("names")).get("name")),
+            "city": _as_str(address_node.get("city")),
+            "state": _as_str(address_node.get("state")),
+            "postal_code": _as_str(address_node.get("postalCode")),
+            "operating_status": _as_str(status_node.get("operatingStatus")),
+            "technologies": technologies,
+        })
+
+    mapped_tech: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "brand_name": _extract_brand_name(brand),
+        "total_location_count": _as_int(locations_connection.get("totalCount")),
+        "locations": location_items,
+        "location_count": len(location_items),
+        "locations_with_technology_count": locations_with_technology_count,
+        "technology_summary": technology_summary,
+    }
+    return {"attempt": attempt, "mapped": mapped_tech}
+
+
+# ---------------------------------------------------------------------------
+# 1e. search_by_person
+# ---------------------------------------------------------------------------
+
+SEARCH_BY_PERSON_QUERY = """
+query SearchByPerson($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      names(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      websites(first: 1) {
+        edges {
+          node {
+            website
+          }
+        }
+      }
+      count(field: "operatingLocations")
+    }
+    ... on OperatingLocation {
+      id
+      enigmaId
+      names(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      addresses(first: 1) {
+        edges {
+          node {
+            fullAddress
+            streetAddress1
+            city
+            state
+            postalCode
+          }
+        }
+      }
+      operatingStatuses(first: 1) {
+        edges {
+          node {
+            operatingStatus
+          }
+        }
+      }
+    }
+    ... on LegalEntity {
+      id
+      enigmaId
+      names(first: 1) {
+        edges {
+          node {
+            name
+            legalEntityType
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def search_by_person(
+    *,
+    api_key: str | None,
+    first_name: str | None,
+    last_name: str | None,
+    date_of_birth: str | None = None,
+    state: str | None = None,
+    city: str | None = None,
+    street: str | None = None,
+    postal_code: str | None = None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "search_by_person",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_first = _as_str(first_name)
+    normalized_last = _as_str(last_name)
+    if not normalized_first or not normalized_last:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "search_by_person",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    person_input: dict[str, Any] = {
+        "firstName": normalized_first,
+        "lastName": normalized_last,
+    }
+    dob = _as_str(date_of_birth)
+    if dob:
+        person_input["dateOfBirth"] = dob
+
+    search_input: dict[str, Any] = {"person": person_input}
+
+    normalized_state = _as_str(state)
+    normalized_city = _as_str(city)
+    normalized_street = _as_str(street)
+    normalized_postal = _as_str(postal_code)
+
+    address_input: dict[str, str] = {}
+    if normalized_state:
+        address_input["state"] = normalized_state.upper()
+    if normalized_city:
+        address_input["city"] = normalized_city.upper()
+    if normalized_street:
+        address_input["street1"] = normalized_street
+    if normalized_postal:
+        address_input["postalCode"] = normalized_postal
+    if address_input:
+        search_input["address"] = address_input
+
+    payload = {
+        "query": SEARCH_BY_PERSON_QUERY,
+        "variables": {"searchInput": search_input},
+    }
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            ENIGMA_GRAPHQL_URL,
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": "search_by_person",
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+
+    if response.status_code == 429:
+        attempt["status"] = "skipped"
+        attempt["skip_reason"] = "rate_limited"
+        attempt["http_status"] = 429
+        return {"attempt": attempt, "mapped": None}
+
+    if response.status_code == 402:
+        attempt["status"] = "skipped"
+        attempt["skip_reason"] = "insufficient_credits"
+        attempt["http_status"] = 402
+        return {"attempt": attempt, "mapped": None}
+
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return {"attempt": attempt, "mapped": None}
+
+    if isinstance(body, dict):
+        errors = body.get("errors")
+        if isinstance(errors, list) and errors:
+            attempt["status"] = "failed"
+            return {"attempt": attempt, "mapped": None}
+
+    data = _as_dict(_as_dict(body).get("data")) if isinstance(body, dict) else {}
+    search_results = _as_list(data.get("search"))
+
+    if not search_results:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    brands: list[dict[str, Any]] = []
+    operating_locations: list[dict[str, Any]] = []
+    legal_entities: list[dict[str, Any]] = []
+
+    for item in search_results:
+        item_dict = _as_dict(item)
+        if not item_dict:
+            continue
+
+        # Discriminate type by key presence:
+        # OperatingLocation nodes have "operatingStatuses"
+        # LegalEntity nodes have "legalEntityType" on their name node
+        # Brand nodes are the default
+        if "operatingStatuses" in item_dict:
+            mapped_loc = _map_location_result(item_dict)
+            if mapped_loc:
+                operating_locations.append(mapped_loc)
+        else:
+            name_node = _first_edge_node(item_dict.get("names"))
+            le_type = _as_str(name_node.get("legalEntityType"))
+            if le_type or "legalEntityType" in item_dict:
+                le_id = _as_str(item_dict.get("id")) or _as_str(item_dict.get("enigmaId"))
+                legal_entities.append({
+                    "enigma_legal_entity_id": le_id,
+                    "legal_entity_name": _as_str(name_node.get("name")),
+                    "legal_entity_type": le_type,
+                })
+            else:
+                mapped_brand = _map_brand_result(item_dict)
+                if mapped_brand:
+                    brands.append(mapped_brand)
+
+    total = len(brands) + len(operating_locations) + len(legal_entities)
+    if total == 0:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    attempt["status"] = "found"
+    mapped_person: dict[str, Any] = {
+        "brands": brands,
+        "operating_locations": operating_locations,
+        "legal_entities": legal_entities,
+        "total_returned": total,
+    }
+    return {"attempt": attempt, "mapped": mapped_person}
+
+
+# ---------------------------------------------------------------------------
+# 1f. get_brand_industries
+# ---------------------------------------------------------------------------
+
+GET_BRAND_INDUSTRIES_QUERY = """
+query GetBrandIndustries($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      namesConnection(first: 1) {
+        edges {
+          node {
+            name
+          }
+        }
+      }
+      industries(first: 20) {
+        edges {
+          node {
+            industryDesc
+            industryCode
+            industryType
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_industries(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_industries",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_industries",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_industries",
+        query=GET_BRAND_INDUSTRIES_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    industries_connection = _as_dict(brand.get("industries"))
+    ind_edges = _as_list(industries_connection.get("edges"))
+
+    if not ind_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    industries: list[dict[str, Any]] = []
+    naics_codes: list[str] = []
+    sic_codes: list[str] = []
+
+    for ind_edge in ind_edges:
+        ind_node = _as_dict(_as_dict(ind_edge).get("node"))
+        if not ind_node:
+            continue
+        industry_type = _as_str(ind_node.get("industryType"))
+        industry_code = _as_str(ind_node.get("industryCode"))
+        industries.append({
+            "industry_desc": _as_str(ind_node.get("industryDesc")),
+            "industry_code": industry_code,
+            "industry_type": industry_type,
+        })
+        if industry_type and "naics" in industry_type.lower() and industry_code:
+            naics_codes.append(industry_code)
+        elif industry_type and "sic" in industry_type.lower() and industry_code:
+            sic_codes.append(industry_code)
+
+    mapped_ind: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "brand_name": _extract_brand_name(brand),
+        "industries": industries,
+        "industry_count": len(industries),
+        "naics_codes": naics_codes,
+        "sic_codes": sic_codes,
+    }
+    return {"attempt": attempt, "mapped": mapped_ind}
