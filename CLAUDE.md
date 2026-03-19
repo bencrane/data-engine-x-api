@@ -1,4 +1,4 @@
-<!-- Last updated: 2026-03-18T07:00:00Z -->
+<!-- Last updated: 2026-03-18T23:59:00Z -->
 
 # CLAUDE.md
 
@@ -66,12 +66,11 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, which w
 - `salesnav_prospects` is broken. Production has `35` successful prospect-producing steps, but the table has `0` rows. The most likely cause is context shape failure: successful `person.search.sales_nav_url` steps do not carry a usable `source_company_domain`, so the Trigger auto-persist branch never fires.
 - `company_ads` exists in production (was missing in March 10) but has `0` rows.
 - `fmcsa_carrier_signals` table exists but has `0` rows — signal detection has not populated it.
-- `mv_fmcsa_authority_grants` and `mv_fmcsa_insurance_cancellations` do not exist in production — migrations 036 and 037 have not been applied.
 - End-to-end pipeline reliability is not clean. Pipelines frequently fail to complete cleanly due to silent auto-persist failures, context-shape issues, and the deploy-sequencing landmine between Railway and Trigger.dev.
 
 ### What Has Never Been Used
 
-- `54` executable operations in the current code catalog have never been called in production:
+- `69` executable operations in the current code catalog have never been called in production:
   - `address.search`
   - `address.search.residents`
   - `company.analyze.sec_10k`
@@ -89,6 +88,21 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, which w
   - `company.enrich.fmcsa.revocation_all_history`
   - `company.enrich.hiring_signals`
   - `company.enrich.locations`
+  - `company.search.enigma.brands`
+  - `company.search.enigma.aggregate`
+  - `company.search.enigma.person`
+  - `company.enrich.enigma.legal_entities`
+  - `company.enrich.enigma.address_deliverability`
+  - `company.enrich.enigma.technologies`
+  - `company.enrich.enigma.industries`
+  - `company.enrich.enigma.affiliated_brands`
+  - `company.enrich.enigma.marketability`
+  - `company.enrich.enigma.activity_flags`
+  - `company.enrich.enigma.bankruptcy`
+  - `company.enrich.enigma.watchlist`
+  - `person.search.enigma.roles`
+  - `person.enrich.enigma.profile`
+  - `company.verify.enigma.kyb`
   - `company.enrich.tech_stack`
   - `company.research.check_court_filings`
   - `company.research.fetch_sec_filings`
@@ -141,7 +155,7 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, which w
 
 - See `docs/DATA_ENGINE_X_ARCHITECTURE.md`, section `7. Known Architectural Problems`, for the full list.
 - Top 3 problems (being addressed across current migration and reliability workstreams):
-  - auto-persist silent failures: the legacy `run-pipeline.ts` wraps dedicated-table writes in try/catch and swallows failures. Dedicated workflows use confirmed writes that surface failures.
+  - auto-persist silent failures: the legacy `run-pipeline.ts` wraps dedicated-table writes in try/catch and swallows failures. Dedicated workflows use confirmed writes that surface failures. Standalone `/api/v1/execute` with `persist: true` now also surfaces persistence errors in the response (implemented 2026-03-18). The `run-pipeline.ts` auto-persist silent failures remain unresolved.
   - `run-pipeline.ts` monolith: being replaced by dedicated workflow files with shared utilities. Do NOT add to `run-pipeline.ts`.
   - deploy-sequencing landmine: Railway must be live before Trigger.dev deploys, or new Trigger code calls internal FastAPI endpoints that do not exist yet. Exception: the fan-out router deploy reverses this order (Trigger first, then Railway).
 
@@ -149,6 +163,9 @@ This section is based on `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md`, which w
 
 - `docs/OPERATIONAL_REALITY_CHECK_2026-03-18.md` - live production state audit
 - `docs/DATA_ENGINE_X_ARCHITECTURE.md` - full architecture doc including known problems
+- `docs/DATA_ACCESS_AND_AUTH_GUIDE.md` - auth paths and data visibility model; grounded in code; supersedes AUTH_MODEL.md for technical detail
+- `docs/PERSISTENCE_MODEL.md` - full persistence audit; 9 data loss risks; read before any persistence work
+- `docs/GLOBAL_DATA_MODEL_ANALYSIS.md` - analysis of globalizing entity model; 13 sections; recommendation: hybrid approach deferred pending 4 prerequisites
 
 If `CLAUDE.md` or `docs/SYSTEM_OVERVIEW.md` conflict with these reports, the reports are correct.
 
@@ -243,6 +260,7 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
 | Staffing Activation | `58203c4a-1654-42f8-8486-bd37016223a5` | Sales Talent (`6749b0b9-3e9a-4382-8e4d-353771ef78d4`, domain: salestalent.inc) |
 | Revenue Activation | `d319a533-356a-4592-bd7a-b79dd4d27802` | — |
 | AlumniGTM | `b0293785-aa7a-4234-8201-cc47305295f8` | global (`8cc8b8f3-fc26-49eb-992b-abe8cb46ec53`, domain: global.alumnigtm.com) |
+| Substrate | `7612fd45-8fda-4b6b-af7f-c8b0ebaa3a19` | — |
 
 ## Directory Structure
 
@@ -252,6 +270,9 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `app/contracts/` — Pydantic output models
   - `app/services/` — operation service functions
     - `app/services/hq_workflow_operations.py` — HQ workflow operation services (6 RevenueInfra-backed workflow ops)
+    - `app/services/persistence_routing.py` — DEDICATED_TABLE_REGISTRY and persist_standalone_result() for standalone execute persistence
+    - `app/services/enigma_brand_discoveries.py` — array-capable upsert service for Enigma brand discovery results
+    - `app/services/enigma_location_enrichments.py` — array-capable upsert service for Enigma location enrichment results
   - `app/routers/execute_v1.py` — operation dispatch + SUPPORTED_OPERATION_IDS
   - `app/routers/entities_v1.py` — entity query endpoints (companies, persons, job-postings, timeline)
   - `app/services/entity_state.py` — entity upsert + identity resolution (company, person, job)
@@ -259,16 +280,20 @@ HQ is read-only from data-engine-x's perspective. data-engine-x never writes to 
   - `app/services/resolve_operations.py` — 7 CRM resolve operations
 - `trigger/`
   - `trigger/src/tasks/run-pipeline.ts` — legacy generic pipeline runner (being replaced by dedicated workflows)
-  - `trigger/src/tasks/` — dedicated workflow files and ingestion tasks, including company enrichment, person search/enrichment, ICP job titles, company intel briefing, person intel briefing, fan-out router, TAM building, FMCSA feed ingestion, and newer workflow families
+  - `trigger/src/tasks/` — dedicated workflow files and ingestion tasks, including company enrichment, person search/enrichment, ICP job titles, company intel briefing, person intel briefing, fan-out router, TAM building, FMCSA feed ingestion, newer workflow families, and `enigma-smb-discovery.ts` (dedicated Enigma SMB discovery workflow with confirmed writes)
   - `trigger/src/` — shared workflow utilities (internal HTTP, confirmed writes, context merge, Parallel.ai polling, prompt templates)
 - `tests/`
 - `scripts/` — backfill scripts for dedicated tables (icp_job_titles, company/person intel briefings)
 - `supabase/migrations/`
 - `docs/`
-  - `docs/blueprints/` — blueprint definition JSON files
+  - `docs/blueprints/` — blueprint definition JSON files, including `enigma_smb_discovery_v1.json` (Substrate org, 3 steps)
   - `docs/EXECUTOR_DIRECTIVE_*.md` — executor agent directives (documentation)
   - `docs/FMCSA_*.md` — FMCSA contract-lock and mapping docs for current ingestion workstreams
   - `docs/directives-hq/` — directives for HQ database work (job title matching, dedup)
   - `docs/troubleshooting-fixes/` — incident post-mortems and fixes
   - `docs/api-reference-docs/` — provider API documentation (Enigma, Parallel.ai)
+  - `docs/DATA_ACCESS_AND_AUTH_GUIDE.md` — auth paths, data visibility by auth type, practical access examples; grounded in code
+  - `docs/PERSISTENCE_MODEL.md` — full persistence audit, 9 data loss risks, persistence decision tree
+  - `docs/ENIGMA_API_REFERENCE.md` — consolidated Enigma API reference from 61 source files
+  - `docs/GLOBAL_DATA_MODEL_ANALYSIS.md` — analysis of moving from org-scoped to global entity model
 - `Dockerfile`
