@@ -1,6 +1,6 @@
 # Auth Model
 
-**Last updated:** 2026-03-18T07:00:00Z
+**Last updated:** 2026-03-18T12:00:00Z
 
 Authentication and multi-tenancy reference for `data-engine-x-api`.
 
@@ -38,7 +38,7 @@ All protected endpoints use `Authorization: Bearer <token>`, with four supported
    - Produces tenant `AuthContext`.
 3. **Super-admin API key**
    - Compared to `SUPER_ADMIN_API_KEY`.
-   - Grants `SuperAdminContext` on super-admin endpoints, flexible super-admin routes, and `/api/v1/execute` (requires `org_id` + `company_id` in request body).
+   - Grants `SuperAdminContext` on super-admin endpoints, flexible super-admin routes, `/api/v1/execute` (requires `org_id` + `company_id` in request body), and all entity query endpoints including `/api/v1/entities/companies` and `/api/v1/entities/persons` (requires `org_id` in request body).
 4. **Internal service auth (Trigger.dev -> FastAPI)**
    - `Authorization: Bearer <INTERNAL_API_KEY>`
    - `x-internal-org-id: <org_uuid>` (required)

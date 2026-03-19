@@ -1,6 +1,6 @@
 # Data Access & Auth Guide
 
-**Last updated:** 2026-03-18T15:30:00Z
+**Last updated:** 2026-03-18T12:00:00Z
 
 Central reference for: what data is available to whom, under what credentials, and how to access it from different contexts.
 
@@ -14,7 +14,7 @@ Supplements `docs/AUTH_MODEL.md`. Every claim is grounded in the actual code —
 |---|---|---|---|---|
 | Tenant JWT session | `Authorization: Bearer <jwt>` | Frontend users, dashboard | All tenant endpoints (`/api/auth/*`, `/api/companies/*`, `/api/blueprints/*`, `/api/v1/*` entity/execute/batch) | Yes — `org_id` baked into JWT claims |
 | Tenant API token | `Authorization: Bearer <token>` | Scripts, automations, external integrations | Same tenant endpoints as JWT | Yes — `org_id` stored in `api_tokens` table row |
-| Super-admin (API key or JWT) | `Authorization: Bearer <key_or_jwt>` | Admin tools, cross-org management, operational queries | All `/api/super-admin/*` CRUD, `/api/v1/execute` (with org_id/company_id in body), FMCSA endpoints, entity query endpoints (with org_id in body), federal data endpoints | Configurable — no inherent org; must specify org context on execution/entity endpoints |
+| Super-admin (API key or JWT) | `Authorization: Bearer <key_or_jwt>` | Admin tools, cross-org management, operational queries | All `/api/super-admin/*` CRUD, `/api/v1/execute` (with org_id/company_id in body), FMCSA endpoints, all entity query endpoints including `/companies` and `/persons` (with org_id in body), federal data endpoints | Configurable — no inherent org; must specify org context on execution/entity endpoints |
 | Internal service auth | `Authorization: Bearer <internal_key>` + `x-internal-org-id` + `x-internal-company-id` headers | Trigger.dev tasks | `/api/internal/*` callbacks, `/api/v1/execute` (via `get_current_auth` matching internal key) | Yes — org/company passed via headers |
 
 ---
@@ -25,7 +25,7 @@ Supplements `docs/AUTH_MODEL.md`. Every claim is grounded in the actual code —
 
 **Code path:** `app/auth/dependencies.py:get_current_auth()` → produces `AuthContext` with `org_id`, optional `company_id`, `role`.
 
-- **Entity tables** (`company_entities`, `person_entities`, `job_posting_entities`): scoped by `org_id` column. Query always includes `.eq("org_id", auth.org_id)` (see `entities_v1.py:352`).
+- **Entity tables** (`company_entities`, `person_entities`, `job_posting_entities`): scoped by `org_id` column. Query always includes `.eq("org_id", org_id)` (see `entities_v1.py`).
 - **Execution lineage** (`submissions`, `pipeline_runs`, `step_results`): scoped by `org_id` column on each table. Tenant flow endpoints filter by `auth.org_id` (see `tenant_flow.py:80+`).
 - **Operation runs** (`operation_runs`): scoped by `org_id` column via `persist_operation_execution()`.
 - **Dedicated entity tables** (`icp_job_titles`, `company_customers`, `company_ads`, `gemini_icp_job_titles`, `salesnav_prospects`, `company_intel_briefings`, `person_intel_briefings`, `entity_relationships`, `entity_timeline`, `entity_snapshots`): all scoped by `org_id` — service functions accept `org_id` parameter extracted from auth.
@@ -42,7 +42,7 @@ Supplements `docs/AUTH_MODEL.md`. Every claim is grounded in the actual code —
 - **`/api/v1/batch/submit`**: same requirement — `org_id` + `company_id` required in body (`execute_v1.py:1283-1289`).
 - **`/api/v1/batch/status`**: super-admin can query any submission. If `org_id` is passed, it filters; otherwise it queries by `submission_id` only (`execute_v1.py:1399-1401`).
 - **Entity query endpoints** (`/api/v1/entities/*`):
-  - `companies` and `persons`: use `get_current_auth` (not flexible auth), so super-admin API key falls through to internal auth path which requires `x-internal-org-id` header. **Finding: super-admin cannot directly query `/api/v1/entities/companies` or `/api/v1/entities/persons`** — these use `Depends(get_current_auth)` not `_resolve_flexible_auth`.
+  - `companies` and `persons`: use `_resolve_flexible_auth`, so super-admin works. Must pass `org_id` in request body — required for super-admin (400 if missing).
   - `job-postings`, `timeline`, `snapshots`: use `_resolve_flexible_auth`, so super-admin works. Must pass `org_id` in request body — required for super-admin.
   - Dedicated table queries (`icp-job-titles`, `company-customers`, etc.): use `_resolve_flexible_auth`. Super-admin must pass `org_id` in body.
   - Federal leads, SBA, FMCSA analytics: use `_resolve_flexible_auth`. Data is global, not org-scoped.
@@ -134,10 +134,10 @@ Super-admin auth has two sub-paths, both resolved by `get_current_super_admin()`
 - FastAPI side: `INTERNAL_API_KEY` env var (loaded via `app/config.py` settings).
 - Trigger.dev side: `DATA_ENGINE_INTERNAL_API_KEY` or `INTERNAL_API_KEY` env var (resolved in `internal-api.ts:103-107`).
 
-**How Trigger.dev passes org context:** The `InternalApiClient` class (`trigger/src/workflows/internal-api.ts:116-208`) sets headers on every request:
+**How Trigger.dev passes org context:** Both `InternalApiClient` (dedicated workflows, `trigger/src/workflows/internal-api.ts`) and the generic `internalPost()` function (legacy `run-pipeline.ts`) set org headers on every request:
 - `Authorization: Bearer <internalApiKey>`
-- `x-internal-org-id: <orgId>` (from `authContext.orgId`)
-- `x-internal-company-id: <companyId>` (conditional — only if `authContext.companyId` is truthy)
+- `x-internal-org-id: <orgId>` (from pipeline payload `org_id`)
+- `x-internal-company-id: <companyId>` (from pipeline payload `company_id`)
 
 **FastAPI validation (internal endpoints):** `require_internal_key()` and `require_internal_context()` in `internal.py:66-97` check the bearer token against `settings.internal_api_key`. `require_internal_context()` additionally extracts `x-internal-org-id` (required) and `x-internal-company-id` (optional) and returns them as a dict.
 
@@ -440,19 +440,20 @@ Creates a submission with one pipeline run per entity. Returns submission ID and
 
 ### Example 3: Querying entities as super admin
 
-**Note:** Super-admin **cannot** directly query `/api/v1/entities/companies` or `/api/v1/entities/persons` — those endpoints use `get_current_auth` which does not accept super-admin keys. Use `/api/v1/entities/job-postings` or dedicated table queries instead:
+Super-admin can query all entity endpoints including `/api/v1/entities/companies` and `/api/v1/entities/persons`. Must pass `org_id` in the request body — required for all entity queries as super-admin (returns 400 without it).
 
 ```bash
-curl -X POST https://your-instance.railway.app/api/v1/icp-job-titles/query \
+curl -X POST https://your-instance.railway.app/api/v1/entities/companies \
   -H "Authorization: Bearer YOUR_SUPER_ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "org_id": "YOUR_ORG_ID",
-    "limit": 10
+    "page": 1,
+    "per_page": 10
   }'
 ```
 
-Super-admin must provide `org_id` in the body. Without it, the endpoint returns a 400 error.
+Works the same for `/api/v1/entities/persons`, `/api/v1/entities/job-postings`, and all dedicated table query endpoints. Super-admin must always provide `org_id` in the body.
 
 ### Example 4: Hitting an internal endpoint with service auth
 
@@ -522,7 +523,7 @@ The token inherits `org_id`, `company_id`, and `role` from the target user. Opti
 
 ### Auth Gaps Discovered
 
-1. **`/api/v1/entities/companies` and `/api/v1/entities/persons` do not accept super-admin auth.** These endpoints use `Depends(get_current_auth)` instead of `Depends(_resolve_flexible_auth)`. Super-admin API key/JWT will fail with 401. All other entity query endpoints (job-postings, timeline, snapshots, dedicated tables, federal leads, FMCSA) use `_resolve_flexible_auth` and work with super-admin auth. This appears to be an oversight — `list_company_entities` and `list_person_entities` are the only two entity endpoints that don't support super-admin.
+1. **`/api/v1/entities/companies` and `/api/v1/entities/persons` did not accept super-admin auth (fixed).** These endpoints previously used `Depends(get_current_auth)` instead of `Depends(_resolve_flexible_auth)`. Both now use `_resolve_flexible_auth` — super-admin can query them with `org_id` in the request body, consistent with all other entity endpoints.
 
 2. **Internal auth `auth_method` is `"api_token"`.** When the internal API key matches in `get_current_auth()`, the resulting `AuthContext` has `auth_method="api_token"` (line 61), making it indistinguishable from a tenant API token in downstream code. This is not a security issue but could cause confusion in audit logging.
 
