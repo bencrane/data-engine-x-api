@@ -69,7 +69,8 @@ SELECT
     NULLIF(last_update_date, '')::DATE              AS last_update_date_cast,
     NULLIF(activation_date, '')::DATE               AS activation_date_cast,
     NULLIF(entity_start_date, '')::DATE             AS entity_start_date_cast,
-    NULLIF(fiscal_year_end_close_date, '')::DATE    AS fiscal_year_end_close_date_cast,
+    -- fiscal_year_end_close_date stores MMDD only (e.g. '1231') not YYYYMMDD; cannot cast to DATE
+    NULLIF(fiscal_year_end_close_date, '')          AS fiscal_year_end_close_mmdd,
 
     -- Keep extract_date native (already DATE type)
     extract_date,
@@ -262,7 +263,7 @@ FROM entities.sba_7a_loans;
 -- No single unique column in SBA data; use composite near-key matching the source table's
 -- unique constraint (uq_sba_7a_loans_extract_date_composite)
 CREATE UNIQUE INDEX idx_mv_sba_typed_composite_key
-    ON entities.mv_sba_loans_typed (extract_date, borrname, borrstreet, borrcity, borrstate, approvaldate, grossapproval_numeric);
+    ON entities.mv_sba_loans_typed (extract_date, borrname, borrstreet, borrcity, borrstate, approvaldate_cast, grossapproval_numeric);
 
 CREATE INDEX idx_mv_sba_typed_state
     ON entities.mv_sba_loans_typed (borrstate);
@@ -400,18 +401,20 @@ CREATE INDEX idx_mv_sam_usa_bridge_latest_contract
 
 DROP MATERIALIZED VIEW IF EXISTS entities.mv_fmcsa_latest_insurance_policies CASCADE;
 
+-- DISTINCT ON deduplicates to latest feed_date per (docket, type, policy)
+-- Same policy appears across multiple daily feed snapshots; ORDER BY feed_date DESC picks latest
+-- bipd_maximum_dollar_limit_thousands_usd and bipd_underlying_dollar_limit_thousands_usd
+-- are INTEGER columns in the source (not TEXT); referenced directly without cast
 CREATE MATERIALIZED VIEW entities.mv_fmcsa_latest_insurance_policies AS
-SELECT
+SELECT DISTINCT ON (docket_number, insurance_type_code, policy_number)
     id,
     feed_date,
     docket_number,
     insurance_type_code,
     insurance_type_description,
     bipd_class_code,
-    NULLIF(bipd_maximum_dollar_limit_thousands_usd, '')::NUMERIC
-        AS bipd_max_limit_thousands_usd,
-    NULLIF(bipd_underlying_dollar_limit_thousands_usd, '')::NUMERIC
-        AS bipd_underlying_limit_thousands_usd,
+    bipd_maximum_dollar_limit_thousands_usd,
+    bipd_underlying_dollar_limit_thousands_usd,
     policy_number,
     effective_date,
     form_code,
@@ -420,12 +423,14 @@ SELECT
     source_observed_at
 FROM entities.insurance_policies
 WHERE is_removal_signal = FALSE
-  AND source_feed_name != 'test_feed';
+  AND source_feed_name != 'test_feed'
+ORDER BY docket_number, insurance_type_code, policy_number, feed_date DESC;
 
 -- Unique index enables REFRESH MATERIALIZED VIEW CONCURRENTLY
--- Composite key: docket + type + policy_number (natural identifier per coverage record)
 CREATE UNIQUE INDEX idx_mv_fmcsa_lip_docket_type_policy
     ON entities.mv_fmcsa_latest_insurance_policies (docket_number, insurance_type_code, policy_number);
+CREATE UNIQUE INDEX idx_mv_fmcsa_lip_id
+    ON entities.mv_fmcsa_latest_insurance_policies (id);
 
 CREATE INDEX idx_mv_fmcsa_lip_docket
     ON entities.mv_fmcsa_latest_insurance_policies (docket_number);
@@ -437,7 +442,7 @@ CREATE INDEX idx_mv_fmcsa_lip_ins_type
     ON entities.mv_fmcsa_latest_insurance_policies (insurance_type_code);
 
 CREATE INDEX idx_mv_fmcsa_lip_bipd_limit
-    ON entities.mv_fmcsa_latest_insurance_policies (bipd_max_limit_thousands_usd);
+    ON entities.mv_fmcsa_latest_insurance_policies (bipd_maximum_dollar_limit_thousands_usd);
 
 -- ============================================================
 -- View 8: entities.mv_fmcsa_new_carriers_90d
