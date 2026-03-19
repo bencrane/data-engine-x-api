@@ -1,4 +1,4 @@
-# Last updated: 2026-03-18
+# Last updated: 2026-03-18 (final Enigma batch)
 from __future__ import annotations
 
 import asyncio
@@ -2562,3 +2562,1095 @@ async def get_brand_industries(
         "sic_codes": sic_codes,
     }
     return {"attempt": attempt, "mapped": mapped_ind}
+
+
+# ---------------------------------------------------------------------------
+# Final batch adapters: affiliated brands, marketability, activity flags,
+# bankruptcy, watchlist, roles, officer persons, KYB verify
+# ---------------------------------------------------------------------------
+
+GET_AFFILIATED_BRANDS_QUERY = """
+query GetAffiliatedBrands($searchInput: SearchInput!, $limit: Int!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      affiliatedBrands(first: $limit) {
+        edges {
+          affiliationType
+          rank
+          firstObservedDate
+          lastObservedDate
+          node {
+            id
+            enigmaId
+            names(first: 1) {
+              edges { node { name } }
+            }
+            websites(first: 1) {
+              edges { node { website } }
+            }
+            count(field: "operatingLocations")
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_affiliated_brands(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+    limit: int = 50,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_affiliated_brands",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_affiliated_brands",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    safe_limit = max(1, min(limit, 100))
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_affiliated_brands",
+        query=GET_AFFILIATED_BRANDS_QUERY,
+        variables={
+            "searchInput": {"id": normalized_brand_id, "entityType": "BRAND"},
+            "limit": safe_limit,
+        },
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    affiliated_brands_conn = _as_dict(brand.get("affiliatedBrands"))
+    ab_edges = _as_list(affiliated_brands_conn.get("edges"))
+
+    if not ab_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    affiliated_brands: list[dict[str, Any]] = []
+    for edge in ab_edges:
+        edge_dict = _as_dict(edge)
+        node = _as_dict(edge_dict.get("node"))
+        brand_name = _as_str(_first_edge_node(node.get("names")).get("name"))
+        website = _as_str(_first_edge_node(node.get("websites")).get("website"))
+        affiliated_brands.append({
+            "enigma_brand_id": _as_str(node.get("id")) or _as_str(node.get("enigmaId")),
+            "brand_name": brand_name,
+            "website": website,
+            "location_count": _as_int(node.get("count")),
+            "affiliation_type": _as_str(edge_dict.get("affiliationType")),
+            "rank": _as_int(edge_dict.get("rank")),
+            "first_observed_date": _as_str(edge_dict.get("firstObservedDate")),
+        })
+
+    mapped: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "affiliated_brand_count": len(affiliated_brands),
+        "affiliated_brands": affiliated_brands,
+    }
+    return {"attempt": attempt, "mapped": mapped}
+
+
+GET_BRAND_MARKETABILITY_QUERY = """
+query GetBrandMarketability($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      isMarketables(first: 1) {
+        edges {
+          node {
+            isMarketable
+            firstObservedDate
+            lastObservedDate
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_marketability(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_marketability",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_marketability",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_marketability",
+        query=GET_BRAND_MARKETABILITY_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    is_marketables_conn = _as_dict(brand.get("isMarketables"))
+    im_edges = _as_list(is_marketables_conn.get("edges"))
+
+    if not im_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    node = _first_edge_node(is_marketables_conn)
+    raw_is_marketable = node.get("isMarketable")
+    if isinstance(raw_is_marketable, bool):
+        is_marketable: bool | None = raw_is_marketable
+    elif isinstance(raw_is_marketable, str):
+        is_marketable = raw_is_marketable.lower() == "true"
+    else:
+        is_marketable = None
+
+    mapped_im: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "is_marketable": is_marketable,
+        "first_observed_date": _as_str(node.get("firstObservedDate")),
+        "last_observed_date": _as_str(node.get("lastObservedDate")),
+    }
+    return {"attempt": attempt, "mapped": mapped_im}
+
+
+GET_BRAND_ACTIVITY_FLAGS_QUERY = """
+query GetBrandActivityFlags($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      activities(first: 20) {
+        edges {
+          node {
+            activityType
+            firstObservedDate
+            lastObservedDate
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_activity_flags(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_activity_flags",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_activity_flags",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_activity_flags",
+        query=GET_BRAND_ACTIVITY_FLAGS_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    activities_conn = _as_dict(brand.get("activities"))
+    act_edges = _as_list(activities_conn.get("edges"))
+
+    # Empty activity list is a valid "found" result — no flags means no compliance issues.
+    activity_flags: list[dict[str, Any]] = []
+    activity_types: list[str] = []
+    for act_edge in act_edges:
+        act_node = _as_dict(_as_dict(act_edge).get("node"))
+        activity_type = _as_str(act_node.get("activityType"))
+        activity_flags.append({
+            "activity_type": activity_type,
+            "first_observed_date": _as_str(act_node.get("firstObservedDate")),
+            "last_observed_date": _as_str(act_node.get("lastObservedDate")),
+        })
+        if activity_type:
+            activity_types.append(activity_type)
+
+    attempt["status"] = "found"
+    mapped_af: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "activity_count": len(activity_flags),
+        "activity_flags": activity_flags,
+        "has_flags": len(activity_flags) > 0,
+        "activity_types": activity_types,
+    }
+    return {"attempt": attempt, "mapped": mapped_af}
+
+
+GET_BRAND_BANKRUPTCY_QUERY = """
+query GetBrandBankruptcy($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      legalEntities(first: 10) {
+        edges {
+          node {
+            id
+            enigmaId
+            legalEntityType
+            names(first: 1) {
+              edges { node { name } }
+            }
+            bankruptcies(first: 10) {
+              edges {
+                node {
+                  id
+                  debtorName
+                  trustee
+                  judge
+                  filingDate
+                  chapterType
+                  caseNumber
+                  petition
+                  entryDate
+                  dateTerminated
+                  debtorDischargedDate
+                  planConfirmedDate
+                  firstObservedDate
+                  lastObservedDate
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_bankruptcy(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_bankruptcy",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_bankruptcy",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_bankruptcy",
+        query=GET_BRAND_BANKRUPTCY_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    le_connection = _as_dict(brand.get("legalEntities"))
+    le_edges = _as_list(le_connection.get("edges"))
+
+    if not le_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    legal_entities_with_bankruptcies: list[dict[str, Any]] = []
+    total_bankruptcy_count = 0
+    has_active_bankruptcy = False
+
+    for le_edge in le_edges:
+        le_node = _as_dict(_as_dict(le_edge).get("node"))
+        if not le_node:
+            continue
+
+        name_node = _first_edge_node(le_node.get("names"))
+        enigma_le_id = _as_str(le_node.get("id")) or _as_str(le_node.get("enigmaId"))
+
+        bk_connection = _as_dict(le_node.get("bankruptcies"))
+        bk_edges = _as_list(bk_connection.get("edges"))
+
+        bankruptcies: list[dict[str, Any]] = []
+        for bk_edge in bk_edges:
+            bk_node = _as_dict(_as_dict(bk_edge).get("node"))
+            if not bk_node:
+                continue
+            date_terminated = _as_str(bk_node.get("dateTerminated"))
+            if not date_terminated:
+                has_active_bankruptcy = True
+            bankruptcies.append({
+                "case_number": _as_str(bk_node.get("caseNumber")),
+                "chapter_type": _as_str(bk_node.get("chapterType")),
+                "petition": _as_str(bk_node.get("petition")),
+                "debtor_name": _as_str(bk_node.get("debtorName")),
+                "filing_date": _as_str(bk_node.get("filingDate")),
+                "entry_date": _as_str(bk_node.get("entryDate")),
+                "date_terminated": date_terminated,
+                "debtor_discharged_date": _as_str(bk_node.get("debtorDischargedDate")),
+                "plan_confirmed_date": _as_str(bk_node.get("planConfirmedDate")),
+                "judge": _as_str(bk_node.get("judge")),
+                "trustee": _as_str(bk_node.get("trustee")),
+                "first_observed_date": _as_str(bk_node.get("firstObservedDate")),
+                "last_observed_date": _as_str(bk_node.get("lastObservedDate")),
+            })
+
+        total_bankruptcy_count += len(bankruptcies)
+        legal_entities_with_bankruptcies.append({
+            "enigma_legal_entity_id": enigma_le_id,
+            "legal_entity_name": _as_str(name_node.get("name")),
+            "legal_entity_type": _as_str(le_node.get("legalEntityType")),
+            "bankruptcy_count": len(bankruptcies),
+            "bankruptcies": bankruptcies,
+        })
+
+    # Legal entities found but no bankruptcies is a valid "found" result.
+    attempt["status"] = "found"
+    mapped_bk: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "legal_entity_count": len(legal_entities_with_bankruptcies),
+        "total_bankruptcy_count": total_bankruptcy_count,
+        "legal_entities_with_bankruptcies": legal_entities_with_bankruptcies,
+        "has_active_bankruptcy": has_active_bankruptcy,
+    }
+    return {"attempt": attempt, "mapped": mapped_bk}
+
+
+GET_BRAND_WATCHLIST_QUERY = """
+query GetBrandWatchlist($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      legalEntities(first: 10) {
+        edges {
+          node {
+            id
+            enigmaId
+            legalEntityType
+            names(first: 1) {
+              edges { node { name } }
+            }
+            isFlaggedByWatchlistEntries(first: 20) {
+              edges {
+                node {
+                  id
+                  watchlistName
+                  firstObservedDate
+                  lastObservedDate
+                }
+              }
+            }
+            appearsOnWatchlistEntries(first: 20) {
+              edges {
+                node {
+                  id
+                  watchlistName
+                  firstObservedDate
+                  lastObservedDate
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_watchlist(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_watchlist",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_watchlist",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_watchlist",
+        query=GET_BRAND_WATCHLIST_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    le_connection = _as_dict(brand.get("legalEntities"))
+    le_edges = _as_list(le_connection.get("edges"))
+
+    if not le_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    legal_entities_with_hits: list[dict[str, Any]] = []
+    total_watchlist_hit_count = 0
+
+    for le_edge in le_edges:
+        le_node = _as_dict(_as_dict(le_edge).get("node"))
+        if not le_node:
+            continue
+
+        name_node = _first_edge_node(le_node.get("names"))
+        enigma_le_id = _as_str(le_node.get("id")) or _as_str(le_node.get("enigmaId"))
+
+        watchlist_entries: list[dict[str, Any]] = []
+
+        # isFlaggedByWatchlistEntries
+        for wl_edge in _as_list(_as_dict(le_node.get("isFlaggedByWatchlistEntries")).get("edges")):
+            wl_node = _as_dict(_as_dict(wl_edge).get("node"))
+            watchlist_entries.append({
+                "watchlist_name": _as_str(wl_node.get("watchlistName")),
+                "connection_type": "is_flagged_by",
+                "first_observed_date": _as_str(wl_node.get("firstObservedDate")),
+                "last_observed_date": _as_str(wl_node.get("lastObservedDate")),
+            })
+
+        # appearsOnWatchlistEntries
+        for wl_edge in _as_list(_as_dict(le_node.get("appearsOnWatchlistEntries")).get("edges")):
+            wl_node = _as_dict(_as_dict(wl_edge).get("node"))
+            watchlist_entries.append({
+                "watchlist_name": _as_str(wl_node.get("watchlistName")),
+                "connection_type": "appears_on",
+                "first_observed_date": _as_str(wl_node.get("firstObservedDate")),
+                "last_observed_date": _as_str(wl_node.get("lastObservedDate")),
+            })
+
+        total_watchlist_hit_count += len(watchlist_entries)
+        legal_entities_with_hits.append({
+            "enigma_legal_entity_id": enigma_le_id,
+            "legal_entity_name": _as_str(name_node.get("name")),
+            "legal_entity_type": _as_str(le_node.get("legalEntityType")),
+            "watchlist_hit_count": len(watchlist_entries),
+            "watchlist_entries": watchlist_entries,
+        })
+
+    # Clean screening result (no hits) is still "found" — not an absence of data.
+    attempt["status"] = "found"
+    mapped_wl: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "legal_entity_count": len(legal_entities_with_hits),
+        "total_watchlist_hit_count": total_watchlist_hit_count,
+        "has_watchlist_hits": total_watchlist_hit_count > 0,
+        "legal_entities_with_hits": legal_entities_with_hits,
+    }
+    return {"attempt": attempt, "mapped": mapped_wl}
+
+
+GET_BRAND_ROLES_QUERY = """
+query GetBrandRoles($searchInput: SearchInput!, $locationLimit: Int!, $roleLimit: Int!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      operatingLocations(first: $locationLimit) {
+        edges {
+          node {
+            id
+            enigmaId
+            names(first: 1) {
+              edges { node { name } }
+            }
+            addresses(first: 1) {
+              edges {
+                node {
+                  fullAddress
+                  city
+                  state
+                }
+              }
+            }
+            operatingStatuses(first: 1) {
+              edges { node { operatingStatus } }
+            }
+            roles(first: $roleLimit) {
+              edges {
+                node {
+                  id
+                  jobTitle
+                  jobFunction
+                  managementLevel
+                  externalUrls
+                  externalId
+                  firstObservedDate
+                  lastObservedDate
+                  phoneNumbers(first: 3) {
+                    edges { node { phoneNumber } }
+                  }
+                  emailAddresses(first: 3) {
+                    edges { node { emailAddress } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_roles(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+    location_limit: int = 10,
+    role_limit: int = 5,
+) -> ProviderAdapterResult:
+    """Retrieve contacts/people at a brand's operating locations.
+
+    Credit warning: This query is expensive at scale. Contact details (email, phone,
+    LinkedIn) are on the Role type at Plus tier (3 credits per Role entity). A brand
+    with 50 locations × 20 roles each = 1,000 Role entities = 3,000 credits per call.
+    Use location_limit and role_limit conservatively. Defaults (10 locations × 5 roles)
+    yield at most ~50 Role entities = ~150 credits per call.
+    """
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_roles",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_roles",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    safe_location_limit = max(1, min(location_limit, 50))
+    safe_role_limit = max(1, min(role_limit, 20))
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_roles",
+        query=GET_BRAND_ROLES_QUERY,
+        variables={
+            "searchInput": {"id": normalized_brand_id, "entityType": "BRAND"},
+            "locationLimit": safe_location_limit,
+            "roleLimit": safe_role_limit,
+        },
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    loc_connection = _as_dict(brand.get("operatingLocations"))
+    loc_edges = _as_list(loc_connection.get("edges"))
+
+    locations: list[dict[str, Any]] = []
+    total_role_count = 0
+
+    for loc_edge in loc_edges:
+        loc_node = _as_dict(_as_dict(loc_edge).get("node"))
+        if not loc_node:
+            continue
+
+        address_node = _first_edge_node(loc_node.get("addresses"))
+        status_node = _first_edge_node(loc_node.get("operatingStatuses"))
+
+        roles: list[dict[str, Any]] = []
+        for role_edge in _as_list(_as_dict(loc_node.get("roles")).get("edges")):
+            role_node = _as_dict(_as_dict(role_edge).get("node"))
+            if not role_node:
+                continue
+
+            phone_numbers = [
+                _as_str(_as_dict(_as_dict(pe).get("node")).get("phoneNumber"))
+                for pe in _as_list(_as_dict(role_node.get("phoneNumbers")).get("edges"))
+                if _as_str(_as_dict(_as_dict(pe).get("node")).get("phoneNumber"))
+            ]
+            email_addresses = [
+                _as_str(_as_dict(_as_dict(ee).get("node")).get("emailAddress"))
+                for ee in _as_list(_as_dict(role_node.get("emailAddresses")).get("edges"))
+                if _as_str(_as_dict(_as_dict(ee).get("node")).get("emailAddress"))
+            ]
+
+            raw_external_urls = role_node.get("externalUrls")
+            external_urls_dict: dict[str, Any] | None = raw_external_urls if isinstance(raw_external_urls, dict) else None
+
+            linkedin_url: str | None = None
+            if external_urls_dict:
+                for key, val in external_urls_dict.items():
+                    if "linkedin" in key.lower():
+                        linkedin_url = _as_str(val)
+                        break
+                if not linkedin_url:
+                    for val in external_urls_dict.values():
+                        val_str = _as_str(val)
+                        if val_str and val_str.startswith("https://www.linkedin.com"):
+                            linkedin_url = val_str
+                            break
+
+            roles.append({
+                "job_title": _as_str(role_node.get("jobTitle")),
+                "job_function": _as_str(role_node.get("jobFunction")),
+                "management_level": _as_str(role_node.get("managementLevel")),
+                "phone_numbers": phone_numbers,
+                "email_addresses": email_addresses,
+                "linkedin_url": linkedin_url,
+                "first_observed_date": _as_str(role_node.get("firstObservedDate")),
+                "last_observed_date": _as_str(role_node.get("lastObservedDate")),
+            })
+
+        total_role_count += len(roles)
+        locations.append({
+            "enigma_location_id": _as_str(loc_node.get("id")) or _as_str(loc_node.get("enigmaId")),
+            "location_name": _as_str(_first_edge_node(loc_node.get("names")).get("name")),
+            "full_address": _as_str(address_node.get("fullAddress")),
+            "city": _as_str(address_node.get("city")),
+            "state": _as_str(address_node.get("state")),
+            "operating_status": _as_str(status_node.get("operatingStatus")),
+            "role_count": len(roles),
+            "roles": roles,
+        })
+
+    if total_role_count == 0:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    mapped_roles: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "location_count": len(locations),
+        "total_role_count": total_role_count,
+        "locations": locations,
+    }
+    return {"attempt": attempt, "mapped": mapped_roles}
+
+
+GET_BRAND_OFFICER_PERSONS_QUERY = """
+query GetBrandOfficerPersons($searchInput: SearchInput!) {
+  search(searchInput: $searchInput) {
+    ... on Brand {
+      id
+      enigmaId
+      legalEntities(first: 10) {
+        edges {
+          node {
+            id
+            enigmaId
+            legalEntityType
+            names(first: 1) {
+              edges { node { name } }
+            }
+            registeredEntities(first: 3) {
+              edges {
+                node {
+                  name
+                  registeredEntityType
+                  formationDate
+                  formationYear
+                }
+              }
+            }
+            persons(first: 20) {
+              edges {
+                node {
+                  id
+                  firstName
+                  lastName
+                  fullName
+                  dateOfBirth
+                }
+              }
+            }
+            roles(first: 10) {
+              edges {
+                node {
+                  jobTitle
+                  jobFunction
+                  managementLevel
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+""".strip()
+
+
+async def get_brand_officer_persons(
+    *,
+    api_key: str | None,
+    brand_id: str | None,
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_officer_persons",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_brand_id = _as_str(brand_id)
+    if not normalized_brand_id:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "get_brand_officer_persons",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    attempt, brand, is_terminal = await _graphql_post(
+        api_key=api_key,
+        action="get_brand_officer_persons",
+        query=GET_BRAND_OFFICER_PERSONS_QUERY,
+        variables={"searchInput": {"id": normalized_brand_id, "entityType": "BRAND"}},
+    )
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    le_connection = _as_dict(brand.get("legalEntities"))
+    le_edges = _as_list(le_connection.get("edges"))
+
+    if not le_edges:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    legal_entities: list[dict[str, Any]] = []
+    total_person_count = 0
+    found_any_persons = False
+
+    for le_edge in le_edges:
+        le_node = _as_dict(_as_dict(le_edge).get("node"))
+        if not le_node:
+            continue
+
+        name_node = _first_edge_node(le_node.get("names"))
+        enigma_le_id = _as_str(le_node.get("id")) or _as_str(le_node.get("enigmaId"))
+
+        # registered entities (take first)
+        re_edges = _as_list(_as_dict(le_node.get("registeredEntities")).get("edges"))
+        first_re_node = _as_dict(_as_dict(re_edges[0]).get("node")) if re_edges else {}
+
+        # persons
+        persons: list[dict[str, Any]] = []
+        for p_edge in _as_list(_as_dict(le_node.get("persons")).get("edges")):
+            p_node = _as_dict(_as_dict(p_edge).get("node"))
+            if not p_node:
+                continue
+            first = _as_str(p_node.get("firstName")) or ""
+            last = _as_str(p_node.get("lastName")) or ""
+            full = _as_str(p_node.get("fullName")) or f"{first} {last}".strip() or None
+            persons.append({
+                "enigma_person_id": _as_str(p_node.get("id")),
+                "first_name": _as_str(p_node.get("firstName")),
+                "last_name": _as_str(p_node.get("lastName")),
+                "full_name": full,
+                "date_of_birth": _as_str(p_node.get("dateOfBirth")),
+            })
+
+        if persons:
+            found_any_persons = True
+        total_person_count += len(persons)
+
+        # officer roles
+        officer_roles: list[dict[str, Any]] = []
+        for role_edge in _as_list(_as_dict(le_node.get("roles")).get("edges")):
+            role_node = _as_dict(_as_dict(role_edge).get("node"))
+            officer_roles.append({
+                "job_title": _as_str(role_node.get("jobTitle")),
+                "job_function": _as_str(role_node.get("jobFunction")),
+                "management_level": _as_str(role_node.get("managementLevel")),
+            })
+
+        legal_entities.append({
+            "enigma_legal_entity_id": enigma_le_id,
+            "legal_entity_name": _as_str(name_node.get("name")),
+            "legal_entity_type": _as_str(le_node.get("legalEntityType")),
+            "registered_entity_name": _as_str(first_re_node.get("name")),
+            "registered_entity_type": _as_str(first_re_node.get("registeredEntityType")),
+            "formation_date": _as_str(first_re_node.get("formationDate")),
+            "person_count": len(persons),
+            "persons": persons,
+            "officer_roles": officer_roles,
+        })
+
+    if not found_any_persons:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    mapped_op: dict[str, Any] = {
+        "enigma_brand_id": normalized_brand_id,
+        "legal_entity_count": len(legal_entities),
+        "total_person_count": total_person_count,
+        "legal_entities": legal_entities,
+    }
+    return {"attempt": attempt, "mapped": mapped_op}
+
+
+ENIGMA_KYB_URL = "https://api.enigma.com/v2/kyb/verify"
+
+
+async def _kyb_post(
+    *,
+    api_key: str,
+    payload: dict[str, Any],
+    action: str = "kyb_verify",
+) -> tuple[dict[str, Any], dict[str, Any] | None, bool]:
+    """POST to the Enigma KYB REST endpoint.
+
+    Returns (attempt_dict, response_dict | None, is_terminal).
+    response_dict is None if the call failed or should be skipped.
+    """
+    start_ms = now_ms()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            ENIGMA_KYB_URL,
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json=payload,
+        )
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": action,
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+
+    if response.status_code == 429:
+        attempt["status"] = "failed"
+        attempt["http_status"] = 429
+        attempt["skip_reason"] = "rate_limited"
+        return attempt, None, False
+
+    if response.status_code == 402:
+        attempt["status"] = "failed"
+        attempt["http_status"] = 402
+        attempt["skip_reason"] = "insufficient_credits"
+        return attempt, None, True
+
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        attempt["skip_reason"] = "http_error"
+        return attempt, None, True
+
+    attempt["status"] = "found"
+    return attempt, body if isinstance(body, dict) else {}, True
+
+
+async def verify_business_kyb(
+    *,
+    api_key: str | None,
+    business_name: str | None,
+    street_address: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    postal_code: str | None = None,
+    person_first_name: str | None = None,
+    person_last_name: str | None = None,
+    registration_state: str | None = None,
+    package: str = "verify",
+) -> ProviderAdapterResult:
+    if not api_key:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "kyb_verify",
+                "status": "skipped",
+                "skip_reason": "missing_provider_api_key",
+            },
+            "mapped": None,
+        }
+
+    normalized_business_name = _as_str(business_name)
+    if not normalized_business_name:
+        return {
+            "attempt": {
+                "provider": "enigma",
+                "action": "kyb_verify",
+                "status": "failed",
+                "skip_reason": "missing_required_inputs",
+            },
+            "mapped": None,
+        }
+
+    kyb_payload: dict[str, Any] = {
+        "package": package if package in ("identify", "verify") else "verify",
+        "top_n": 1,
+    }
+    kyb_payload["names"] = [{"name": normalized_business_name.strip()}]
+
+    address: dict[str, Any] = {}
+    if street_address:
+        address["street_address1"] = street_address
+    if city:
+        address["city"] = city
+    if state:
+        address["state"] = state.upper()
+    if postal_code:
+        address["postal_code"] = postal_code
+    if address:
+        kyb_payload["addresses"] = [address]
+
+    if person_first_name and person_last_name:
+        kyb_payload["persons"] = [{
+            "first_name": person_first_name.strip(),
+            "last_name": person_last_name.strip(),
+        }]
+
+    if registration_state:
+        kyb_payload["state"] = registration_state.upper()
+
+    attempt, response_body, is_terminal = await _kyb_post(
+        api_key=api_key,
+        payload=kyb_payload,
+    )
+    if not is_terminal or response_body is None:
+        return {"attempt": attempt, "mapped": None}
+
+    data = _as_dict(response_body.get("data"))
+    tasks = _as_dict(response_body.get("tasks"))
+
+    registered_entities = _as_list(data.get("registered_entities"))
+    brands = _as_list(data.get("brands"))
+
+    if not registered_entities and not brands:
+        attempt["status"] = "not_found"
+        return {"attempt": attempt, "mapped": None}
+
+    first_brand = _as_dict(brands[0]) if brands else {}
+    first_re = _as_dict(registered_entities[0]) if registered_entities else {}
+
+    def _task_result(task_key: str) -> str | None:
+        return _as_str(_as_dict(tasks.get(task_key)).get("result"))
+
+    name_verification = _task_result("name_verification")
+    address_verification = _task_result("address_verification")
+    person_verification = _task_result("person_verification")
+
+    mapped_kyb: dict[str, Any] = {
+        "business_name_queried": normalized_business_name,
+        "enigma_brand_id": _as_str(first_brand.get("id")),
+        "enigma_registered_entity_id": _as_str(first_re.get("id")),
+        "name_verification": name_verification,
+        "sos_name_verification": _task_result("sos_name_verification"),
+        "address_verification": address_verification,
+        "person_verification": person_verification,
+        "domestic_registration": _task_result("domestic_registration"),
+        "name_match": name_verification is not None and name_verification.endswith(("_exact_match", "_match")),
+        "address_match": address_verification is not None and address_verification.endswith(("_exact_match", "_match")),
+        "person_match": person_verification == "person_match",
+        "domestic_active": _task_result("domestic_registration") == "domestic_active",
+        "registered_entity_count": len(registered_entities),
+        "brand_count": len(brands),
+        "raw_tasks": tasks,
+    }
+    return {"attempt": attempt, "mapped": mapped_kyb}
