@@ -1,6 +1,6 @@
 # Chief Agent Doc Authority Map
 
-**Last updated:** 2026-03-18T07:00:00Z
+**Last updated:** 2026-03-18T23:59:00Z
 
 Use this as the first-click navigation file for Chief Agent onboarding.
 
@@ -56,6 +56,10 @@ Useful for broad lookup, system orientation, and codebase surface area after you
 - `docs/API_SURFACE.md`
 - `docs/DEPLOY_PROTOCOL.md`
 - `docs/SYSTEM_OVERVIEW.md`
+- `docs/DATA_ACCESS_AND_AUTH_GUIDE.md` — auth paths, data visibility by auth type, practical access examples; grounded in code; more detailed than AUTH_MODEL.md
+- `docs/PERSISTENCE_MODEL.md` — full persistence audit; all write paths, data loss risks, confirmed-write vs auto-persist distinction; read before persistence work
+- `docs/ENIGMA_API_REFERENCE.md` — consolidated Enigma API reference from 61 source files; read before any Enigma adapter or operation work
+- `docs/GLOBAL_DATA_MODEL_ANALYSIS.md` — analysis of moving from org-scoped to global entity model; decision pending
 
 ### Operational
 
@@ -100,5 +104,8 @@ Recent documentation spans multiple workstream families, including:
 - production reliability, runtime, and deploy-sequencing investigations
 - FMCSA ingestion and mapping across multiple feed families
 - newer workflow families such as job-posting-led discovery
+- Enigma API full coverage — 17 operations wired, dedicated workflow, 2 new persistence tables, async brand discovery
+- Standalone execute persistence — persist flag, persistence routing registry, response-level error surfacing
+- Global data model analysis — documentation-only analysis; hybrid approach (global entities, org-scoped dedicated tables) recommended, deferred pending prerequisites
 
 Those workstreams are present in the docs surface, but their presence does not prove production completion.
