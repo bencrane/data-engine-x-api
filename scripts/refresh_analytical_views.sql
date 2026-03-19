@@ -38,4 +38,32 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_usaspending_first_contracts;
 -- ---- WEEKLY: Federal contract leads (existing, from migration 034) ----
 REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_federal_contract_leads;
 
+-- ---- DAILY: FMCSA gap-fill views from migration 042 ----
+-- mv_fmcsa_latest_insurance_policies: active insurance posture per docket (~1.4M rows)
+-- mv_fmcsa_new_carriers_90d: carriers added in the last 90 days (~16K rows, window advances daily)
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_fmcsa_latest_insurance_policies;
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_fmcsa_new_carriers_90d;
+
+-- ---- WEEKLY: SAM.gov and SBA analytical views from migration 042 ----
+-- Dependency order: typed base views before aggregate/cross-vertical views
+-- mv_sam_gov_entities_typed must refresh before mv_sam_usaspending_bridge
+
+-- SAM.gov base view (typed columns, ~867K rows)
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_sam_gov_entities_typed;
+
+-- SAM.gov aggregates (trivial row counts ~57 and ~480)
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_sam_gov_entities_by_state;
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_sam_gov_entities_by_naics;
+
+-- SBA typed base view (~356K rows)
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_sba_loans_typed;
+
+-- SBA aggregate (~57 rows)
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_sba_loans_by_state;
+
+-- Cross-vertical bridge: depends on mv_sam_gov_entities_typed (above) and
+-- mv_usaspending_contracts_typed (already refreshed in WEEKLY block above)
+-- (~118K rows; hash join of 867K × 14.7M MV — run last; 5–15 min)
+REFRESH MATERIALIZED VIEW CONCURRENTLY entities.mv_sam_usaspending_bridge;
+
 RESET statement_timeout;
