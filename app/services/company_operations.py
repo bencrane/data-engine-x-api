@@ -13,9 +13,15 @@ from app.contracts.company_enrich import (
     CardRevenueOutput,
     CompanyEnrichProfileOutput,
     EcommerceEnrichOutput,
+    EnigmaAddressDeliverabilityOutput,
+    EnigmaAggregateOutput,
     EnigmaBrandDiscoveryOutput,
+    EnigmaIndustriesOutput,
+    EnigmaLegalEntitiesOutput,
     EnigmaLocationsEnrichedOutput,
     EnigmaLocationsOutput,
+    EnigmaPersonSearchOutput,
+    EnigmaTechnologiesOutput,
     FMCSACarrierEnrichOutput,
     TechnographicsOutput,
 )
@@ -1250,3 +1256,449 @@ async def execute_company_enrich_bulk_profile(
         "provider_attempts": [prospeo_bulk_attempt],
     }
 
+
+# ---------------------------------------------------------------------------
+# Enigma additional operations
+# ---------------------------------------------------------------------------
+
+
+async def execute_company_search_enigma_aggregate(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.search.enigma.aggregate"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    state = _as_non_empty_str(input_data.get("state")) or _as_non_empty_str(context.get("state"))
+    city = _as_non_empty_str(input_data.get("city")) or _as_non_empty_str(context.get("city"))
+    operating_status_filter = (
+        _as_non_empty_str(input_data.get("operating_status_filter"))
+        or _as_non_empty_str(context.get("operating_status_filter"))
+    )
+
+    if not state and not city:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["state|city"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await enigma.aggregate_locations(
+        api_key=settings.enigma_api_key,
+        state=state,
+        city=city,
+        operating_status_filter=operating_status_filter,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = _as_dict(result.get("mapped"))
+    adapter_status = result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": adapter_status,
+            "provider_attempts": attempts,
+        }
+
+    output = {
+        **mapped,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaAggregateOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": adapter_status,
+        "output": validated_output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_enigma_legal_entities(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.enigma.legal_entities"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    enigma_brand_id = (
+        _as_non_empty_str(input_data.get("enigma_brand_id"))
+        or _as_non_empty_str(context.get("enigma_brand_id"))
+    )
+
+    if not enigma_brand_id:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["enigma_brand_id"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await enigma.get_brand_legal_entities(
+        api_key=settings.enigma_api_key,
+        brand_id=enigma_brand_id,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = _as_dict(result.get("mapped"))
+    adapter_status = result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": adapter_status,
+            "provider_attempts": attempts,
+        }
+
+    output = {
+        **mapped,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaLegalEntitiesOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": adapter_status,
+        "output": validated_output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_enigma_address_deliverability(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.enigma.address_deliverability"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    enigma_brand_id = (
+        _as_non_empty_str(input_data.get("enigma_brand_id"))
+        or _as_non_empty_str(context.get("enigma_brand_id"))
+    )
+
+    if not enigma_brand_id:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["enigma_brand_id"],
+            "provider_attempts": attempts,
+        }
+
+    step_config = _as_dict(input_data.get("step_config")) or _as_dict(context.get("step_config"))
+    limit = max(1, min(_as_positive_int(step_config.get("limit")) or 25, 100))
+
+    settings = get_settings()
+    result = await enigma.get_brand_address_deliverability(
+        api_key=settings.enigma_api_key,
+        brand_id=enigma_brand_id,
+        limit=limit,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = _as_dict(result.get("mapped"))
+    adapter_status = result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": adapter_status,
+            "provider_attempts": attempts,
+        }
+
+    output = {
+        **mapped,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaAddressDeliverabilityOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": adapter_status,
+        "output": validated_output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_enigma_technologies(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.enigma.technologies"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    enigma_brand_id = (
+        _as_non_empty_str(input_data.get("enigma_brand_id"))
+        or _as_non_empty_str(context.get("enigma_brand_id"))
+    )
+
+    if not enigma_brand_id:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["enigma_brand_id"],
+            "provider_attempts": attempts,
+        }
+
+    step_config = _as_dict(input_data.get("step_config")) or _as_dict(context.get("step_config"))
+    limit = max(1, min(_as_positive_int(step_config.get("limit")) or 25, 100))
+
+    settings = get_settings()
+    result = await enigma.get_brand_technologies(
+        api_key=settings.enigma_api_key,
+        brand_id=enigma_brand_id,
+        limit=limit,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = _as_dict(result.get("mapped"))
+    adapter_status = result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": adapter_status,
+            "provider_attempts": attempts,
+        }
+
+    output = {
+        **mapped,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaTechnologiesOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": adapter_status,
+        "output": validated_output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_search_enigma_person(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.search.enigma.person"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    first_name = (
+        _as_non_empty_str(input_data.get("first_name"))
+        or _as_non_empty_str(context.get("first_name"))
+    )
+    last_name = (
+        _as_non_empty_str(input_data.get("last_name"))
+        or _as_non_empty_str(context.get("last_name"))
+    )
+
+    if not first_name or not last_name:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["first_name", "last_name"],
+            "provider_attempts": attempts,
+        }
+
+    date_of_birth = (
+        _as_non_empty_str(input_data.get("date_of_birth"))
+        or _as_non_empty_str(context.get("date_of_birth"))
+    )
+    state = _as_non_empty_str(input_data.get("state")) or _as_non_empty_str(context.get("state"))
+    city = _as_non_empty_str(input_data.get("city")) or _as_non_empty_str(context.get("city"))
+    street = _as_non_empty_str(input_data.get("street")) or _as_non_empty_str(context.get("street"))
+    postal_code = (
+        _as_non_empty_str(input_data.get("postal_code"))
+        or _as_non_empty_str(context.get("postal_code"))
+    )
+
+    settings = get_settings()
+    result = await enigma.search_by_person(
+        api_key=settings.enigma_api_key,
+        first_name=first_name,
+        last_name=last_name,
+        date_of_birth=date_of_birth,
+        state=state,
+        city=city,
+        street=street,
+        postal_code=postal_code,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = _as_dict(result.get("mapped"))
+    adapter_status = result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": adapter_status,
+            "provider_attempts": attempts,
+        }
+
+    output = {
+        **mapped,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaPersonSearchOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": adapter_status,
+        "output": validated_output,
+        "provider_attempts": attempts,
+    }
+
+
+async def execute_company_enrich_enigma_industries(
+    *,
+    input_data: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    run_id = str(uuid.uuid4())
+    operation_id = "company.enrich.enigma.industries"
+
+    context = _as_dict(input_data.get("cumulative_context"))
+    enigma_brand_id = (
+        _as_non_empty_str(input_data.get("enigma_brand_id"))
+        or _as_non_empty_str(context.get("enigma_brand_id"))
+    )
+
+    if not enigma_brand_id:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "missing_inputs": ["enigma_brand_id"],
+            "provider_attempts": attempts,
+        }
+
+    settings = get_settings()
+    result = await enigma.get_brand_industries(
+        api_key=settings.enigma_api_key,
+        brand_id=enigma_brand_id,
+    )
+    attempts.append(result["attempt"])
+
+    mapped = _as_dict(result.get("mapped"))
+    adapter_status = result["attempt"].get("status", "failed")
+    if not mapped:
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": adapter_status,
+            "provider_attempts": attempts,
+        }
+
+    output = {
+        **mapped,
+        "source_provider": "enigma",
+    }
+
+    try:
+        validated_output = EnigmaIndustriesOutput.model_validate(output).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "run_id": run_id,
+            "operation_id": operation_id,
+            "status": "failed",
+            "provider_attempts": attempts,
+            "error": {
+                "code": "output_validation_failed",
+                "message": str(exc),
+            },
+        }
+
+    return {
+        "run_id": run_id,
+        "operation_id": operation_id,
+        "status": adapter_status,
+        "output": validated_output,
+        "provider_attempts": attempts,
+    }
