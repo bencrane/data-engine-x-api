@@ -30,6 +30,9 @@ from app.routers import (
     tenant_steps,
     tenant_users,
 )
+from app.routers.fmcsa_carriers_v1 import router as fmcsa_carriers_router
+from app.routers.sam_gov_v1 import router as sam_gov_router
+from app.routers.sba_loans_v1 import router as sba_loans_router
 
 app = FastAPI(
     title="data-engine-x-api",
@@ -172,3 +175,18 @@ app.include_router(
     tags=["alumni-gtm"],
 )
 app.include_router(enigma_mcp_v1.router, tags=["enigma-mcp"])
+app.include_router(
+    fmcsa_carriers_router,
+    prefix="/api/v1/fmcsa/carriers",
+    tags=["fmcsa-carriers-v1"],
+)
+app.include_router(
+    sam_gov_router,
+    prefix="/api/v1/sam/entities",
+    tags=["sam-gov-v1"],
+)
+app.include_router(
+    sba_loans_router,
+    prefix="/api/v1/sba/loans",
+    tags=["sba-loans-v1"],
+)
