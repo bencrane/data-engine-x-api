@@ -1,6 +1,46 @@
 # Operational Reality Check
 
-**Last updated:** 2026-03-18T06:30:00Z
+**Last updated:** 2026-03-18T23:59:00Z
+
+## Post-Audit Updates (2026-03-18, end of day)
+
+This section documents what changed after the initial 06:30 UTC audit. Row counts in the sections below reflect the 06:30 UTC state unless noted otherwise.
+
+### Migrations Applied After Initial Audit
+
+Migrations 036–041 were applied to production during the day:
+
+- **036** (`mv_fmcsa_authority_grants`): materialized view created. Was listed as missing in the "Missing Expected Tables" section below — that entry is now stale.
+- **037** (`mv_fmcsa_insurance_cancellations`): materialized view created. Was listed as missing — now stale.
+- **038** (`mv_usaspending_contracts_typed`, `mv_usaspending_first_contracts`): two USASpending analytical materialized views created. `mv_usaspending_contracts_typed` covers 14.6M rows with typed column casts. `mv_usaspending_first_contracts` covers 133K rows (first contract per recipient).
+- **039** (four FMCSA analytical MVs): `mv_fmcsa_latest_census` (2.58M rows), `mv_fmcsa_safety_percentiles` (36K rows), `mv_fmcsa_crash_counts` (40K rows), `mv_fmcsa_carrier_master` (2.58M rows). Test feed rows were deleted from `motor_carrier_census_records` and `commercial_vehicle_crashes` tables — row counts in the audit sections below may be slightly overstated.
+- **040** (supplemental indexes): composite indexes added to `usaspending_contracts`, `sam_gov_entities`, `sba_7a_loans` for analytical query performance. No row count changes.
+- **041** (`enigma_brand_discoveries`, `enigma_location_enrichments`): two new tables in `entities` schema. Both currently have 0 rows (tables newly created, no operations have been run against production yet).
+
+### Bug Fixes
+
+- **Super-admin auth on entity endpoints (fixed):** `/api/v1/entities/companies` and `/api/v1/entities/persons` previously used `Depends(get_current_auth)` which blocked super-admin API key with 401. Both now use `Depends(_resolve_flexible_auth)`. Super-admin can query these endpoints by passing `org_id` in the request body, consistent with all other entity query endpoints. Noted as Auth Gap #1 in `docs/DATA_ACCESS_AND_AUTH_GUIDE.md` — now resolved.
+- **`run-pipeline.ts` `internalPost()` headers (fixed):** The generic `internalPost()` function was not sending `x-internal-org-id` or `x-internal-company-id` headers, unlike the `InternalApiClient` class used by dedicated workflows. Fixed — `internalPost()` now sets both headers from the pipeline payload. The existing behavior of passing org_id in the request body was preserved for backward compatibility.
+
+### New Operations Added
+
+15 new Enigma operations were wired into `/api/v1/execute`, bringing total Enigma coverage to 17 operations (2 pre-existing + 15 new). All 15 new operations have 0 `operation_runs` rows in production (never called). Operation IDs:
+
+`company.search.enigma.brands`, `company.search.enigma.aggregate`, `company.search.enigma.person`, `company.enrich.enigma.legal_entities`, `company.enrich.enigma.address_deliverability`, `company.enrich.enigma.technologies`, `company.enrich.enigma.industries`, `company.enrich.enigma.affiliated_brands`, `company.enrich.enigma.marketability`, `company.enrich.enigma.activity_flags`, `company.enrich.enigma.bankruptcy`, `company.enrich.enigma.watchlist`, `person.search.enigma.roles`, `person.enrich.enigma.profile`, `company.verify.enigma.kyb`.
+
+### Standalone Execute Persistence
+
+`POST /api/v1/execute` now accepts `persist: bool = False`. When `persist=true`, the endpoint attempts entity state upsert and dedicated table writes and returns a `persistence` status field in the response. Errors are surfaced, not swallowed. `app/services/persistence_routing.py` implements a `DEDICATED_TABLE_REGISTRY` mapping 11 operation IDs to write functions. `_finalize_execute_response()` was created and replaced all 93 dispatch branch endings in `execute_v1.py`. This addresses Risk #1 from `docs/PERSISTENCE_MODEL.md` for standalone execute calls.
+
+### Row Counts Not Re-Verified
+
+Row counts in the audit sections below reflect the 06:30 UTC state. They have NOT been re-verified after migrations 036–041 were applied. To get current counts:
+
+```bash
+doppler run -p data-engine-x-api -c prd -- bash -c 'psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM entities.mv_fmcsa_authority_grants;"'
+```
+
+---
 
 As of `2026-03-18`.
 
