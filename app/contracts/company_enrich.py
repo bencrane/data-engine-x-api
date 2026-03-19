@@ -192,8 +192,25 @@ class EnigmaBrandItem(BaseModel):
     industries: list[str] | None = None
 
 
+class EnigmaDiscoveryLocationItem(BaseModel):
+    enigma_location_id: str | None = None
+    location_name: str | None = None
+    full_address: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    operating_status: str | None = None
+    website: str | None = None
+    phone: str | None = None
+    parent_brand_id: str | None = None
+    parent_brand_name: str | None = None
+
+
 class EnigmaBrandDiscoveryOutput(BaseModel):
     brands: list[EnigmaBrandItem] | None = None
+    locations: list[EnigmaDiscoveryLocationItem] | None = None
+    entity_type: str | None = None
     total_returned: int | None = None
     has_next_page: bool | None = None
     next_page_token: str | None = None
