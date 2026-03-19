@@ -80,6 +80,7 @@ class CompanyEntitiesListRequest(BaseModel):
     industry: str | None = None
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=25, ge=1, le=100)
+    org_id: str | None = None
 
 
 class PersonEntitiesListRequest(BaseModel):
@@ -91,6 +92,7 @@ class PersonEntitiesListRequest(BaseModel):
     department: str | None = None
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=25, ge=1, le=100)
+    org_id: str | None = None
 
 
 class JobPostingEntitiesListRequest(BaseModel):
@@ -342,22 +344,27 @@ class LeadsQueryRequest(BaseModel):
 @router.post(
     "/companies",
     response_model=DataEnvelope,
-    responses={403: {"model": ErrorEnvelope}},
+    responses={400: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope}},
 )
 async def list_company_entities(
     payload: CompanyEntitiesListRequest,
-    auth: AuthContext = Depends(get_current_auth),
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
-    client = get_supabase_client()
-    query = client.schema("entities").table("company_entities").select("*").eq("org_id", auth.org_id)
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin company entity queries", 400)
 
-    if auth.role in {"company_admin", "member"}:
+    client = get_supabase_client()
+    query = client.schema("entities").table("company_entities").select("*").eq("org_id", org_id)
+
+    if not is_super_admin and auth.role in {"company_admin", "member"}:
         if not auth.company_id:
             return error_response("Company-scoped user missing company_id", 403)
         if payload.company_id and payload.company_id != auth.company_id:
             return error_response("Forbidden company access", 403)
         associated_ids = list_associated_entity_ids(
-            org_id=auth.org_id,
+            org_id=org_id,
             company_id=auth.company_id,
             entity_type="company",
         )
@@ -403,22 +410,27 @@ async def list_company_entities(
 @router.post(
     "/persons",
     response_model=DataEnvelope,
-    responses={403: {"model": ErrorEnvelope}},
+    responses={400: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope}},
 )
 async def list_person_entities(
     payload: PersonEntitiesListRequest,
-    auth: AuthContext = Depends(get_current_auth),
+    auth: AuthContext | SuperAdminContext = Depends(_resolve_flexible_auth),
 ):
-    client = get_supabase_client()
-    query = client.schema("entities").table("person_entities").select("*").eq("org_id", auth.org_id)
+    is_super_admin = isinstance(auth, SuperAdminContext)
+    org_id = payload.org_id if is_super_admin and payload.org_id else auth.org_id
+    if is_super_admin and not org_id:
+        return error_response("org_id is required for super-admin person entity queries", 400)
 
-    if auth.role in {"company_admin", "member"}:
+    client = get_supabase_client()
+    query = client.schema("entities").table("person_entities").select("*").eq("org_id", org_id)
+
+    if not is_super_admin and auth.role in {"company_admin", "member"}:
         if not auth.company_id:
             return error_response("Company-scoped user missing company_id", 403)
         if payload.company_id and payload.company_id != auth.company_id:
             return error_response("Forbidden company access", 403)
         associated_ids = list_associated_entity_ids(
-            org_id=auth.org_id,
+            org_id=org_id,
             company_id=auth.company_id,
             entity_type="person",
         )
