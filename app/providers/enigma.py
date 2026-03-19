@@ -223,7 +223,7 @@ query GetBrandLocations($searchInput: SearchInput!, $locationLimit: Int!, $locat
                   streetAddress1
                   city
                   state
-                  postalCode
+                  zip
                 }
               }
             }
@@ -366,7 +366,7 @@ def _map_operating_location(node: dict[str, Any]) -> dict[str, Any]:
         "street": _as_str(address_node.get("streetAddress1")),
         "city": _as_str(address_node.get("city")),
         "state": _as_str(address_node.get("state")),
-        "postal_code": _as_str(address_node.get("postalCode")),
+        "postal_code": _as_str(address_node.get("zip")),
         "operating_status": _as_str(operating_status_node.get("operatingStatus")),
     }
 
@@ -925,7 +925,7 @@ SEARCH_BRANDS_BY_PROMPT_LOCATION_FRAGMENT = """
             streetAddress1
             city
             state
-            postalCode
+            zip
           }
         }
       }
@@ -1085,7 +1085,7 @@ query GetLocationsEnriched($searchInput: SearchInput!, $locationLimit: Int!, $lo
                   streetAddress1
                   city
                   state
-                  postalCode
+                  zip
                 }}
               }}
             }}
@@ -1245,7 +1245,7 @@ def _map_location_result(loc: dict[str, Any]) -> dict[str, Any] | None:
         "street": _as_str(address_node.get("streetAddress1")),
         "city": _as_str(address_node.get("city")),
         "state": _as_str(address_node.get("state")),
-        "postal_code": _as_str(address_node.get("postalCode")),
+        "postal_code": _as_str(address_node.get("zip")),
         "operating_status": _as_str(status_node.get("operatingStatus")),
         "website": _as_str(website_node.get("website")),
         "phone": _as_str(phone_node.get("phoneNumber")),
@@ -1903,7 +1903,7 @@ query GetBrandAddressDeliverability($searchInput: SearchInput!, $locationLimit: 
                   streetAddress1
                   city
                   state
-                  postalCode
+                  zip
                   deliverabilities(first: 1) {
                     edges {
                       node {
@@ -2024,7 +2024,7 @@ async def get_brand_address_deliverability(
             "street": _as_str(address_edge_node.get("streetAddress1")),
             "city": _as_str(address_edge_node.get("city")),
             "state": _as_str(address_edge_node.get("state")),
-            "postal_code": _as_str(address_edge_node.get("postalCode")),
+            "postal_code": _as_str(address_edge_node.get("zip")),
             "operating_status": _as_str(status_node.get("operatingStatus")),
             "rdi": _as_str(deliverability_node.get("rdi")),
             "delivery_type": _as_str(deliverability_node.get("deliveryType")),
@@ -2079,7 +2079,7 @@ query GetBrandTechnologies($searchInput: SearchInput!, $locationLimit: Int!) {
                 node {
                   city
                   state
-                  postalCode
+                  zip
                 }
               }
             }
@@ -2210,7 +2210,7 @@ async def get_brand_technologies(
             "location_name": _as_str(_first_edge_node(loc_node.get("names")).get("name")),
             "city": _as_str(address_node.get("city")),
             "state": _as_str(address_node.get("state")),
-            "postal_code": _as_str(address_node.get("postalCode")),
+            "postal_code": _as_str(address_node.get("zip")),
             "operating_status": _as_str(status_node.get("operatingStatus")),
             "technologies": technologies,
         })
@@ -2270,7 +2270,7 @@ query SearchByPerson($searchInput: SearchInput!) {
             streetAddress1
             city
             state
-            postalCode
+            zip
           }
         }
       }
