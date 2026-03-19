@@ -1,11 +1,16 @@
-# Last updated: 2026-03-18T20:15:00Z
+# Last updated: 2026-03-18T21:30:00Z
 from __future__ import annotations
 
+import asyncio
+import logging
+import uuid as uuid_mod
 from typing import Any
 
 import httpx
 
 from app.providers.common import ProviderAdapterResult, now_ms, parse_json_or_raw
+
+logger = logging.getLogger(__name__)
 
 ENIGMA_GRAPHQL_URL = "https://api.enigma.com/graphql"
 
@@ -430,6 +435,244 @@ async def _graphql_post(
     return attempt, brand, True
 
 
+POLL_BACKGROUND_TASK_QUERY = """
+query PollBackgroundTask($taskId: String!) {
+  backgroundTask(id: $taskId) {
+    id
+    status
+    result
+    lastError
+    executionAttempts
+    createdTimestamp
+    updatedTimestamp
+  }
+}
+""".strip()
+
+
+async def _graphql_post_async(
+    *,
+    api_key: str,
+    action: str,
+    query: str,
+    variables: dict[str, Any],
+    poll_interval_seconds: float = 5.0,
+    max_wait_seconds: float = 300.0,
+) -> tuple[dict[str, Any], dict[str, Any] | list[Any], bool]:
+    """Submit a GraphQL query that may return 202 Accepted (async background task).
+
+    Handles the full async lifecycle: submit, poll backgroundTask(id), retrieve result.
+    Falls back to synchronous handling if the API returns 200 directly.
+
+    Returns the same 3-tuple as _graphql_post(): (attempt_dict, data, is_terminal).
+    """
+    payload = {
+        "query": query,
+        "variables": variables,
+    }
+    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+    start_ms = now_ms()
+
+    # --- Submit ---
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(ENIGMA_GRAPHQL_URL, headers=headers, json=payload)
+        body = parse_json_or_raw(response.text, response.json)
+
+    attempt: dict[str, Any] = {
+        "provider": "enigma",
+        "action": action,
+        "duration_ms": now_ms() - start_ms,
+        "raw_response": body,
+    }
+
+    # Rate limit / payment errors — do not retry
+    if response.status_code == 429:
+        attempt["status"] = "failed"
+        attempt["http_status"] = 429
+        attempt["skip_reason"] = "rate_limited"
+        return attempt, {}, False
+
+    if response.status_code == 402:
+        attempt["status"] = "failed"
+        attempt["http_status"] = 402
+        attempt["skip_reason"] = "insufficient_credits"
+        return attempt, {}, False
+
+    if response.status_code >= 400:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return attempt, {}, False
+
+    errors = body.get("errors") if isinstance(body, dict) else None
+    if isinstance(errors, list) and errors:
+        attempt["status"] = "failed"
+        return attempt, {}, False
+
+    # --- Synchronous fallback (200 with inline results) ---
+    if response.status_code == 200:
+        data = _as_dict(body.get("data")) if isinstance(body, dict) else {}
+        search_results = _as_list(data.get("search"))
+        if not search_results:
+            attempt["status"] = "not_found"
+            return attempt, {}, True
+        attempt["status"] = "found"
+        return attempt, search_results, True
+
+    # --- Async path (202 Accepted) ---
+    if response.status_code != 202:
+        attempt["status"] = "failed"
+        attempt["http_status"] = response.status_code
+        return attempt, {}, False
+
+    # Extract background task ID from 202 response.
+    # The exact shape is not fully documented — log it and try multiple paths.
+    logger.info(
+        "Enigma async 202 response body (action=%s): %s",
+        action,
+        body,
+    )
+    task_id: str | None = None
+    if isinstance(body, dict):
+        # Try common paths: data.search[0].id, data.backgroundTask.id, taskId, id
+        bg_task = _as_dict(body.get("data", {})).get("backgroundTask")
+        if isinstance(bg_task, dict):
+            task_id = _as_str(bg_task.get("id"))
+        if not task_id:
+            task_id = _as_str(body.get("taskId")) or _as_str(body.get("id"))
+        if not task_id:
+            # Some APIs return the task ID nested in data
+            task_id = _as_str(_as_dict(body.get("data")).get("taskId"))
+            if not task_id:
+                task_id = _as_str(_as_dict(body.get("data")).get("id"))
+
+    if not task_id:
+        attempt["status"] = "failed"
+        attempt["error"] = "async_task_id_not_found"
+        logger.error(
+            "Could not extract background task ID from 202 response (action=%s): %s",
+            action,
+            body,
+        )
+        return attempt, {}, False
+
+    attempt["background_task_id"] = task_id
+    logger.info(
+        "Enigma async task submitted (action=%s, task_id=%s, prompt entity_type in variables)",
+        action,
+        task_id,
+    )
+
+    # --- Poll loop ---
+    poll_count = 0
+    elapsed_seconds = 0.0
+    current_interval = poll_interval_seconds
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        while elapsed_seconds < max_wait_seconds:
+            await asyncio.sleep(current_interval)
+            elapsed_seconds += current_interval
+            poll_count += 1
+
+            # Escalate interval: after 5 polls, double (capped at 30s)
+            if poll_count == 5:
+                current_interval = min(current_interval * 2, 30.0)
+
+            poll_response = await client.post(
+                ENIGMA_GRAPHQL_URL,
+                headers=headers,
+                json={
+                    "query": POLL_BACKGROUND_TASK_QUERY,
+                    "variables": {"taskId": task_id},
+                },
+            )
+            poll_body = parse_json_or_raw(poll_response.text, poll_response.json)
+
+            if poll_response.status_code >= 400:
+                logger.warning(
+                    "Enigma poll request failed (task_id=%s, status=%s): %s",
+                    task_id,
+                    poll_response.status_code,
+                    poll_body,
+                )
+                continue  # Transient poll failure — retry
+
+            task_data = _as_dict(
+                _as_dict(poll_body.get("data") if isinstance(poll_body, dict) else {}).get("backgroundTask")
+            )
+            status = _as_str(task_data.get("status")) or ""
+
+            logger.info(
+                "Enigma poll (task_id=%s, poll=%d, elapsed=%.1fs, status=%s)",
+                task_id,
+                poll_count,
+                elapsed_seconds,
+                status,
+            )
+
+            if status == "SUCCESS":
+                result = task_data.get("result")
+                # Log the raw result shape on first success for future reference
+                # ASSUMPTION: result is either inline JSON data (list/dict) or a URL string
+                logger.info(
+                    "Enigma async task SUCCESS (task_id=%s). Result type=%s, raw_result=%s",
+                    task_id,
+                    type(result).__name__,
+                    str(result)[:2000],
+                )
+
+                # If result is a URL string (S3 pre-signed), fetch it
+                if isinstance(result, str) and result.startswith("http"):
+                    async with httpx.AsyncClient(timeout=60.0) as download_client:
+                        download_resp = await download_client.get(result)
+                        if download_resp.status_code == 200:
+                            result = parse_json_or_raw(download_resp.text, download_resp.json)
+                        else:
+                            attempt["status"] = "failed"
+                            attempt["error"] = f"download_failed_{download_resp.status_code}"
+                            return attempt, {}, False
+
+                attempt["status"] = "found"
+                attempt["duration_ms"] = now_ms() - start_ms
+                attempt["poll_count"] = poll_count
+                attempt["background_task_status"] = "SUCCESS"
+
+                # Return result as-is — caller handles mapping
+                if isinstance(result, list):
+                    return attempt, result, True
+                if isinstance(result, dict):
+                    # Check if result wraps search results
+                    search_in_result = _as_list(result.get("search")) or _as_list(result.get("data", {}).get("search") if isinstance(result.get("data"), dict) else [])
+                    if search_in_result:
+                        return attempt, search_in_result, True
+                    return attempt, result, True
+                # Unexpected shape
+                logger.warning(
+                    "Enigma async result has unexpected type %s (task_id=%s)",
+                    type(result).__name__,
+                    task_id,
+                )
+                attempt["status"] = "found"
+                return attempt, result if isinstance(result, (dict, list)) else {}, True
+
+            if status in ("FAILED", "CANCELLED"):
+                last_error = _as_str(task_data.get("lastError")) or status
+                attempt["status"] = "failed"
+                attempt["error"] = last_error
+                attempt["background_task_status"] = status
+                attempt["duration_ms"] = now_ms() - start_ms
+                attempt["poll_count"] = poll_count
+                return attempt, {}, False
+
+            # Still PROCESSING — continue polling
+
+    # Timeout
+    attempt["status"] = "failed"
+    attempt["error"] = "background_task_timeout"
+    attempt["duration_ms"] = now_ms() - start_ms
+    attempt["poll_count"] = poll_count
+    return attempt, {}, False
+
+
 async def match_business(
     *,
     api_key: str | None,
@@ -641,9 +884,7 @@ async def get_brand_locations(
     return {"attempt": attempt, "mapped": mapped}
 
 
-SEARCH_BRANDS_BY_PROMPT_QUERY = """
-query SearchBrandsByPrompt($searchInput: SearchInput!) {
-  search(searchInput: $searchInput) {
+SEARCH_BRANDS_BY_PROMPT_BRAND_FRAGMENT = """
     ... on Brand {
       id
       enigmaId
@@ -670,9 +911,49 @@ query SearchBrandsByPrompt($searchInput: SearchInput!) {
         }
       }
     }
-  }
-}
 """.strip()
+
+SEARCH_BRANDS_BY_PROMPT_LOCATION_FRAGMENT = """
+    ... on OperatingLocation {
+      id
+      enigmaId
+      names(first: 1) { edges { node { name } } }
+      addresses(first: 1) {
+        edges {
+          node {
+            fullAddress
+            streetAddress1
+            city
+            state
+            postalCode
+          }
+        }
+      }
+      operatingStatuses(first: 1) { edges { node { operatingStatus } } }
+      websites(first: 1) { edges { node { website } } }
+      phoneNumbers(first: 1) { edges { node { phoneNumber } } }
+      brands(first: 1) {
+        edges {
+          node {
+            id
+            names(first: 1) { edges { node { name } } }
+          }
+        }
+      }
+    }
+""".strip()
+
+
+def _build_search_by_prompt_query(entity_type: str) -> str:
+    if entity_type == "OPERATING_LOCATION":
+        fragment = SEARCH_BRANDS_BY_PROMPT_LOCATION_FRAGMENT
+    else:
+        fragment = SEARCH_BRANDS_BY_PROMPT_BRAND_FRAGMENT
+    return f"query SearchByPrompt($searchInput: SearchInput!) {{\n  search(searchInput: $searchInput) {{\n    {fragment}\n  }}\n}}"
+
+
+# Keep for backwards compatibility with any direct references
+SEARCH_BRANDS_BY_PROMPT_QUERY = _build_search_by_prompt_query("BRAND")
 
 
 def _build_locations_enriched_query(
@@ -916,14 +1197,74 @@ def _map_enriched_location(node: dict[str, Any]) -> dict[str, Any]:
     return base
 
 
+def _map_brand_result(brand: dict[str, Any]) -> dict[str, Any] | None:
+    """Map a Brand GraphQL result to the standard brand item dict."""
+    brand_id = _as_str(brand.get("id")) or _as_str(brand.get("enigmaId"))
+    if not brand_id:
+        return None
+
+    website_node = _first_edge_node(brand.get("websites"))
+    industries_connection = _as_dict(brand.get("industries"))
+    industries_edges = _as_list(industries_connection.get("edges"))
+    industry_list: list[str] = []
+    for ind_edge in industries_edges:
+        ind_node = _as_dict(_as_dict(ind_edge).get("node"))
+        desc = _as_str(ind_node.get("industryDesc"))
+        if desc:
+            industry_list.append(desc)
+
+    return {
+        "enigma_brand_id": brand_id,
+        "brand_name": _extract_brand_name(brand),
+        "website": _as_str(website_node.get("website")),
+        "location_count": _as_int(brand.get("count")),
+        "industries": industry_list,
+    }
+
+
+def _map_location_result(loc: dict[str, Any]) -> dict[str, Any] | None:
+    """Map an OperatingLocation GraphQL result to the location item dict."""
+    loc_id = _as_str(loc.get("id")) or _as_str(loc.get("enigmaId"))
+    if not loc_id:
+        return None
+
+    address_node = _first_edge_node(loc.get("addresses"))
+    status_node = _first_edge_node(loc.get("operatingStatuses"))
+    website_node = _first_edge_node(loc.get("websites"))
+    phone_node = _first_edge_node(loc.get("phoneNumbers"))
+
+    # Extract parent brand info if available
+    brand_node = _first_edge_node(loc.get("brands"))
+    parent_brand_id = _as_str(brand_node.get("id")) if brand_node else None
+    parent_brand_name = _as_str(_first_edge_node(brand_node.get("names")).get("name")) if brand_node else None
+
+    return {
+        "enigma_location_id": loc_id,
+        "location_name": _as_str(_first_edge_node(loc.get("names")).get("name")),
+        "full_address": _as_str(address_node.get("fullAddress")),
+        "street": _as_str(address_node.get("streetAddress1")),
+        "city": _as_str(address_node.get("city")),
+        "state": _as_str(address_node.get("state")),
+        "postal_code": _as_str(address_node.get("postalCode")),
+        "operating_status": _as_str(status_node.get("operatingStatus")),
+        "website": _as_str(website_node.get("website")),
+        "phone": _as_str(phone_node.get("phoneNumber")),
+        "parent_brand_id": parent_brand_id,
+        "parent_brand_name": parent_brand_name,
+    }
+
+
 async def search_brands_by_prompt(
     *,
     api_key: str | None,
     prompt: str,
+    entity_type: str = "BRAND",
     state: str | None = None,
     city: str | None = None,
     limit: int = 10,
     page_token: str | None = None,
+    poll_interval_seconds: float = 5.0,
+    max_wait_seconds: float = 300.0,
 ) -> ProviderAdapterResult:
     if not api_key:
         return {
@@ -948,11 +1289,18 @@ async def search_brands_by_prompt(
             "mapped": None,
         }
 
+    # Validate entity type
+    valid_entity_types = {"BRAND", "OPERATING_LOCATION"}
+    resolved_entity_type = entity_type.upper() if entity_type and entity_type.upper() in valid_entity_types else "BRAND"
+
     safe_limit = max(1, min(int(limit), 100))
 
     search_input: dict[str, Any] = {
-        "entityType": "BRAND",
+        "entityType": resolved_entity_type,
         "prompt": normalized_prompt,
+        "output": {
+            "filename": f"brand_discovery_{uuid_mod.uuid4().hex[:12]}",
+        },
         "conditions": {"limit": safe_limit},
     }
     if page_token:
@@ -968,88 +1316,103 @@ async def search_brands_by_prompt(
             address["city"] = normalized_city
         search_input["address"] = address
 
-    request_payload = {
-        "query": SEARCH_BRANDS_BY_PROMPT_QUERY,
-        "variables": {"searchInput": search_input},
-    }
-    start_ms = now_ms()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            ENIGMA_GRAPHQL_URL,
-            headers={"x-api-key": api_key, "Content-Type": "application/json"},
-            json=request_payload,
+    # Log credit usage for rate limit tracking
+    logger.info(
+        "Enigma async search submission (entity_type=%s, prompt=%s, limit=%d)",
+        resolved_entity_type,
+        normalized_prompt[:200],
+        safe_limit,
+    )
+
+    query = _build_search_by_prompt_query(resolved_entity_type)
+
+    attempt, data, is_terminal = await _graphql_post_async(
+        api_key=api_key,
+        action="search_brands_by_prompt",
+        query=query,
+        variables={"searchInput": search_input},
+        poll_interval_seconds=poll_interval_seconds,
+        max_wait_seconds=max_wait_seconds,
+    )
+
+    if not is_terminal or attempt.get("status") != "found":
+        return {"attempt": attempt, "mapped": None}
+
+    # --- Map results based on entity type ---
+    # The async result from _graphql_post_async returns either:
+    # - a list of result items (from search results array)
+    # - a dict that may contain search results nested inside
+    # ASSUMPTION: The background task result contains the same GraphQL entity objects
+    # as the synchronous search response would. If the shape differs, this mapping
+    # will log a warning and return not_found so the issue is visible.
+    result_items: list[Any] = []
+    if isinstance(data, list):
+        result_items = data
+    elif isinstance(data, dict):
+        # Try to extract from common wrapper shapes
+        result_items = _as_list(data.get("search")) or _as_list(data.get("results")) or _as_list(data.get("data"))
+        if not result_items:
+            # The dict itself might be a single result — wrap it
+            result_items = [data] if data else []
+
+    if not result_items:
+        logger.warning(
+            "Enigma async result had no extractable items (entity_type=%s, data_type=%s)",
+            resolved_entity_type,
+            type(data).__name__,
         )
-        body = parse_json_or_raw(response.text, response.json)
-
-    attempt: dict[str, Any] = {
-        "provider": "enigma",
-        "action": "search_brands_by_prompt",
-        "duration_ms": now_ms() - start_ms,
-        "raw_response": body,
-    }
-    if response.status_code >= 400:
-        attempt["status"] = "failed"
-        attempt["http_status"] = response.status_code
-        return {"attempt": attempt, "mapped": None}
-
-    errors = body.get("errors")
-    if isinstance(errors, list) and errors:
-        attempt["status"] = "failed"
-        return {"attempt": attempt, "mapped": None}
-
-    data = _as_dict(body.get("data"))
-    search_results = _as_list(data.get("search"))
-    if not search_results:
         attempt["status"] = "not_found"
         return {"attempt": attempt, "mapped": None}
 
+    # Log result shape for documentation
+    logger.info(
+        "Enigma async result mapping: entity_type=%s, item_count=%d, first_item_keys=%s",
+        resolved_entity_type,
+        len(result_items),
+        list(_as_dict(result_items[0]).keys())[:15] if result_items else [],
+    )
+
+    if resolved_entity_type == "OPERATING_LOCATION":
+        locations: list[dict[str, Any]] = []
+        for item in result_items:
+            mapped_loc = _map_location_result(_as_dict(item))
+            if mapped_loc:
+                locations.append(mapped_loc)
+
+        if not locations:
+            attempt["status"] = "not_found"
+            return {"attempt": attempt, "mapped": None}
+
+        # Async results are assumed to be complete (no pagination)
+        mapped: dict[str, Any] = {
+            "locations": locations,
+            "brands": None,
+            "entity_type": "OPERATING_LOCATION",
+            "total_returned": len(locations),
+            "has_next_page": False,
+            "next_page_token": None,
+        }
+        return {"attempt": attempt, "mapped": mapped}
+
+    # BRAND entity type
     brands: list[dict[str, Any]] = []
-    for result_item in search_results:
-        brand = _as_dict(result_item)
-        if not brand:
-            continue
-
-        brand_id = _as_str(brand.get("id")) or _as_str(brand.get("enigmaId"))
-        if not brand_id:
-            continue
-
-        website_node = _first_edge_node(brand.get("websites"))
-        industries_connection = _as_dict(brand.get("industries"))
-        industries_edges = _as_list(industries_connection.get("edges"))
-        industry_list: list[str] = []
-        for ind_edge in industries_edges:
-            ind_node = _as_dict(_as_dict(ind_edge).get("node"))
-            desc = _as_str(ind_node.get("industryDesc"))
-            if desc:
-                industry_list.append(desc)
-
-        brands.append({
-            "enigma_brand_id": brand_id,
-            "brand_name": _extract_brand_name(brand),
-            "website": _as_str(website_node.get("website")),
-            "location_count": _as_int(brand.get("count")),
-            "industries": industry_list,
-        })
+    for item in result_items:
+        mapped_brand = _map_brand_result(_as_dict(item))
+        if mapped_brand:
+            brands.append(mapped_brand)
 
     if not brands:
         attempt["status"] = "not_found"
         return {"attempt": attempt, "mapped": None}
 
-    attempt["status"] = "found"
-
-    current_offset = 0
-    if page_token is not None:
-        try:
-            current_offset = int(page_token)
-        except (TypeError, ValueError):
-            current_offset = 0
-
-    has_next = len(brands) >= safe_limit
+    # Async results are assumed to be complete (no pagination)
     mapped = {
         "brands": brands,
+        "locations": None,
+        "entity_type": "BRAND",
         "total_returned": len(brands),
-        "has_next_page": has_next,
-        "next_page_token": str(current_offset + safe_limit) if has_next else None,
+        "has_next_page": False,
+        "next_page_token": None,
     }
     return {"attempt": attempt, "mapped": mapped}
 

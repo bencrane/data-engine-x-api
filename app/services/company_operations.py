@@ -927,11 +927,13 @@ async def execute_company_search_enigma_brands(
     city = _as_non_empty_str(input_data.get("city")) or _as_non_empty_str(context.get("city"))
     limit = _as_positive_int(input_data.get("limit")) or _as_positive_int(context.get("limit")) or 10
     page_token = _as_non_empty_str(input_data.get("page_token")) or _as_non_empty_str(context.get("page_token"))
+    entity_type = _as_non_empty_str(input_data.get("entity_type")) or _as_non_empty_str(context.get("entity_type")) or "BRAND"
 
     settings = get_settings()
     search_result = await enigma.search_brands_by_prompt(
         api_key=settings.enigma_api_key,
         prompt=prompt,
+        entity_type=entity_type,
         state=state,
         city=city,
         limit=limit,
