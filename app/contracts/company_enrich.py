@@ -454,3 +454,199 @@ class EnigmaIndustriesOutput(BaseModel):
     naics_codes: list[str] | None = None
     sic_codes: list[str] | None = None
     source_provider: str = "enigma"
+
+
+# --- Enigma affiliated brands ---
+
+class EnigmaAffiliatedBrandItem(BaseModel):
+    enigma_brand_id: str | None = None
+    brand_name: str | None = None
+    website: str | None = None
+    location_count: int | None = None
+    affiliation_type: str | None = None
+    rank: int | None = None
+    first_observed_date: str | None = None
+
+
+class EnigmaAffiliatedBrandsOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    affiliated_brand_count: int | None = None
+    affiliated_brands: list[EnigmaAffiliatedBrandItem] | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma marketability ---
+
+class EnigmaMarketabilityOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    is_marketable: bool | None = None
+    first_observed_date: str | None = None
+    last_observed_date: str | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma activity flags ---
+
+class EnigmaActivityFlagItem(BaseModel):
+    activity_type: str | None = None
+    first_observed_date: str | None = None
+    last_observed_date: str | None = None
+
+
+class EnigmaActivityFlagsOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    activity_count: int | None = None
+    activity_flags: list[EnigmaActivityFlagItem] | None = None
+    has_flags: bool | None = None
+    activity_types: list[str] | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma bankruptcy ---
+
+class EnigmaBankruptcyRecord(BaseModel):
+    case_number: str | None = None
+    chapter_type: str | None = None
+    petition: str | None = None
+    debtor_name: str | None = None
+    filing_date: str | None = None
+    entry_date: str | None = None
+    date_terminated: str | None = None
+    debtor_discharged_date: str | None = None
+    plan_confirmed_date: str | None = None
+    judge: str | None = None
+    trustee: str | None = None
+    first_observed_date: str | None = None
+    last_observed_date: str | None = None
+
+
+class EnigmaBankruptcyLegalEntityItem(BaseModel):
+    enigma_legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
+    legal_entity_type: str | None = None
+    bankruptcy_count: int | None = None
+    bankruptcies: list[EnigmaBankruptcyRecord] | None = None
+
+
+class EnigmaBankruptcyOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    legal_entity_count: int | None = None
+    total_bankruptcy_count: int | None = None
+    has_active_bankruptcy: bool | None = None
+    legal_entities_with_bankruptcies: list[EnigmaBankruptcyLegalEntityItem] | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma watchlist ---
+
+class EnigmaWatchlistEntry(BaseModel):
+    watchlist_name: str | None = None
+    connection_type: str | None = None  # "is_flagged_by" or "appears_on"
+    first_observed_date: str | None = None
+    last_observed_date: str | None = None
+
+
+class EnigmaWatchlistLegalEntityItem(BaseModel):
+    enigma_legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
+    legal_entity_type: str | None = None
+    watchlist_hit_count: int | None = None
+    watchlist_entries: list[EnigmaWatchlistEntry] | None = None
+
+
+class EnigmaWatchlistOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    legal_entity_count: int | None = None
+    total_watchlist_hit_count: int | None = None
+    has_watchlist_hits: bool | None = None
+    legal_entities_with_hits: list[EnigmaWatchlistLegalEntityItem] | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma brand roles ---
+
+class EnigmaRoleItem(BaseModel):
+    job_title: str | None = None
+    job_function: str | None = None
+    management_level: str | None = None
+    phone_numbers: list[str] | None = None
+    email_addresses: list[str] | None = None
+    linkedin_url: str | None = None
+    first_observed_date: str | None = None
+    last_observed_date: str | None = None
+
+
+class EnigmaLocationRolesItem(BaseModel):
+    enigma_location_id: str | None = None
+    location_name: str | None = None
+    full_address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    operating_status: str | None = None
+    role_count: int | None = None
+    roles: list[EnigmaRoleItem] | None = None
+
+
+class EnigmaBrandRolesOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    location_count: int | None = None
+    total_role_count: int | None = None
+    locations: list[EnigmaLocationRolesItem] | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma officer persons ---
+
+class EnigmaOfficerPersonItem(BaseModel):
+    enigma_person_id: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None
+    date_of_birth: str | None = None
+
+
+class EnigmaOfficerRoleItem(BaseModel):
+    job_title: str | None = None
+    job_function: str | None = None
+    management_level: str | None = None
+
+
+class EnigmaOfficerLegalEntityItem(BaseModel):
+    enigma_legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
+    legal_entity_type: str | None = None
+    registered_entity_name: str | None = None
+    registered_entity_type: str | None = None
+    formation_date: str | None = None
+    person_count: int | None = None
+    persons: list[EnigmaOfficerPersonItem] | None = None
+    officer_roles: list[EnigmaOfficerRoleItem] | None = None
+
+
+class EnigmaOfficerPersonsOutput(BaseModel):
+    enigma_brand_id: str | None = None
+    legal_entity_count: int | None = None
+    total_person_count: int | None = None
+    legal_entities: list[EnigmaOfficerLegalEntityItem] | None = None
+    source_provider: str = "enigma"
+
+
+# --- Enigma KYB verification ---
+
+class EnigmaKYBOutput(BaseModel):
+    business_name_queried: str | None = None
+    enigma_brand_id: str | None = None
+    enigma_registered_entity_id: str | None = None
+    name_verification: str | None = None
+    sos_name_verification: str | None = None
+    address_verification: str | None = None
+    person_verification: str | None = None
+    domestic_registration: str | None = None
+    name_match: bool | None = None
+    address_match: bool | None = None
+    person_match: bool | None = None
+    domestic_active: bool | None = None
+    registered_entity_count: int | None = None
+    brand_count: int | None = None
+    raw_tasks: dict[str, Any] | None = None
+    source_provider: str = "enigma"
