@@ -110,3 +110,4 @@ Migration order:
 39. `039_mv_fmcsa_analytical.sql` — FMCSA latest census, safety percentiles, crash counts, master carrier MVs (**heavy: run during low-traffic window**)
 40. `040_analytical_missing_indexes.sql` — supplemental composite indexes for USASpending, SAM.gov, SBA
 41. `041_enigma_brand_discoveries.sql` — Enigma brand discoveries + location enrichments tables (2 new tables in `entities` schema with indexes)
+42. `042_mv_analytical_expansion.sql` — 8 new analytical MVs: SAM.gov typed base + state/NAICS aggregates, SBA typed base + state aggregate, SAM×USASpending cross-vertical bridge, FMCSA latest insurance policies snapshot, FMCSA new carriers 90d (**heavy: ~30-60 min, run during low-traffic window**)
